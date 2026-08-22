@@ -371,6 +371,11 @@ allow_dynamic_registration = false
 [functions.notification-dispatcher]
 verify_jwt = false
 
+# event-change-notifier はDB Webhook(supabase_functions.http_request経由)から呼び出される内部専用Functionのため、
+# エンドユーザーのJWTを持たない。呼び出し元はEdge Function内でx-webhook-secretヘッダーにより検証する。
+[functions.event-change-notifier]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

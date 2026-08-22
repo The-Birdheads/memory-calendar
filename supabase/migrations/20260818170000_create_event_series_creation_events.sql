@@ -107,9 +107,9 @@ create trigger event_change_notifier_on_series_creation
   after insert on public.event_series_creation_events
   for each row
   execute function supabase_functions.http_request(
-    'http://host.docker.internal:54321/functions/v1/event-change-notifier',
+    'https://posqpbpfnmnnacqzkoxy.supabase.co/functions/v1/event-change-notifier',
     'POST',
-    '{"Content-Type":"application/json"}',
+    '{"Content-Type":"application/json","x-webhook-secret":"<WEBHOOK_SECRET>"}',
     '{}',
     '5000'
   );

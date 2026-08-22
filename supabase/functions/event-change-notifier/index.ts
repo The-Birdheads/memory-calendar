@@ -10,6 +10,9 @@ import { sendExpoPushNotifications } from "../_shared/expoPush.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// DB Webhook(supabase_functions.http_request、JWTを持たない)からの呼び出しを検証する共有シークレット。
+// 本番では `supabase secrets set WEBHOOK_SECRET=...` で必ず上書きすること。
+const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET") ?? "local-dev-webhook-secret-change-me";
 
 interface WebhookPayload {
   type: "INSERT" | "UPDATE" | "DELETE";
@@ -180,6 +183,10 @@ async function handleSeriesCreation(supabase: SupabaseClient, series: SeriesCrea
 }
 
 Deno.serve(async (req) => {
+  if (req.headers.get("x-webhook-secret") !== WEBHOOK_SECRET) {
+    return new Response("forbidden", { status: 403 });
+  }
+
   const payload = (await req.json()) as WebhookPayload;
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 

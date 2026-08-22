@@ -4,17 +4,17 @@ create extension if not exists pg_cron with schema extensions;
 create extension if not exists pg_net with schema extensions;
 
 -- notification-dispatcher呼び出し時の簡易認証用共有シークレット。
--- ローカル開発用の初期値。本番デプロイ前に、
---   1) `supabase secrets set CRON_SECRET=<十分にランダムな値>` でEdge Function側に設定し、
---   2) 下記のヘッダー値を同じシークレットに置き換える(またはVaultから読み込むよう変更する)
--- こと。値を変更せず本番運用しないこと。
+-- <CRON_SECRET> はプレースホルダー(実値はリポジトリに含めない)。
+-- Edge Function側は `supabase secrets set CRON_SECRET=...` で同じ値を設定済み。
+-- 本番DBには既に実値を反映済みのため、この置き換え自体はDBに影響しない。
+-- 環境を再構築する場合は、この文字列を実際のシークレット値に置き換えてから適用すること。
 select cron.schedule(
   'notification-dispatcher-every-minute',
   '* * * * *',
   $$
   select net.http_post(
-    url := 'http://host.docker.internal:54321/functions/v1/notification-dispatcher',
-    headers := '{"Content-Type": "application/json", "x-cron-secret": "local-dev-cron-secret-change-me"}'::jsonb,
+    url := 'https://posqpbpfnmnnacqzkoxy.supabase.co/functions/v1/notification-dispatcher',
+    headers := '{"Content-Type": "application/json", "x-cron-secret": "<CRON_SECRET>"}'::jsonb,
     body := '{}'::jsonb
   );
   $$

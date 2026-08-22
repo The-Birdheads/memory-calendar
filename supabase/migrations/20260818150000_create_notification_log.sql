@@ -31,16 +31,14 @@ create index notification_log_target_user_id_idx on public.notification_log (tar
 
 -- DB Webhook: events(series_id IS NULLの単発予定のみ)のUPDATE、event_commentsのINSERTを起点に
 -- event-change-notifier Edge Functionを呼び出す。
--- 注記: 以下のURLはローカル開発用(`supabase functions serve`)を前提としている。
--- 本番デプロイ時は 'https://<project-ref>.supabase.co/functions/v1/event-change-notifier' に置き換えること。
 create trigger event_change_notifier_on_event_update
   after update on public.events
   for each row
   when (new.series_id is null)
   execute function supabase_functions.http_request(
-    'http://host.docker.internal:54321/functions/v1/event-change-notifier',
+    'https://posqpbpfnmnnacqzkoxy.supabase.co/functions/v1/event-change-notifier',
     'POST',
-    '{"Content-Type":"application/json"}',
+    '{"Content-Type":"application/json","x-webhook-secret":"<WEBHOOK_SECRET>"}',
     '{}',
     '5000'
   );
@@ -49,9 +47,9 @@ create trigger event_change_notifier_on_comment_insert
   after insert on public.event_comments
   for each row
   execute function supabase_functions.http_request(
-    'http://host.docker.internal:54321/functions/v1/event-change-notifier',
+    'https://posqpbpfnmnnacqzkoxy.supabase.co/functions/v1/event-change-notifier',
     'POST',
-    '{"Content-Type":"application/json"}',
+    '{"Content-Type":"application/json","x-webhook-secret":"<WEBHOOK_SECRET>"}',
     '{}',
     '5000'
   );
