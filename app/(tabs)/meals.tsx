@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
 import {
@@ -20,6 +21,10 @@ const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
 
 function todayDateString(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function formatMealDateLabel(date: Date): string {
+  return `${date.getUTCFullYear()}/${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
 }
 
 interface MealRecordRowProps {
@@ -66,8 +71,9 @@ export default function MealsScreen() {
   const { deleteMealRecord } = useDeleteMealRecord();
 
   const [newTitle, setNewTitle] = useState("");
-  const [newMealDate, setNewMealDate] = useState("");
+  const [newMealDate, setNewMealDate] = useState(() => new Date());
   const [newSlot, setNewSlot] = useState<MealSlot>("breakfast");
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   const today = todayDateString();
   const pastRecords = mealRecords.filter((record) => record.mealDate < today);
@@ -86,13 +92,13 @@ export default function MealsScreen() {
   const handleCreate = async () => {
     const success = await createMealRecord({
       calendarId: activeCalendarId,
-      mealDate: newMealDate,
+      mealDate: newMealDate.toISOString().slice(0, 10),
       slot: newSlot,
       title: newTitle,
     });
     if (success) {
       setNewTitle("");
-      setNewMealDate("");
+      setNewMealDate(new Date());
       await refetch();
     }
   };
@@ -119,7 +125,8 @@ export default function MealsScreen() {
         ))}
       </View>
 
-      <View style={styles.createForm}>
+      <View style={styles.createCard}>
+        <Text style={styles.createCardTitle}>献立を記録</Text>
         <TextInput
           testID="meal-create-title-input"
           style={styles.input}
@@ -127,13 +134,48 @@ export default function MealsScreen() {
           value={newTitle}
           onChangeText={setNewTitle}
         />
-        <TextInput
-          testID="meal-create-date-input"
-          style={styles.input}
-          placeholder="日付(YYYY-MM-DD)"
-          value={newMealDate}
-          onChangeText={setNewMealDate}
-        />
+
+        <TouchableOpacity
+          testID="meal-create-date-button"
+          style={styles.dateField}
+          onPress={() => setIsDatePickerOpen(true)}
+        >
+          <Text style={styles.dateFieldLabel}>日付</Text>
+          <Text>{formatMealDateLabel(newMealDate)}</Text>
+        </TouchableOpacity>
+
+        {isDatePickerOpen ? (
+          <View style={styles.pickerContainer}>
+            {Platform.OS === "web" ? (
+              <TextInput
+                testID="meal-create-date-picker"
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                onChangeText={(text) => {
+                  const parsed = new Date(`${text}T00:00:00.000Z`);
+                  if (!Number.isNaN(parsed.getTime())) setNewMealDate(parsed);
+                }}
+              />
+            ) : (
+              <DateTimePicker
+                testID="meal-create-date-picker"
+                value={newMealDate}
+                mode="date"
+                onChange={(_event, selected) => {
+                  if (selected) setNewMealDate(selected);
+                }}
+              />
+            )}
+            <TouchableOpacity
+              testID="meal-create-date-picker-done"
+              style={styles.pickerDoneButton}
+              onPress={() => setIsDatePickerOpen(false)}
+            >
+              <Text>完了</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <View style={styles.slotRow}>
           {MEAL_SLOTS.map((slot) => (
             <TouchableOpacity
@@ -142,12 +184,12 @@ export default function MealsScreen() {
               style={[styles.slotButton, slot === newSlot && styles.slotButtonActive]}
               onPress={() => setNewSlot(slot)}
             >
-              <Text>{MEAL_SLOT_LABELS[slot]}</Text>
+              <Text style={slot === newSlot && styles.slotButtonTextActive}>{MEAL_SLOT_LABELS[slot]}</Text>
             </TouchableOpacity>
           ))}
         </View>
         <TouchableOpacity testID="meal-create-submit" style={styles.createButton} onPress={handleCreate}>
-          <Text>記録を追加</Text>
+          <Text style={styles.createButtonText}>記録を追加</Text>
         </TouchableOpacity>
       </View>
 
@@ -211,17 +253,50 @@ const styles = StyleSheet.create({
     color: "#666",
     fontSize: 12,
   },
-  createForm: {
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+  createCard: {
+    gap: 10,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  createCardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#ddd",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  dateField: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  dateFieldLabel: {
+    color: "#666",
+  },
+  pickerContainer: {
+    gap: 8,
+    alignItems: "flex-end",
+  },
+  pickerDoneButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   slotRow: {
     flexDirection: "row",
@@ -229,7 +304,7 @@ const styles = StyleSheet.create({
   },
   slotButton: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#ddd",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -238,9 +313,19 @@ const styles = StyleSheet.create({
     borderColor: "#2f6fed",
     backgroundColor: "#e8f0fe",
   },
+  slotButtonTextActive: {
+    color: "#2f6fed",
+    fontWeight: "600",
+  },
   createButton: {
     alignSelf: "flex-start",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: "#2f6fed",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: "#fff",
+    fontWeight: "600",
   },
 });

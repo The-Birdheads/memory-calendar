@@ -13,6 +13,17 @@ jest.mock("../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
 }));
 
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { TextInput } = require("react-native");
+  return function MockDateTimePicker({ testID, onChange }: any) {
+    return React.createElement(TextInput, {
+      testID,
+      onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
+    });
+  };
+});
+
 // meals/hooks (useMealRecords, useCreateMealRecord, ...) are intentionally left
 // un-mocked so the real hook -> service -> Supabase client chain is exercised.
 
@@ -39,7 +50,9 @@ describe("13.4 献立記録フローの検証", () => {
     expect(queryByDisplayValue("から揚げ")).toBeNull();
 
     await fireEvent.changeText(getByTestId("meal-create-title-input"), "から揚げ");
-    await fireEvent.changeText(getByTestId("meal-create-date-input"), "2026-09-01");
+    await fireEvent.press(getByTestId("meal-create-date-button"));
+    await fireEvent.changeText(getByTestId("meal-create-date-picker"), "2026-09-01T00:00:00.000Z");
+    await fireEvent.press(getByTestId("meal-create-date-picker-done"));
     await fireEvent.press(getByTestId("meal-create-slot-dinner"));
     await fireEvent.press(getByTestId("meal-create-submit"));
 

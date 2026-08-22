@@ -21,6 +21,17 @@ jest.mock("../../../src/features/events/hooks", () => ({
   useCreateEvent: jest.fn(),
 }));
 
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { TextInput } = require("react-native");
+  return function MockDateTimePicker({ testID, onChange }: any) {
+    return React.createElement(TextInput, {
+      testID,
+      onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
+    });
+  };
+});
+
 const CALENDARS = [
   { id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
   { id: "cal-2", name: "友人グループ", createdBy: "user-2", createdAt: "2026-08-17T01:00:00.000Z" },
@@ -159,13 +170,14 @@ describe("CalendarScreen", () => {
     expect(queryByTestId("remove-member-user-2")).toBeNull();
   });
 
-  it("defaults to month view and switches to week view when pressed", async () => {
+  it("defaults to month view, shows the month label, and switches to week view when pressed", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
 
     const today = new Date("2026-08-18T12:00:00.000Z");
-    const { getByTestId } = await render(<CalendarScreen />);
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
 
+    expect(getByText("2026年8月")).toBeTruthy();
     await waitFor(() =>
       expect(useEventsInRange).toHaveBeenLastCalledWith("cal-1", computeDateRange("month", today))
     );
@@ -177,7 +189,32 @@ describe("CalendarScreen", () => {
     );
   });
 
-  it("shows only the selected date's events, colored by category, and updates when a date is selected", async () => {
+  it("renders a month grid with a cell for today and for each day, highlighting today", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    expect(getByTestId("calendar-grid-cell-2026-08-18")).toBeTruthy();
+    expect(getByTestId("calendar-grid-cell-2026-08-01")).toBeTruthy();
+    expect(getByTestId("calendar-grid-cell-2026-08-31")).toBeTruthy();
+  });
+
+  it("shows event dots on grid cells that have events", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({
+      events: [TODAY_EVENT, OTHER_DAY_EVENT],
+      isLoading: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    expect(getByTestId("calendar-grid-dot-event-1")).toBeTruthy();
+    expect(getByTestId("calendar-grid-dot-event-2")).toBeTruthy();
+  });
+
+  it("shows only the selected date's events, colored by category, and updates when a grid cell is selected", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({
       events: [TODAY_EVENT, OTHER_DAY_EVENT],
@@ -190,7 +227,7 @@ describe("CalendarScreen", () => {
     expect(getByText("朝会")).toBeTruthy();
     expect(queryByText("外出")).toBeNull();
 
-    await fireEvent.press(getByTestId("calendar-date-2026-08-20"));
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-20"));
 
     expect(getByText("外出")).toBeTruthy();
     expect(queryByText("朝会")).toBeNull();
@@ -206,7 +243,7 @@ describe("CalendarScreen", () => {
 
     const { getByText, queryByText, getByTestId } = await render(<CalendarScreen />);
 
-    await fireEvent.press(getByTestId("calendar-date-2026-08-20"));
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-20"));
     expect(getByText("外出")).toBeTruthy();
 
     await fireEvent.press(getByTestId("calendar-today-button"));
@@ -215,22 +252,77 @@ describe("CalendarScreen", () => {
     expect(queryByText("外出")).toBeNull();
   });
 
-  it("creates a new event and refetches the range so the list reflects it", async () => {
+  it("moves to the next/previous month and updates the label and query range", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-month-next"));
+    expect(getByText("2026年9月")).toBeTruthy();
+    await waitFor(() =>
+      expect(useEventsInRange).toHaveBeenLastCalledWith(
+        "cal-1",
+        computeDateRange("month", new Date("2026-09-18T12:00:00.000Z"))
+      )
+    );
+
+    await fireEvent.press(getByTestId("calendar-month-prev"));
+    await fireEvent.press(getByTestId("calendar-month-prev"));
+    expect(getByText("2026年7月")).toBeTruthy();
+  });
+
+  it("shows a horizontal date strip in week view", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-view-week"));
+
+    expect(getByTestId("calendar-date-2026-08-18")).toBeTruthy();
+    expect(queryByTestId("calendar-grid-cell-2026-08-18")).toBeNull();
+  });
+
+  it("opens the creation modal from the FAB and cancels without creating", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    const createEventMock = jest.fn().mockResolvedValue(true);
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    expect(queryByTestId("event-create-title-input")).toBeNull();
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    expect(getByTestId("event-create-title-input")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("event-create-cancel"));
+    expect(queryByTestId("event-create-title-input")).toBeNull();
+    expect(createEventMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a new event with title/dates/color from the modal and refetches the range", async () => {
     mockCommonHooks();
     const refetch = jest.fn();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch });
     const createEventMock = jest.fn().mockResolvedValue(true);
-    (useCreateEvent as jest.Mock).mockReturnValue({
-      createEvent: createEventMock,
-      isSubmitting: false,
-      error: null,
-    });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
 
-    const { getByTestId } = await render(<CalendarScreen />);
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
 
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
     await fireEvent.changeText(getByTestId("event-create-title-input"), "誕生日会");
-    await fireEvent.changeText(getByTestId("event-create-start-input"), "2026-09-01T10:00:00.000Z");
-    await fireEvent.changeText(getByTestId("event-create-end-input"), "2026-09-01T12:00:00.000Z");
+
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-09-01T10:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-09-01T12:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-color-green"));
     await fireEvent.press(getByTestId("event-create-submit"));
 
     await waitFor(() =>
@@ -239,8 +331,40 @@ describe("CalendarScreen", () => {
         title: "誕生日会",
         startAt: "2026-09-01T10:00:00.000Z",
         endAt: "2026-09-01T12:00:00.000Z",
+        isAllDay: false,
+        categoryColor: "#43a047",
       })
     );
     await waitFor(() => expect(refetch).toHaveBeenCalled());
+    await waitFor(() => expect(queryByTestId("event-create-title-input")).toBeNull());
+  });
+
+  it("passes isAllDay true when the all-day toggle is on", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue(true);
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "旅行");
+    await fireEvent.press(getByTestId("event-create-allday-toggle"));
+
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-09-01T00:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-09-03T00:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() =>
+      expect(createEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ isAllDay: true, title: "旅行" })
+      )
+    );
   });
 });

@@ -20,6 +20,17 @@ jest.mock("../../../src/features/meals/hooks", () => ({
   useDeleteMealRecord: jest.fn(),
 }));
 
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { TextInput } = require("react-native");
+  return function MockDateTimePicker({ testID, onChange }: any) {
+    return React.createElement(TextInput, {
+      testID,
+      onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
+    });
+  };
+});
+
 const CALENDARS = [
   { id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
   { id: "cal-2", name: "友人グループ", createdBy: "user-2", createdAt: "2026-08-17T01:00:00.000Z" },
@@ -117,7 +128,9 @@ describe("MealsScreen", () => {
     const { getByTestId } = await render(<MealsScreen />);
 
     await fireEvent.changeText(getByTestId("meal-create-title-input"), "から揚げ");
-    await fireEvent.changeText(getByTestId("meal-create-date-input"), "2026-09-01");
+    await fireEvent.press(getByTestId("meal-create-date-button"));
+    await fireEvent.changeText(getByTestId("meal-create-date-picker"), "2026-09-01T00:00:00.000Z");
+    await fireEvent.press(getByTestId("meal-create-date-picker-done"));
     await fireEvent.press(getByTestId("meal-create-slot-dinner"));
     await fireEvent.press(getByTestId("meal-create-submit"));
 

@@ -20,6 +20,17 @@ jest.mock("../../src/features/calendars/hooks", () => ({
   useRemoveMember: jest.fn(),
 }));
 
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { TextInput } = require("react-native");
+  return function MockDateTimePicker({ testID, onChange }: any) {
+    return React.createElement(TextInput, {
+      testID,
+      onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
+    });
+  };
+});
+
 const CALENDARS = [{ id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-01T00:00:00.000Z" }];
 
 describe("13.1 予定作成からカレンダー月表示への反映", () => {
@@ -51,9 +62,17 @@ describe("13.1 予定作成からカレンダー月表示への反映", () => {
 
     expect(queryByText("誕生日会")).toBeNull();
 
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
     await fireEvent.changeText(getByTestId("event-create-title-input"), "誕生日会");
-    await fireEvent.changeText(getByTestId("event-create-start-input"), "2026-09-15T10:00:00.000Z");
-    await fireEvent.changeText(getByTestId("event-create-end-input"), "2026-09-15T12:00:00.000Z");
+
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-09-15T10:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-09-15T12:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
     await fireEvent.press(getByTestId("event-create-submit"));
 
     await waitFor(() => expect(getByText("誕生日会")).toBeTruthy());
