@@ -1,0 +1,187 @@
+import { useCallback, useEffect, useState } from "react";
+
+import { subscribeToTableChanges } from "../../shared/api/realtime";
+import { getSupabaseClient } from "../../shared/api/supabaseClient";
+import {
+  attachTagsToEvent,
+  createTag,
+  deleteTag,
+  listTagsForEvent,
+  listTagTree,
+  updateTag,
+} from "./service";
+import type { CreateTagInput, Tag, TagError, TagTreeNode, UpdateTagInput } from "./types";
+
+export interface UseTagTreeResult {
+  tagTree: TagTreeNode[];
+  isLoading: boolean;
+  error: TagError | null;
+  refetch: () => Promise<void>;
+}
+
+export function useTagTree(calendarId: string): UseTagTreeResult {
+  const [tagTree, setTagTree] = useState<TagTreeNode[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const result = await listTagTree(getSupabaseClient(), calendarId);
+    if (result.ok) {
+      setTagTree(result.value);
+      setError(null);
+    } else {
+      setTagTree([]);
+      setError(result.error);
+    }
+    setIsLoading(false);
+  }, [calendarId]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  useEffect(() => {
+    return subscribeToTableChanges(
+      getSupabaseClient(),
+      `tags-${calendarId}`,
+      "tags",
+      refetch,
+      `calendar_id=eq.${calendarId}`
+    );
+  }, [calendarId, refetch]);
+
+  return { tagTree, isLoading, error, refetch };
+}
+
+export interface UseCreateTagResult {
+  createTag: (input: CreateTagInput) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TagError | null;
+}
+
+export function useCreateTag(): UseCreateTagResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const runCreateTag = useCallback(async (input: CreateTagInput) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await createTag(getSupabaseClient(), input);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { createTag: runCreateTag, isSubmitting, error };
+}
+
+export interface UseEventTagsResult {
+  tags: Tag[];
+  isLoading: boolean;
+  error: TagError | null;
+  refetch: () => Promise<void>;
+}
+
+export function useEventTags(eventId: string): UseEventTagsResult {
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const result = await listTagsForEvent(getSupabaseClient(), eventId);
+    if (result.ok) {
+      setTags(result.value);
+      setError(null);
+    } else {
+      setTags([]);
+      setError(result.error);
+    }
+    setIsLoading(false);
+  }, [eventId]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { tags, isLoading, error, refetch };
+}
+
+export interface UseAttachTagsToEventResult {
+  attachTagsToEvent: (eventId: string, tagIds: string[]) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TagError | null;
+}
+
+export function useAttachTagsToEvent(): UseAttachTagsToEventResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const runAttachTagsToEvent = useCallback(async (eventId: string, tagIds: string[]) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await attachTagsToEvent(getSupabaseClient(), eventId, tagIds);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { attachTagsToEvent: runAttachTagsToEvent, isSubmitting, error };
+}
+
+export interface UseUpdateTagResult {
+  updateTag: (tagId: string, input: UpdateTagInput) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TagError | null;
+}
+
+export function useUpdateTag(): UseUpdateTagResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const runUpdateTag = useCallback(async (tagId: string, input: UpdateTagInput) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await updateTag(getSupabaseClient(), tagId, input);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { updateTag: runUpdateTag, isSubmitting, error };
+}
+
+export interface UseDeleteTagResult {
+  deleteTag: (tagId: string) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TagError | null;
+}
+
+export function useDeleteTag(): UseDeleteTagResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const runDeleteTag = useCallback(async (tagId: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await deleteTag(getSupabaseClient(), tagId);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { deleteTag: runDeleteTag, isSubmitting, error };
+}

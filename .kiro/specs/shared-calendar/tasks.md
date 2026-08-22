@@ -1,0 +1,247 @@
+# 実装計画
+
+- [ ] 1. 基盤: プロジェクト雛形とSupabase環境構築
+- [x] 1.1 Expo/TypeScriptプロジェクトの雛形とナビゲーション、Supabaseクライアントの初期化
+  - Expo Router構成でタブ(カレンダー/ToDo/振り返り/思い出/献立)と認証画面の空スクリーンを作成する
+  - `supabase-js`クライアントを初期化し、環境変数からURL/anonキーを読み込む
+  - アプリを起動し、各タブ間の画面遷移が動作することを確認できる
+- [x] 1.2 Supabaseデータベース基盤: RLS共通ヘルパーとprofilesテーブル
+  - `is_calendar_member(calendar_id, uid)` SECURITY DEFINER関数を作成する
+  - `auth.users`と連携する`profiles`テーブルを作成し、RLSを有効化する
+  - マイグレーションを適用し、`profiles`テーブルへの読み書きがRLS経由で制御されることを確認できる
+- [x] 1.3 EAS Build設定とExpo Push通知の権限リクエスト基盤
+  - `eas.json`を作成し、dev buildが生成できる状態にする
+  - Expo Notificationsの権限リクエスト処理の雛形を実装する
+  - dev build上でPush通知の権限ダイアログが表示されることを確認できる
+
+- [ ] 2. ユーザー認証(AuthService)
+- [x] 2.1 サインアップ・ログイン・ログアウトとセッション永続化
+  - メールアドレス/パスワードでのアカウント作成とログインを実装する
+  - 認証エラー時にエラーメッセージを表示する
+  - セッションを永続化し、アプリ再起動後もログイン状態が維持されることを確認できる
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+
+- [ ] 3. カレンダー共有基盤(CalendarService)
+- [x] 3.1 calendars/calendar_membersスキーマとカレンダー作成
+  - `calendars`・`calendar_members`テーブルとロール(owner/editor/viewer)を定義しRLSを設定する
+  - カレンダー作成操作でオーナーとして自身が登録されることを確認できる
+  - _Requirements: 2.1_
+- [x] 3.2 招待コード発行と招待経由の参加
+  - `calendar_invites`テーブルと招待コード発行APIを実装する
+  - 招待コードでの参加(RPC `join_by_invite`)を実装し、有効期限切れ時にエラーを返す
+  - 発行した招待コードから別アカウントがメンバーとして追加されることを確認できる
+  - _Requirements: 2.2, 2.3_
+- [x] 3.3 メンバー一覧・削除・カレンダー切り替え
+  - カレンダーごとのメンバー一覧表示とオーナーによるメンバー削除を実装する
+  - 複数カレンダー間の切り替えUIを実装する
+  - メンバーを削除すると一覧から即座に消えることを確認できる
+  - _Requirements: 2.4, 2.5, 2.6_
+
+- [ ] 4. 予定管理基盤(EventService)
+- [x] 4.1 eventsスキーマと単発予定の登録
+  - `events`テーブル(`reminder_at`列を含む)を作成しRLSを設定する
+  - タイトル・日時での予定登録と、終日/場所/メモ/カテゴリの任意項目設定を実装する
+  - 作成者・最終更新者が記録され、登録した予定がカレンダーメンバーの一覧に反映されることを確認できる
+  - _Requirements: 3.1, 3.2, 3.8_
+- [x] 4.2 予定の編集・削除(削除確認モーダルとカスケード)
+  - 予定の編集・削除操作と、`endAt < startAt`のバリデーションエラー表示を実装する
+  - `todos`/`event_tags`/`event_reminder_targets`/`event_photos`/`event_comments`/`event_reactions`への`ON DELETE CASCADE`を設定する
+  - 削除確認モーダルで「思い出データも削除されます」という警告を表示し、確定後に全メンバーの表示から予定が消えることを確認できる
+  - _Requirements: 3.5, 3.7, 3.9_
+- [x] 4.3 繰り返しシリーズの生成(終了日必須・最大1年)
+  - `event_series`テーブル(`recurrence_end_at` NOT NULL、1年以内のCHECK制約)を作成する
+  - `createRecurringSeries` RPCで開始日から終了日までの各回を個別行として生成し、共通の`series_id`で紐づける
+  - 終了日未指定または1年超過時にエラーメッセージが表示され登録が行われないことを確認できる
+  - _Requirements: 3.3, 3.4_
+- [x] 4.4 繰り返しシリーズのまとめ編集・削除
+  - 同一`series_id`を持つ全`events`行への一括更新(日時以外の項目)を実装する
+  - シリーズ単位での削除操作を実装する
+  - まとめ編集を実行すると、全ての回に変更が反映されることを確認できる
+  - _Requirements: 3.6_
+- [x] 4.5 カレンダー表示(月/週/日)と当日ナビゲーション
+  - `listEventsInRange`による期間クエリと、月/週/日表示の切り替えUIを実装する
+  - 予定をカテゴリ色で識別できる表示と、日付選択時の一覧表示を実装する
+  - 「今日」ボタンで当日を含む表示に切り替わることを確認できる
+  - _Requirements: 4.1, 4.2, 4.3, 4.4_
+- [x] 4.6 予定のリマインダー時刻と対象者選択
+  - `events.reminder_at`の設定UI/APIと、`event_reminder_targets`への対象者(すべて/特定メンバー)保存を実装する
+  - 対象者未設定時は全メンバーが対象とみなされることを確認できる
+  - _Requirements: 6.4, 6.5, 6.6_
+
+- [ ] 5. (P) コミュニケーション機能(CommunicationService)
+- [x] 5.1 (P) コメント投稿と表示
+  - `event_comments`テーブルを作成しRLSを設定する
+  - 予定へのコメント投稿と、投稿者・投稿日時を含む表示を実装する
+  - 投稿したコメントが予定詳細に即座に表示されることを確認できる
+  - _Requirements: 5.1, 5.3_
+  - _Boundary: CommunicationService_
+- [x] 5.2 (P) スタンプ付与とコメント削除
+  - `event_reactions`テーブルを作成し、スタンプの付与・表示を実装する
+  - 自分が投稿したコメントの削除操作を実装する
+  - スタンプを付与すると予定詳細に反映され、削除したコメントが一覧から消えることを確認できる
+  - _Requirements: 5.2, 5.4_
+  - _Boundary: CommunicationService_
+
+- [ ] 6. (P) タグ機能(TagService)
+- [x] 6.1 (P) tagsスキーマとタグ作成
+  - `tags`テーブル(`parent_id`, `level`の3階層CHECK制約)を作成しRLSを設定する
+  - タグ名・色を指定したタグ作成を実装する
+  - 作成したタグがカレンダーのタグ一覧に表示されることを確認できる
+  - _Requirements: 10.1, 10.2_
+  - _Boundary: TagService_
+- [x] 6.2 (P) 予定への複数タグ付与と色表示
+  - `event_tags`テーブルと`attachTagsToEvent`を実装する
+  - カレンダー上・予定詳細でタグを設定色で表示する
+  - 予定に複数タグを設定すると全て反映されることを確認できる
+  - _Requirements: 10.3, 10.4, 10.5_
+  - _Boundary: TagService_
+- [x] 6.3 (P) タグ編集
+  - タグの名称・色・階層の編集機能を実装する
+  - 編集後、既存の予定への紐付け表示にも変更が反映されることを確認できる
+  - _Requirements: 10.6_
+  - _Boundary: TagService_
+- [x] 6.4 (P) タグ削除の確認モーダルとカスケード削除
+  - タグ削除操作時の確認モーダル表示を実装する
+  - `tags.parent_id`/`event_tags.tag_id`への`ON DELETE CASCADE`を設定する
+  - 大分類タグを削除すると配下の中分類・小分類タグと紐付けが全て消えることを確認できる
+  - _Requirements: 10.7, 10.8_
+  - _Boundary: TagService_
+
+- [ ] 7. (P) 一覧振り返り機能(HistoryService)
+- [x] 7.1 (P) タグ絞り込みによる過去予定の一覧振り返り画面
+  - 階層を問わないタグ絞り込み(祖先→子孫の再帰CTE)を行う`listPastEventsByTag`を実装する
+  - カレンダー画面とは別の振り返り一覧画面(日付順表示)を実装する
+  - 中分類タグで絞り込むと配下の小分類タグ付き予定も含まれ、該当0件時に空状態メッセージが表示されることを確認できる
+  - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5_
+  - _Boundary: HistoryService_
+  - _Depends: 6.1_
+
+- [ ] 8. (P) 思い出機能(MemoryService)
+- [x] 8.1 (P) 写真添付とStorageポリシー
+  - `event_photos`テーブルとSupabase Storageバケット(カレンダーメンバーのみ読み取り可)を作成する
+  - `attachPhoto`を実装し、未来の予定への添付時に`EventNotPast`エラーを返す
+  - 実施済み予定に写真を添付すると保存され表示されることを確認できる
+  - _Requirements: 7.1, 7.2, 7.5_
+  - _Boundary: MemoryService_
+  - _Depends: 5.1_
+- [x] 8.2 (P) 感想コメントの追加
+  - `addReflection`(既存`event_comments`の再利用)を実装する
+  - 実施済み予定に感想コメントを追加すると保存されることを確認できる
+  - _Requirements: 7.3, 7.4_
+  - _Boundary: MemoryService_
+- [x] 8.3 (P) 思い出タイムラインと繰り返し予定の個別扱い確認
+  - `listMemoriesTimeline`(時系列降順、年月フィルタ、サムネイル表示)を実装する
+  - 思い出一覧画面と、選択時の詳細表示(日時・写真・コメント・スタンプ)を実装する
+  - 繰り返し予定の1回にのみ写真・コメントを追加し、他の回の思い出に影響しないことを確認できる
+  - 思い出が0件の場合に空状態メッセージが表示されることを確認できる
+  - _Requirements: 7.6, 8.1, 8.2, 8.3, 8.4, 8.5_
+  - _Boundary: MemoryService_
+
+- [ ] 9. (P) ToDo管理機能(TodoService)
+- [x] 9.1 (P) todosスキーマと予定へのToDo追加
+  - `todos`テーブル(`event_id` NOT NULL)を作成しRLSを設定する
+  - 予定に対するToDo項目の追加を実装する
+  - 追加したToDoが該当予定に紐づいて保存されることを確認できる
+  - _Requirements: 9.1_
+  - _Boundary: TodoService_
+- [x] 9.2 (P) ToDo一覧画面
+  - カレンダー全体のToDo一覧画面を実装し、完了/未完了を区別して表示する
+  - 一覧画面でカレンダー切り替えと連動して表示が更新されることを確認できる
+  - _Requirements: 9.2, 9.5_
+  - _Boundary: TodoService_
+- [x] 9.3 (P) 達成状況管理と編集・削除
+  - チェックボックス操作による`toggleDone`(完了/未完了、`completedAt`更新)を実装する
+  - ToDoの編集・削除を実装する
+  - チェックを操作すると一覧の表示が即座に切り替わることを確認できる
+  - _Requirements: 9.4, 9.6_
+  - _Boundary: TodoService_
+- [x] 9.4 (P) ToDoのリマインド日時設定
+  - ToDoへの`reminder_at`設定UI/APIを実装する
+  - 配信対象は紐づく予定の`event_reminder_targets`を継承する仕様として保存のみ行う
+  - リマインド日時を設定すると保存され一覧に反映されることを確認できる
+  - _Requirements: 9.3_
+  - _Boundary: TodoService_
+  - _Depends: 4.6_
+
+- [ ] 10. (P) 献立記録機能(MealRecordService)
+- [x] 10.1 (P) meal_records/meal_tagsスキーマと区分別登録
+  - `meal_records`・`meal_tags`・`meal_record_tags`テーブルを作成しRLSを設定する
+  - 朝食/昼食/夕食/間食区分でのタイトル・点数・URL・タグ・メモの登録を実装する
+  - 献立タグが予定用タグと独立して管理されることを確認できる
+  - _Requirements: 12.1, 12.2, 12.3_
+  - _Boundary: MealRecordService_
+- [x] 10.2 (P) 食べる予定/食べたものの一覧共有
+  - `meal_date`と現在時刻の比較による未来/過去の一覧表示を実装する
+  - 共有カレンダーの全メンバーの記録が一覧に含まれることを確認できる
+  - _Requirements: 12.4, 12.5, 12.7_
+  - _Boundary: MealRecordService_
+- [x] 10.3 (P) 献立記録の編集・削除
+  - 献立記録の編集・削除操作を実装する
+  - 編集後、一覧表示に変更が反映されることを確認できる
+  - _Requirements: 12.6_
+  - _Boundary: MealRecordService_
+
+- [ ] 11. 通知配信基盤
+- [x] 11.1 push_tokensの登録と権限連携
+  - `push_tokens`テーブルを作成し、アプリ起動時にExpo Push Tokenを取得・保存する処理を実装する
+  - ログアウト時にトークンを無効化する
+  - 権限許可後にトークンが`push_tokens`へ保存されることを確認できる
+  - _Requirements: 6.1_
+- [x] 11.2 EventChangeNotifier: 変更・コメント通知
+  - `notification_log`テーブルと一意制約(冪等性キー)を作成する
+  - `events`(`series_id IS NULL`のみ)/`event_comments`のDB Webhookを起点に、操作者を除く全メンバーへプッシュ通知を送るEdge Functionを実装する
+  - 予定編集・コメント投稿後、他メンバーの端末に通知が届き`notification_log`に記録されることを確認できる
+  - _Requirements: 6.1, 6.2, 6.3_
+  - _Depends: 4.2, 5.1, 11.1_
+- [x] 11.3 繰り返しシリーズ作成の集約通知
+  - `event_series_creation_events`テーブルを作成する
+  - `createRecurringSeries` RPCがシリーズ生成後に1件INSERTし、そのDB Webhookを起点に1件のみ通知を送信する処理を実装する
+  - シリーズ作成時に個々の回ごとの通知は送信されず、集約された1件のみ届くことを確認できる
+  - _Requirements: 3.3, 6.1_
+  - _Depends: 4.3, 11.2_
+- [x] 11.4 NotificationDispatcher: リマインド配信
+  - pg_cronで毎分起動するEdge Functionを実装し、`todos.reminder_at`/`events.reminder_at`到来分を抽出する
+  - `event_reminder_targets`を参照して配信対象を解決(未設定時は全メンバー)し、Expo Push経由で送信する
+  - リマインド時刻到来後、設定した対象者のみに通知が届き、再実行しても重複配信されないことを確認できる
+  - _Requirements: 6.4, 6.5, 6.6, 9.3_
+  - _Depends: 4.6, 9.4, 11.1_
+
+- [ ] 12. 画面統合とリアルタイム同期
+- [x] 12.1 予定詳細画面の統合
+  - コメント・スタンプ・タグ・ToDo・リマインド対象者選択・思い出セクション(実施済みの場合)を1つの予定詳細画面に統合する
+  - 削除操作から確認モーダルを経て予定削除に至る導線を統合する
+  - 予定詳細画面から全機能(コメント投稿、タグ付与、ToDo追加、削除)を操作できることを確認できる
+  - _Depends: 4.2, 5.2, 6.2, 8.2, 9.3_
+- [x] 12.2 Supabase Realtimeによる一覧のリアルタイム反映
+  - カレンダー・ToDo一覧・タグ一覧画面にSupabase Realtime購読を組み込む
+  - 他メンバーの変更操作が自端末の画面に自動反映されることを確認できる
+  - _Depends: 12.1_
+
+- [ ] 13. 検証: E2E・回帰テスト
+- [x] 13.1 予定作成からカレンダー月表示への反映
+  - 予定作成後に月表示へ切り替えて登録内容が表示されることをE2Eで検証する
+  - 検証の前提として、予定作成UIが未実装だったため`useCreateEvent`フックとカレンダー画面への最小限の登録フォームを追加した
+  - Jest+RTL上で、実サービス層(モックはSupabaseクライアント境界のみ)を通してカレンダー画面に反映されることを確認(`e2e/__tests__/13.1-event-creation-to-calendar.test.tsx`)。実機/実DBでのE2Eではない点に留意
+  - _Requirements: 3.1, 4.1_
+  - _Depends: 4.5_
+- [x] 13.2 繰り返し予定の思い出粒度の検証
+  - 繰り返し予定の1回だけに写真・コメントを追加し、他の回に影響しないことを検証する
+  - `createRecurringSeries`/`attachPhoto`/`postComment`/`listPhotosForEvent`/`listComments`を実サービス層で連携させ、フェイクSupabaseクライアント上で1回のみに紐づくことを確認(`e2e/__tests__/13.2-recurring-memory-granularity.test.tsx`)
+  - _Requirements: 7.4, 7.6_
+  - _Depends: 8.3_
+- [x] 13.3 予定削除フローの検証
+  - 削除確認モーダルの警告表示と、確定後の紐づくToDo・写真・コメントのカスケード削除を検証する
+  - 予定詳細画面(実フック)から削除確認→確定までを操作し、フェイクSupabaseクライアント上でのカスケード削除を確認(`e2e/__tests__/13.3-event-deletion-cascade.test.tsx`)。実DBのON DELETE CASCADE制約自体はマイグレーション(4.2)で定義済みだが、Docker環境がないため本タスクでは未実行
+  - _Requirements: 3.9_
+  - _Depends: 12.1_
+- [x] 13.4 献立記録フローの検証
+  - 未来日付での献立記録登録から一覧参照までの一連の操作を検証する
+  - 検証の前提として、献立記録の登録UIが未実装だったため、献立画面へ最小限の登録フォームを追加した
+  - 食べる予定一覧まで実フック経由で反映されることを確認(`e2e/__tests__/13.4-meal-record-flow.test.tsx`)
+  - _Requirements: 12.1, 12.4_
+  - _Depends: 10.2_
+- [ ] 13.5* 通知冪等性の回帰テスト
+  - 未実施: DB Webhook起点(EventChangeNotifier)とpg_cron起点(NotificationDispatcher)はDeno製Edge Functionであり、本環境にはDenoランタイム・Docker上のPostgresが無く実行できない(タスク11実装時と同一の環境制約)。Docker/Deno環境が整い次第、実行して検証する
+  - DB Webhook起点(EventChangeNotifier)とpg_cron起点(NotificationDispatcher)の双方で、再実行しても重複通知が発生しないことを回帰テストで検証する
+  - _Requirements: 6.1, 6.4_
+  - _Depends: 11.2, 11.4_

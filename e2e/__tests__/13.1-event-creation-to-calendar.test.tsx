@@ -1,0 +1,63 @@
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
+
+import CalendarScreen from "../../app/(tabs)/calendar";
+import { useAuthSession } from "../../src/features/auth/hooks";
+import { useCalendarMembers, useMyCalendars, useRemoveMember } from "../../src/features/calendars/hooks";
+import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
+import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
+
+jest.mock("../../src/shared/api/supabaseClient", () => ({
+  getSupabaseClient: jest.fn(),
+}));
+
+jest.mock("../../src/features/auth/hooks", () => ({
+  useAuthSession: jest.fn(),
+}));
+
+jest.mock("../../src/features/calendars/hooks", () => ({
+  useMyCalendars: jest.fn(),
+  useCalendarMembers: jest.fn(),
+  useRemoveMember: jest.fn(),
+}));
+
+const CALENDARS = [{ id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-01T00:00:00.000Z" }];
+
+describe("13.1 予定作成からカレンダー月表示への反映", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-09-15T09:00:00.000Z"));
+
+    (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } } });
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+    (useCalendarMembers as jest.Mock).mockReturnValue({
+      members: [{ calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-01T00:00:00.000Z" }],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    (useRemoveMember as jest.Mock).mockReturnValue({ removeMember: jest.fn(), isSubmitting: false, error: null });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.clearAllMocks();
+  });
+
+  it("reflects a newly created event in the calendar's month view without a page reload", async () => {
+    const fakeClient = createFakeSupabaseClient();
+    (getSupabaseClient as jest.Mock).mockReturnValue(fakeClient);
+
+    const { getByTestId, getByText, queryByText } = await render(<CalendarScreen />);
+
+    expect(queryByText("誕生日会")).toBeNull();
+
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "誕生日会");
+    await fireEvent.changeText(getByTestId("event-create-start-input"), "2026-09-15T10:00:00.000Z");
+    await fireEvent.changeText(getByTestId("event-create-end-input"), "2026-09-15T12:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() => expect(getByText("誕生日会")).toBeTruthy());
+    expect(fakeClient.getTable("events")).toHaveLength(1);
+    expect(fakeClient.getTable("events")[0]).toMatchObject({ calendar_id: "cal-1", title: "誕生日会" });
+  });
+});
