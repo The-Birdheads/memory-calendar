@@ -2,7 +2,14 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import CalendarScreen from "../calendar";
 import { useAuthSession } from "../../../src/features/auth/hooks";
-import { useCalendarMembers, useMyCalendars, useRemoveMember } from "../../../src/features/calendars/hooks";
+import {
+  useCalendarMembers,
+  useCreateCalendar,
+  useCreateInvite,
+  useJoinByInvite,
+  useMyCalendars,
+  useRemoveMember,
+} from "../../../src/features/calendars/hooks";
 import { computeDateRange } from "../../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../../src/features/events/hooks";
 
@@ -14,6 +21,9 @@ jest.mock("../../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
   useCalendarMembers: jest.fn(),
   useRemoveMember: jest.fn(),
+  useCreateCalendar: jest.fn(),
+  useCreateInvite: jest.fn(),
+  useJoinByInvite: jest.fn(),
 }));
 
 jest.mock("../../../src/features/events/hooks", () => ({
@@ -62,7 +72,12 @@ const OTHER_DAY_EVENT = {
 
 function mockCommonHooks() {
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } } });
-  (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+  (useMyCalendars as jest.Mock).mockReturnValue({
+    calendars: CALENDARS,
+    isLoading: false,
+    error: null,
+    refetch: jest.fn(),
+  });
   (useCalendarMembers as jest.Mock).mockReturnValue({
     members: MEMBERS_CAL_1,
     isLoading: false,
@@ -76,6 +91,21 @@ function mockCommonHooks() {
   });
   (useCreateEvent as jest.Mock).mockReturnValue({
     createEvent: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useCreateCalendar as jest.Mock).mockReturnValue({
+    createCalendar: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useCreateInvite as jest.Mock).mockReturnValue({
+    createInvite: jest.fn().mockResolvedValue({ id: "invite-1", calendarId: "cal-1", code: "ABC123", expiresAt: "2026-09-01T00:00:00.000Z", createdBy: "user-1", createdAt: "2026-08-22T00:00:00.000Z" }),
+    isSubmitting: false,
+    error: null,
+  });
+  (useJoinByInvite as jest.Mock).mockReturnValue({
+    joinByInvite: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -145,7 +175,12 @@ describe("CalendarScreen", () => {
 
   it("hides remove buttons when the caller is not the owner", async () => {
     (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-2" } } });
-    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+    (useMyCalendars as jest.Mock).mockReturnValue({
+      calendars: CALENDARS,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
     (useCalendarMembers as jest.Mock).mockReturnValue({
       members: MEMBERS_CAL_1,
       isLoading: false,
@@ -159,6 +194,21 @@ describe("CalendarScreen", () => {
     });
     (useCreateEvent as jest.Mock).mockReturnValue({
       createEvent: jest.fn().mockResolvedValue(true),
+      isSubmitting: false,
+      error: null,
+    });
+    (useCreateCalendar as jest.Mock).mockReturnValue({
+      createCalendar: jest.fn().mockResolvedValue(true),
+      isSubmitting: false,
+      error: null,
+    });
+    (useCreateInvite as jest.Mock).mockReturnValue({
+      createInvite: jest.fn().mockResolvedValue(null),
+      isSubmitting: false,
+      error: null,
+    });
+    (useJoinByInvite as jest.Mock).mockReturnValue({
+      joinByInvite: jest.fn().mockResolvedValue(true),
       isSubmitting: false,
       error: null,
     });
@@ -366,5 +416,79 @@ describe("CalendarScreen", () => {
         expect.objectContaining({ isAllDay: true, title: "旅行" })
       )
     );
+  });
+
+  it("shows an onboarding message and the add-calendar button when the caller has no calendars", async () => {
+    mockCommonHooks();
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByText, getByTestId } = await render(<CalendarScreen />);
+
+    expect(getByText("カレンダーがありません。作成するか、招待コードで参加してください。")).toBeTruthy();
+    expect(getByTestId("calendar-add-button")).toBeTruthy();
+  });
+
+  it("creates a new calendar from the onboarding modal and refetches the calendar list", async () => {
+    mockCommonHooks();
+    const refetchCalendars = jest.fn();
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: refetchCalendars });
+    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    const createCalendarMock = jest.fn().mockResolvedValue(true);
+    (useCreateCalendar as jest.Mock).mockReturnValue({ createCalendar: createCalendarMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-button"));
+    await fireEvent.changeText(getByTestId("calendar-create-name-input"), "我が家");
+    await fireEvent.press(getByTestId("calendar-create-submit"));
+
+    await waitFor(() => expect(createCalendarMock).toHaveBeenCalledWith({ name: "我が家" }));
+    await waitFor(() => expect(refetchCalendars).toHaveBeenCalled());
+  });
+
+  it("joins a calendar via invite code from the onboarding modal", async () => {
+    mockCommonHooks();
+    const refetchCalendars = jest.fn();
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: refetchCalendars });
+    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    const joinByInviteMock = jest.fn().mockResolvedValue(true);
+    (useJoinByInvite as jest.Mock).mockReturnValue({ joinByInvite: joinByInviteMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-button"));
+    await fireEvent.changeText(getByTestId("calendar-join-code-input"), "ABC123");
+    await fireEvent.press(getByTestId("calendar-join-submit"));
+
+    await waitFor(() => expect(joinByInviteMock).toHaveBeenCalledWith("ABC123"));
+    await waitFor(() => expect(refetchCalendars).toHaveBeenCalled());
+  });
+
+  it("generates and shows an invite code for the active calendar", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    const createInviteMock = jest.fn().mockResolvedValue({
+      id: "invite-1",
+      calendarId: "cal-1",
+      code: "XYZ789",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+      createdBy: "user-1",
+      createdAt: "2026-08-22T00:00:00.000Z",
+    });
+    (useCreateInvite as jest.Mock).mockReturnValue({ createInvite: createInviteMock, isSubmitting: false, error: null });
+
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-invite-button"));
+
+    await waitFor(() => expect(createInviteMock).toHaveBeenCalledWith("cal-1"));
+    expect(getByText("XYZ789")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("calendar-invite-close"));
+    expect(() => getByText("XYZ789")).toThrow();
   });
 });

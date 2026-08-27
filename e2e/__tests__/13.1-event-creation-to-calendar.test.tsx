@@ -2,7 +2,14 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import CalendarScreen from "../../app/(tabs)/calendar";
 import { useAuthSession } from "../../src/features/auth/hooks";
-import { useCalendarMembers, useMyCalendars, useRemoveMember } from "../../src/features/calendars/hooks";
+import {
+  useCalendarMembers,
+  useCreateCalendar,
+  useCreateInvite,
+  useJoinByInvite,
+  useMyCalendars,
+  useRemoveMember,
+} from "../../src/features/calendars/hooks";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
@@ -18,6 +25,9 @@ jest.mock("../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
   useCalendarMembers: jest.fn(),
   useRemoveMember: jest.fn(),
+  useCreateCalendar: jest.fn(),
+  useCreateInvite: jest.fn(),
+  useJoinByInvite: jest.fn(),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => {
@@ -39,7 +49,7 @@ describe("13.1 予定作成からカレンダー月表示への反映", () => {
     jest.setSystemTime(new Date("2026-09-15T09:00:00.000Z"));
 
     (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } } });
-    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null, refetch: jest.fn() });
     (useCalendarMembers as jest.Mock).mockReturnValue({
       members: [{ calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-01T00:00:00.000Z" }],
       isLoading: false,
@@ -47,6 +57,9 @@ describe("13.1 予定作成からカレンダー月表示への反映", () => {
       refetch: jest.fn(),
     });
     (useRemoveMember as jest.Mock).mockReturnValue({ removeMember: jest.fn(), isSubmitting: false, error: null });
+    (useCreateCalendar as jest.Mock).mockReturnValue({ createCalendar: jest.fn(), isSubmitting: false, error: null });
+    (useCreateInvite as jest.Mock).mockReturnValue({ createInvite: jest.fn(), isSubmitting: false, error: null });
+    (useJoinByInvite as jest.Mock).mockReturnValue({ joinByInvite: jest.fn(), isSubmitting: false, error: null });
   });
 
   afterEach(() => {

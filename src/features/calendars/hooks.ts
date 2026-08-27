@@ -1,8 +1,83 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
-import { listMembers, listMyCalendars, removeMember } from "./service";
-import type { Calendar, CalendarError, CalendarMember } from "./types";
+import { createCalendar, createInvite, joinByInvite, listMembers, listMyCalendars, removeMember } from "./service";
+import type { Calendar, CalendarError, CalendarInvite, CalendarMember, CreateCalendarInput } from "./types";
+
+export interface UseCreateCalendarResult {
+  createCalendar: (input: CreateCalendarInput) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: CalendarError | null;
+}
+
+export function useCreateCalendar(): UseCreateCalendarResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<CalendarError | null>(null);
+
+  const runCreateCalendar = useCallback(async (input: CreateCalendarInput) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await createCalendar(getSupabaseClient(), input);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { createCalendar: runCreateCalendar, isSubmitting, error };
+}
+
+export interface UseCreateInviteResult {
+  createInvite: (calendarId: string) => Promise<CalendarInvite | null>;
+  isSubmitting: boolean;
+  error: CalendarError | null;
+}
+
+export function useCreateInvite(): UseCreateInviteResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<CalendarError | null>(null);
+
+  const runCreateInvite = useCallback(async (calendarId: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await createInvite(getSupabaseClient(), calendarId);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return null;
+    }
+    return result.value;
+  }, []);
+
+  return { createInvite: runCreateInvite, isSubmitting, error };
+}
+
+export interface UseJoinByInviteResult {
+  joinByInvite: (inviteCode: string) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: CalendarError | null;
+}
+
+export function useJoinByInvite(): UseJoinByInviteResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<CalendarError | null>(null);
+
+  const runJoinByInvite = useCallback(async (inviteCode: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await joinByInvite(getSupabaseClient(), inviteCode);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { joinByInvite: runJoinByInvite, isSubmitting, error };
+}
 
 export interface UseMyCalendarsResult {
   calendars: Calendar[];

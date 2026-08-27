@@ -3,7 +3,14 @@ import { FlatList, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, Tou
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
-import { useCalendarMembers, useMyCalendars, useRemoveMember } from "../../src/features/calendars/hooks";
+import {
+  useCalendarMembers,
+  useCreateCalendar,
+  useCreateInvite,
+  useJoinByInvite,
+  useMyCalendars,
+  useRemoveMember,
+} from "../../src/features/calendars/hooks";
 import { computeDateRange, type CalendarViewMode } from "../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../src/features/events/hooks";
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
@@ -60,12 +67,20 @@ function formatFieldLabel(date: Date, isAllDay: boolean): string {
 
 export default function CalendarScreen() {
   const { session } = useAuthSession();
-  const { calendars } = useMyCalendars();
+  const { calendars, refetch: refetchCalendars } = useMyCalendars();
   const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(null);
 
   const activeCalendarId = selectedCalendarId ?? calendars[0]?.id ?? "";
   const { members, refetch } = useCalendarMembers(activeCalendarId);
   const { removeMember } = useRemoveMember();
+  const { createCalendar } = useCreateCalendar();
+  const { createInvite } = useCreateInvite();
+  const { joinByInvite } = useJoinByInvite();
+
+  const [isOnboardingModalVisible, setIsOnboardingModalVisible] = useState(false);
+  const [newCalendarName, setNewCalendarName] = useState("");
+  const [joinInviteCode, setJoinInviteCode] = useState("");
+  const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [focusedDate, setFocusedDate] = useState(() => new Date());
@@ -139,6 +154,31 @@ export default function CalendarScreen() {
     setIsCreateModalVisible(true);
   };
 
+  const handleCreateCalendar = async () => {
+    const success = await createCalendar({ name: newCalendarName });
+    if (success) {
+      setNewCalendarName("");
+      setIsOnboardingModalVisible(false);
+      await refetchCalendars();
+    }
+  };
+
+  const handleJoinByInvite = async () => {
+    const success = await joinByInvite(joinInviteCode);
+    if (success) {
+      setJoinInviteCode("");
+      setIsOnboardingModalVisible(false);
+      await refetchCalendars();
+    }
+  };
+
+  const handleGenerateInvite = async () => {
+    const invite = await createInvite(activeCalendarId);
+    if (invite) {
+      setGeneratedInviteCode(invite.code);
+    }
+  };
+
   const handleCreateEvent = async () => {
     const success = await createEvent({
       calendarId: activeCalendarId,
@@ -170,7 +210,72 @@ export default function CalendarScreen() {
             <Text>{calendar.name}</Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity
+          testID="calendar-add-button"
+          style={styles.switchAddButton}
+          onPress={() => setIsOnboardingModalVisible(true)}
+        >
+          <Text style={styles.switchAddButtonText}>＋</Text>
+        </TouchableOpacity>
+        {activeCalendarId ? (
+          <TouchableOpacity testID="calendar-invite-button" style={styles.inviteButton} onPress={handleGenerateInvite}>
+            <Text style={styles.inviteButtonText}>招待</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
+
+      {calendars.length === 0 ? (
+        <Text style={styles.onboardingMessage}>
+          カレンダーがありません。作成するか、招待コードで参加してください。
+        </Text>
+      ) : null}
+
+      {generatedInviteCode ? (
+        <View style={styles.inviteCodeBanner}>
+          <Text style={styles.inviteCodeLabel}>招待コード</Text>
+          <Text style={styles.inviteCodeValue}>{generatedInviteCode}</Text>
+          <TouchableOpacity testID="calendar-invite-close" onPress={() => setGeneratedInviteCode(null)}>
+            <Text>閉じる</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <Modal visible={isOnboardingModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>カレンダーを作成</Text>
+            <TextInput
+              testID="calendar-create-name-input"
+              style={styles.input}
+              placeholder="カレンダー名"
+              value={newCalendarName}
+              onChangeText={setNewCalendarName}
+            />
+            <TouchableOpacity testID="calendar-create-submit" style={styles.createButton} onPress={handleCreateCalendar}>
+              <Text style={styles.createButtonText}>作成</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.modalTitle}>招待コードで参加</Text>
+            <TextInput
+              testID="calendar-join-code-input"
+              style={styles.input}
+              placeholder="招待コード"
+              value={joinInviteCode}
+              onChangeText={setJoinInviteCode}
+            />
+            <TouchableOpacity testID="calendar-join-submit" style={styles.createButton} onPress={handleJoinByInvite}>
+              <Text style={styles.createButtonText}>参加</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              testID="calendar-onboarding-cancel"
+              onPress={() => setIsOnboardingModalVisible(false)}
+            >
+              <Text>閉じる</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <View style={styles.viewModeRow}>
         {VIEW_MODES.map((mode) => (
@@ -427,6 +532,53 @@ const styles = StyleSheet.create({
   switchButtonActive: {
     borderColor: "#2f6fed",
     backgroundColor: "#e8f0fe",
+  },
+  switchAddButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  switchAddButtonText: {
+    color: "#2f6fed",
+    fontWeight: "700",
+  },
+  inviteButton: {
+    marginLeft: "auto",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#2f6fed",
+  },
+  inviteButtonText: {
+    color: "#2f6fed",
+  },
+  onboardingMessage: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    color: "#666",
+  },
+  inviteCodeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 12,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#e8f0fe",
+  },
+  inviteCodeLabel: {
+    color: "#666",
+  },
+  inviteCodeValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: 1,
   },
   viewModeRow: {
     flexDirection: "row",
