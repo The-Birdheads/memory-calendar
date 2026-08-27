@@ -48,8 +48,8 @@ const CALENDARS = [
 ];
 
 const MEMBERS_CAL_1 = [
-  { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z" },
-  { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T00:00:00.000Z" },
+  { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう" },
+  { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T00:00:00.000Z", displayName: null },
 ];
 
 const TODAY_EVENT = {
@@ -130,8 +130,21 @@ describe("CalendarScreen", () => {
 
     expect(getByTestId("calendar-switch-cal-1")).toBeTruthy();
     expect(getByTestId("calendar-switch-cal-2")).toBeTruthy();
-    expect(getByText("user-1")).toBeTruthy();
-    expect(getByText("user-2")).toBeTruthy();
+    expect(getByText("たろう")).toBeTruthy();
+    expect(getByText("メンバー")).toBeTruthy();
+  });
+
+  it("never shows a member's raw user id, falling back to their own email when they have no display name", async () => {
+    mockCommonHooks();
+    (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-2", email: "user2@example.com" } } });
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByText, queryByText } = await render(<CalendarScreen />);
+
+    expect(getByText("たろう")).toBeTruthy();
+    expect(getByText("user2@example.com")).toBeTruthy();
+    expect(queryByText("user-1")).toBeNull();
+    expect(queryByText("user-2")).toBeNull();
   });
 
   it("switches the active calendar when a switcher button is pressed", async () => {

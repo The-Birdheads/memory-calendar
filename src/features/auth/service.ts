@@ -25,7 +25,12 @@ export async function signUp(
   client: SupabaseClient,
   credentials: AuthCredentials
 ): Promise<Result<Session | null, AuthError>> {
-  const { data, error } = await client.auth.signUp(credentials);
+  const { email, password, displayName } = credentials;
+  const { data, error } = await client.auth.signUp({
+    email,
+    password,
+    ...(displayName ? { options: { data: { display_name: displayName } } } : {}),
+  });
   if (error) {
     return err(mapAuthError(error.message));
   }

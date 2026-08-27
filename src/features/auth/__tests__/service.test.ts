@@ -53,6 +53,21 @@ describe("signUp", () => {
 
     expect(result).toEqual({ ok: false, error: { type: "EmailAlreadyInUse" } });
   });
+
+  it("passes the display name through as signup metadata when provided", async () => {
+    const session = { user: { id: "u1" } };
+    const client = createMockClient({
+      signUp: jest.fn().mockResolvedValue({ data: { session }, error: null }),
+    });
+
+    await signUp(client, { email: "a@example.com", password: "password123", displayName: "たろう" });
+
+    expect(client.auth.signUp).toHaveBeenCalledWith({
+      email: "a@example.com",
+      password: "password123",
+      options: { data: { display_name: "たろう" } },
+    });
+  });
 });
 
 describe("signIn", () => {

@@ -58,4 +58,24 @@ describe("SignupScreen", () => {
 
     expect(router.push).toHaveBeenCalledWith("/(auth)/login");
   });
+
+  it("includes the entered display name when submitting", async () => {
+    const signUp = jest.fn().mockResolvedValue(true);
+    (useAuthActions as jest.Mock).mockReturnValue({ signUp, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<SignupScreen />);
+
+    await fireEvent.changeText(getByTestId("signup-display-name-input"), "たろう");
+    await fireEvent.changeText(getByTestId("signup-email-input"), "new@example.com");
+    await fireEvent.changeText(getByTestId("signup-password-input"), "password123");
+    await fireEvent.press(getByTestId("signup-submit-button"));
+
+    await waitFor(() =>
+      expect(signUp).toHaveBeenCalledWith({
+        email: "new@example.com",
+        password: "password123",
+        displayName: "たろう",
+      })
+    );
+  });
 });

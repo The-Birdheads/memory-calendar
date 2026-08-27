@@ -156,7 +156,7 @@ describe("joinByInvite", () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T00:00:00.000Z" },
+      value: { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T00:00:00.000Z", displayName: null },
     });
     expect(client.rpc).toHaveBeenCalledWith("join_by_invite", { p_code: "abc-123" });
   });
@@ -229,10 +229,22 @@ describe("listMyCalendars", () => {
 });
 
 describe("listMembers", () => {
-  it("returns the members of the given calendar", async () => {
+  it("returns the members of the given calendar, including each member's display name", async () => {
     const rows = [
-      { calendar_id: "cal-1", user_id: "user-1", role: "owner", joined_at: "2026-08-17T00:00:00.000Z" },
-      { calendar_id: "cal-1", user_id: "user-2", role: "viewer", joined_at: "2026-08-17T01:00:00.000Z" },
+      {
+        calendar_id: "cal-1",
+        user_id: "user-1",
+        role: "owner",
+        joined_at: "2026-08-17T00:00:00.000Z",
+        profiles: { display_name: "たろう" },
+      },
+      {
+        calendar_id: "cal-1",
+        user_id: "user-2",
+        role: "viewer",
+        joined_at: "2026-08-17T01:00:00.000Z",
+        profiles: { display_name: null },
+      },
     ];
     const eq = jest.fn().mockResolvedValue({ data: rows, error: null });
     const select = jest.fn().mockReturnValue({ eq });
@@ -245,11 +257,12 @@ describe("listMembers", () => {
     expect(result).toEqual({
       ok: true,
       value: [
-        { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z" },
-        { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T01:00:00.000Z" },
+        { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう" },
+        { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T01:00:00.000Z", displayName: null },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("calendar_members");
+    expect(select).toHaveBeenCalledWith("*, profiles(display_name)");
     expect(eq).toHaveBeenCalledWith("calendar_id", "cal-1");
   });
 

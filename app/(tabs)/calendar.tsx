@@ -362,7 +362,10 @@ export default function CalendarScreen() {
         keyExtractor={(item) => item.userId}
         renderItem={({ item }) => (
           <View style={styles.memberRow}>
-            <Text>{item.userId}</Text>
+            <Text>
+              {item.displayName ??
+                (item.userId === session?.user.id ? session?.user.email ?? "メンバー" : "メンバー")}
+            </Text>
             {isOwner && item.role !== "owner" ? (
               <TouchableOpacity
                 testID={`remove-member-${item.userId}`}

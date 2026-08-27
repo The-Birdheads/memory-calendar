@@ -7,4 +7,5 @@ export type AuthError =
 export interface AuthCredentials {
   email: string;
   password: string;
+  displayName?: string;
 }

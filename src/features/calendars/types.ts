@@ -12,6 +12,7 @@ export interface CalendarMember {
   userId: string;
   role: CalendarRole;
   joinedAt: string;
+  displayName: string | null;
 }
 
 export interface CreateCalendarInput {

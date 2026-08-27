@@ -6,12 +6,13 @@ import { useAuthActions } from "../../src/features/auth/hooks";
 import { getAuthErrorMessageJa } from "../../src/features/auth/service";
 
 export default function SignupScreen() {
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { signUp, isSubmitting, error } = useAuthActions();
 
   const handleSubmit = async () => {
-    const success = await signUp({ email, password });
+    const success = await signUp({ email, password, displayName: displayName.trim() || undefined });
     if (success) {
       router.replace("/(tabs)/calendar");
     }
@@ -20,6 +21,13 @@ export default function SignupScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>アカウント登録</Text>
+      <TextInput
+        testID="signup-display-name-input"
+        style={styles.input}
+        placeholder="表示名"
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
       <TextInput
         testID="signup-email-input"
         style={styles.input}
