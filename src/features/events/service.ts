@@ -298,3 +298,18 @@ export async function getEvent(
 
   return ok(mapEventRow(data as EventRow));
 }
+
+export function getEventErrorMessageJa(error: EventError): string {
+  switch (error.type) {
+    case "NotFound":
+      return "予定が見つかりません";
+    case "Forbidden":
+      return "この操作を行う権限がありません";
+    case "InvalidDateRange":
+      return "終了日時は開始日時より後に設定してください";
+    case "InvalidRecurrenceRange":
+      return "繰り返しの終了日は開始日から1年以内で指定してください";
+    default:
+      return "エラーが発生しました。しばらくしてから再度お試しください";
+  }
+}

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createCalendar,
   createInvite,
+  getCalendarErrorMessageJa,
   joinByInvite,
   listMembers,
   listMyCalendars,
@@ -298,5 +299,16 @@ describe("removeMember", () => {
     const result = await removeMember(client, "cal-1", "user-2");
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("getCalendarErrorMessageJa", () => {
+  it("returns a Japanese message for each known error type", () => {
+    expect(getCalendarErrorMessageJa({ type: "NotFound" })).toContain("見つかりません");
+    expect(getCalendarErrorMessageJa({ type: "Forbidden" })).toContain("権限がありません");
+    expect(getCalendarErrorMessageJa({ type: "InviteExpired" })).toContain("有効期限");
+    expect(getCalendarErrorMessageJa({ type: "ValidationError", field: "name" })).toContain(
+      "カレンダー名"
+    );
   });
 });

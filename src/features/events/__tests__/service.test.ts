@@ -5,6 +5,7 @@ import {
   createRecurringSeries,
   deleteEvent,
   getEvent,
+  getEventErrorMessageJa,
   listEventsInRange,
   setReminderTargets,
   updateEvent,
@@ -848,5 +849,14 @@ describe("getEvent", () => {
     const result = await getEvent(client, "event-1");
 
     expect(result).toEqual({ ok: false, error: { type: "NotFound" } });
+  });
+});
+
+describe("getEventErrorMessageJa", () => {
+  it("returns a Japanese message for each known error type", () => {
+    expect(getEventErrorMessageJa({ type: "NotFound" })).toContain("見つかりません");
+    expect(getEventErrorMessageJa({ type: "Forbidden" })).toContain("権限がありません");
+    expect(getEventErrorMessageJa({ type: "InvalidDateRange" })).toContain("開始日時より後");
+    expect(getEventErrorMessageJa({ type: "InvalidRecurrenceRange" })).toContain("1年以内");
   });
 });

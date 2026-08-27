@@ -173,3 +173,21 @@ export async function removeMember(
 
   return ok(undefined);
 }
+
+export function getCalendarErrorMessageJa(error: CalendarError): string {
+  switch (error.type) {
+    case "NotFound":
+      return "カレンダーが見つかりません";
+    case "Forbidden":
+      return "この操作を行う権限がありません";
+    case "InviteExpired":
+      return "招待コードが無効か、有効期限が切れています";
+    case "ValidationError":
+      if (error.field === "name") {
+        return "カレンダー名を入力してください";
+      }
+      return "入力内容を確認してください";
+    default:
+      return "エラーが発生しました。しばらくしてから再度お試しください";
+  }
+}

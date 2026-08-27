@@ -220,22 +220,16 @@ describe("CalendarScreen", () => {
     expect(queryByTestId("remove-member-user-2")).toBeNull();
   });
 
-  it("defaults to month view, shows the month label, and switches to week view when pressed", async () => {
+  it("shows the month label and queries the month range", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
 
     const today = new Date("2026-08-18T12:00:00.000Z");
-    const { getByTestId, getByText } = await render(<CalendarScreen />);
+    const { getByText } = await render(<CalendarScreen />);
 
     expect(getByText("2026年8月")).toBeTruthy();
     await waitFor(() =>
       expect(useEventsInRange).toHaveBeenLastCalledWith("cal-1", computeDateRange("month", today))
-    );
-
-    await fireEvent.press(getByTestId("calendar-view-week"));
-
-    await waitFor(() =>
-      expect(useEventsInRange).toHaveBeenLastCalledWith("cal-1", computeDateRange("week", today))
     );
   });
 
@@ -320,18 +314,6 @@ describe("CalendarScreen", () => {
     await fireEvent.press(getByTestId("calendar-month-prev"));
     await fireEvent.press(getByTestId("calendar-month-prev"));
     expect(getByText("2026年7月")).toBeTruthy();
-  });
-
-  it("shows a horizontal date strip in week view", async () => {
-    mockCommonHooks();
-    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
-
-    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
-
-    await fireEvent.press(getByTestId("calendar-view-week"));
-
-    expect(getByTestId("calendar-date-2026-08-18")).toBeTruthy();
-    expect(queryByTestId("calendar-grid-cell-2026-08-18")).toBeNull();
   });
 
   it("opens the creation modal from the FAB and cancels without creating", async () => {
@@ -490,5 +472,60 @@ describe("CalendarScreen", () => {
 
     await fireEvent.press(getByTestId("calendar-invite-close"));
     expect(() => getByText("XYZ789")).toThrow();
+  });
+
+  it("shows an error message when calendar creation fails", async () => {
+    mockCommonHooks();
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    (useCreateCalendar as jest.Mock).mockReturnValue({
+      createCalendar: jest.fn().mockResolvedValue(false),
+      isSubmitting: false,
+      error: { type: "ValidationError", field: "name" },
+    });
+
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-button"));
+    await fireEvent.press(getByTestId("calendar-create-submit"));
+
+    expect(getByText("カレンダー名を入力してください")).toBeTruthy();
+  });
+
+  it("shows an error message when joining by invite fails", async () => {
+    mockCommonHooks();
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    (useJoinByInvite as jest.Mock).mockReturnValue({
+      joinByInvite: jest.fn().mockResolvedValue(false),
+      isSubmitting: false,
+      error: { type: "InviteExpired" },
+    });
+
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-button"));
+    await fireEvent.press(getByTestId("calendar-join-submit"));
+
+    expect(getByText("招待コードが無効か、有効期限が切れています")).toBeTruthy();
+  });
+
+  it("shows an error message when event creation fails", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    (useCreateEvent as jest.Mock).mockReturnValue({
+      createEvent: jest.fn().mockResolvedValue(false),
+      isSubmitting: false,
+      error: { type: "InvalidDateRange" },
+    });
+
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    expect(getByText("終了日時は開始日時より後に設定してください")).toBeTruthy();
   });
 });

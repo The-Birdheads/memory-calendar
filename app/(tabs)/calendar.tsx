@@ -1,5 +1,16 @@
 import { useMemo, useState } from "react";
-import { FlatList, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
@@ -11,13 +22,13 @@ import {
   useMyCalendars,
   useRemoveMember,
 } from "../../src/features/calendars/hooks";
-import { computeDateRange, type CalendarViewMode } from "../../src/features/events/dateRange";
+import { getCalendarErrorMessageJa } from "../../src/features/calendars/service";
+import { computeDateRange } from "../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../src/features/events/hooks";
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
+import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
 
-const VIEW_MODES: CalendarViewMode[] = ["month", "week", "day"];
-const VIEW_MODE_LABELS: Record<CalendarViewMode, string> = { month: "月", week: "週", day: "日" };
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
 const CATEGORY_COLORS: { name: string; hex: string }[] = [
@@ -36,17 +47,6 @@ function toDateKey(iso: string): string {
 
 function todayDateKey(): string {
   return toDateKey(new Date().toISOString());
-}
-
-function listDateKeysInRange(start: string, end: string): string[] {
-  const keys: string[] = [];
-  const cursor = new Date(start);
-  const endDate = new Date(end);
-  while (cursor <= endDate) {
-    keys.push(toDateKey(cursor.toISOString()));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return keys;
 }
 
 function formatMonthLabel(date: Date): string {
@@ -73,22 +73,21 @@ export default function CalendarScreen() {
   const activeCalendarId = selectedCalendarId ?? calendars[0]?.id ?? "";
   const { members, refetch } = useCalendarMembers(activeCalendarId);
   const { removeMember } = useRemoveMember();
-  const { createCalendar } = useCreateCalendar();
+  const { createCalendar, error: createCalendarError } = useCreateCalendar();
   const { createInvite } = useCreateInvite();
-  const { joinByInvite } = useJoinByInvite();
+  const { joinByInvite, error: joinByInviteError } = useJoinByInvite();
 
   const [isOnboardingModalVisible, setIsOnboardingModalVisible] = useState(false);
   const [newCalendarName, setNewCalendarName] = useState("");
   const [joinInviteCode, setJoinInviteCode] = useState("");
   const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
 
-  const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [focusedDate, setFocusedDate] = useState(() => new Date());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayDateKey());
 
-  const range = useMemo(() => computeDateRange(viewMode, focusedDate), [viewMode, focusedDate]);
+  const range = useMemo(() => computeDateRange("month", focusedDate), [focusedDate]);
   const { events, refetch: refetchEvents } = useEventsInRange(activeCalendarId, range);
-  const { createEvent } = useCreateEvent();
+  const { createEvent, error: createEventError } = useCreateEvent();
 
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [newEventTitle, setNewEventTitle] = useState("");
@@ -98,7 +97,6 @@ export default function CalendarScreen() {
   const [newEventColor, setNewEventColor] = useState(CATEGORY_COLORS[0].hex);
   const [activePicker, setActivePicker] = useState<"start" | "end" | null>(null);
 
-  const dateKeys = useMemo(() => listDateKeysInRange(range.start, range.end), [range]);
   const monthGrid = useMemo(() => buildMonthGrid(focusedDate), [focusedDate]);
   const eventsForSelectedDate = events.filter((event) => toDateKey(event.startAt) === selectedDateKey);
 
@@ -132,13 +130,7 @@ export default function CalendarScreen() {
 
   const shiftFocusedDate = (direction: 1 | -1) => {
     const next = new Date(focusedDate);
-    if (viewMode === "month") {
-      next.setUTCMonth(next.getUTCMonth() + direction);
-    } else if (viewMode === "week") {
-      next.setUTCDate(next.getUTCDate() + direction * 7);
-    } else {
-      next.setUTCDate(next.getUTCDate() + direction);
-    }
+    next.setUTCMonth(next.getUTCMonth() + direction);
     setFocusedDate(next);
     setSelectedDateKey(toDateKey(next.toISOString()));
   };
@@ -241,53 +233,57 @@ export default function CalendarScreen() {
       ) : null}
 
       <Modal visible={isOnboardingModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>カレンダーを作成</Text>
-            <TextInput
-              testID="calendar-create-name-input"
-              style={styles.input}
-              placeholder="カレンダー名"
-              value={newCalendarName}
-              onChangeText={setNewCalendarName}
-            />
-            <TouchableOpacity testID="calendar-create-submit" style={styles.createButton} onPress={handleCreateCalendar}>
-              <Text style={styles.createButtonText}>作成</Text>
-            </TouchableOpacity>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>カレンダーを作成</Text>
+              <TextInput
+                testID="calendar-create-name-input"
+                style={styles.input}
+                placeholder="カレンダー名"
+                value={newCalendarName}
+                onChangeText={setNewCalendarName}
+              />
+              {createCalendarError ? (
+                <Text style={styles.errorText}>{getCalendarErrorMessageJa(createCalendarError)}</Text>
+              ) : null}
+              <TouchableOpacity testID="calendar-create-submit" style={styles.createButton} onPress={handleCreateCalendar}>
+                <Text style={styles.createButtonText}>作成</Text>
+              </TouchableOpacity>
 
-            <Text style={styles.modalTitle}>招待コードで参加</Text>
-            <TextInput
-              testID="calendar-join-code-input"
-              style={styles.input}
-              placeholder="招待コード"
-              value={joinInviteCode}
-              onChangeText={setJoinInviteCode}
-            />
-            <TouchableOpacity testID="calendar-join-submit" style={styles.createButton} onPress={handleJoinByInvite}>
-              <Text style={styles.createButtonText}>参加</Text>
-            </TouchableOpacity>
+              <Text style={styles.modalTitle}>招待コードで参加</Text>
+              <TextInput
+                testID="calendar-join-code-input"
+                style={styles.input}
+                placeholder="招待コード"
+                value={joinInviteCode}
+                onChangeText={setJoinInviteCode}
+              />
+              {joinByInviteError ? (
+                <Text style={styles.errorText}>{getCalendarErrorMessageJa(joinByInviteError)}</Text>
+              ) : null}
+              <TouchableOpacity testID="calendar-join-submit" style={styles.createButton} onPress={handleJoinByInvite}>
+                <Text style={styles.createButtonText}>参加</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              testID="calendar-onboarding-cancel"
-              onPress={() => setIsOnboardingModalVisible(false)}
-            >
-              <Text>閉じる</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              <TouchableOpacity
+                testID="calendar-onboarding-cancel"
+                onPress={() => setIsOnboardingModalVisible(false)}
+              >
+                <Text>閉じる</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <View style={styles.viewModeRow}>
-        {VIEW_MODES.map((mode) => (
-          <TouchableOpacity
-            key={mode}
-            testID={`calendar-view-${mode}`}
-            onPress={() => setViewMode(mode)}
-            style={[styles.viewModeButton, mode === viewMode && styles.viewModeButtonActive]}
-          >
-            <Text>{VIEW_MODE_LABELS[mode]}</Text>
-          </TouchableOpacity>
-        ))}
         <TouchableOpacity testID="calendar-today-button" onPress={handleToday} style={styles.todayButton}>
           <Text>今日</Text>
         </TouchableOpacity>
@@ -303,67 +299,52 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
-      {viewMode === "month" ? (
-        <View style={styles.gridContainer}>
-          <View style={styles.weekdayRow}>
-            {WEEKDAY_LABELS.map((label) => (
-              <Text key={label} style={styles.weekdayLabel}>
-                {label}
-              </Text>
-            ))}
-          </View>
-          {monthGrid.map((week, weekIndex) => (
-            <View key={weekIndex} style={styles.gridRow}>
-              {week.map((cell) => {
-                const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
-                const isToday = cell.dateKey === todayDateKey();
-                const isSelected = cell.dateKey === selectedDateKey;
-                return (
-                  <TouchableOpacity
-                    key={cell.dateKey}
-                    testID={`calendar-grid-cell-${cell.dateKey}`}
-                    style={[
-                      styles.gridCell,
-                      isSelected && styles.gridCellSelected,
-                      !cell.isCurrentMonth && styles.gridCellMuted,
-                    ]}
-                    onPress={() => setSelectedDateKey(cell.dateKey)}
-                  >
-                    <View style={[styles.gridDayBadge, isToday && styles.gridDayBadgeToday]}>
-                      <Text style={[styles.gridDayText, isToday && styles.gridDayTextToday]}>{cell.day}</Text>
-                    </View>
-                    <View style={styles.gridDotsRow}>
-                      {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => (
-                        <View
-                          key={event.id}
-                          testID={`calendar-grid-dot-${event.id}`}
-                          style={[styles.gridDot, { backgroundColor: event.categoryColor ?? "#999999" }]}
-                        />
-                      ))}
-                      {cellEvents.length > MAX_DOTS_PER_CELL ? (
-                        <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+      <View style={styles.gridContainer}>
+        <View style={styles.weekdayRow}>
+          {WEEKDAY_LABELS.map((label) => (
+            <Text key={label} style={styles.weekdayLabel}>
+              {label}
+            </Text>
           ))}
         </View>
-      ) : (
-        <ScrollView horizontal style={styles.dateList}>
-          {dateKeys.map((item) => (
-            <TouchableOpacity
-              key={item}
-              testID={`calendar-date-${item}`}
-              onPress={() => setSelectedDateKey(item)}
-              style={[styles.dateChip, item === selectedDateKey && styles.dateChipActive]}
-            >
-              <Text>{item.slice(8, 10)}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
+        {monthGrid.map((week, weekIndex) => (
+          <View key={weekIndex} style={styles.gridRow}>
+            {week.map((cell) => {
+              const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
+              const isToday = cell.dateKey === todayDateKey();
+              const isSelected = cell.dateKey === selectedDateKey;
+              return (
+                <TouchableOpacity
+                  key={cell.dateKey}
+                  testID={`calendar-grid-cell-${cell.dateKey}`}
+                  style={[
+                    styles.gridCell,
+                    isSelected && styles.gridCellSelected,
+                    !cell.isCurrentMonth && styles.gridCellMuted,
+                  ]}
+                  onPress={() => setSelectedDateKey(cell.dateKey)}
+                >
+                  <View style={[styles.gridDayBadge, isToday && styles.gridDayBadgeToday]}>
+                    <Text style={[styles.gridDayText, isToday && styles.gridDayTextToday]}>{cell.day}</Text>
+                  </View>
+                  <View style={styles.gridDotsRow}>
+                    {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => (
+                      <View
+                        key={event.id}
+                        testID={`calendar-grid-dot-${event.id}`}
+                        style={[styles.gridDot, { backgroundColor: event.categoryColor ?? "#999999" }]}
+                      />
+                    ))}
+                    {cellEvents.length > MAX_DOTS_PER_CELL ? (
+                      <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ))}
+      </View>
 
       <FlatList
         data={eventsForSelectedDate}
@@ -399,7 +380,14 @@ export default function CalendarScreen() {
       </TouchableOpacity>
 
       <Modal visible={isCreateModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>予定を作成</Text>
 
@@ -494,6 +482,10 @@ export default function CalendarScreen() {
               ))}
             </View>
 
+            {createEventError ? (
+              <Text style={styles.errorText}>{getEventErrorMessageJa(createEventError)}</Text>
+            ) : null}
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 testID="event-create-cancel"
@@ -506,7 +498,8 @@ export default function CalendarScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -586,17 +579,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingBottom: 8,
-  },
-  viewModeButton: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  viewModeButtonActive: {
-    borderColor: "#2f6fed",
-    backgroundColor: "#e8f0fe",
   },
   todayButton: {
     marginLeft: "auto",
@@ -687,23 +669,6 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: "#888",
   },
-  dateList: {
-    flexGrow: 0,
-    paddingHorizontal: 8,
-    marginBottom: 8,
-  },
-  dateChip: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginHorizontal: 4,
-  },
-  dateChipActive: {
-    borderColor: "#2f6fed",
-    backgroundColor: "#e8f0fe",
-  },
   eventRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -752,6 +717,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     backgroundColor: "rgba(0,0,0,0.35)",
   },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+  },
   modalCard: {
     backgroundColor: "#fff",
     borderTopLeftRadius: 20,
@@ -762,6 +731,9 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
+  },
+  errorText: {
+    color: "#d32f2f",
   },
   input: {
     borderWidth: 1,
