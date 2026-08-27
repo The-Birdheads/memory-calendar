@@ -46,6 +46,10 @@ export default function SignupScreen() {
       >
         <Text style={styles.buttonText}>登録する</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity testID="signup-login-link" onPress={() => router.push("/(auth)/login")}>
+        <Text style={styles.linkText}>すでにアカウントをお持ちの方はこちら</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -71,6 +75,11 @@ const styles = StyleSheet.create({
   },
   error: {
     color: "#d32f2f",
+  },
+  linkText: {
+    color: "#2f6fed",
+    textAlign: "center",
+    marginTop: 8,
   },
   button: {
     backgroundColor: "#2f6fed",

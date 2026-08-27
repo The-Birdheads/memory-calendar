@@ -8,10 +8,17 @@ import { getAuthErrorMessageJa } from "../../src/features/auth/service";
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { signIn, isSubmitting, error } = useAuthActions();
+  const { signIn, signInWithGoogle, isSubmitting, error } = useAuthActions();
 
   const handleSubmit = async () => {
     const success = await signIn({ email, password });
+    if (success) {
+      router.replace("/(tabs)/calendar");
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    const success = await signInWithGoogle();
     if (success) {
       router.replace("/(tabs)/calendar");
     }
@@ -46,6 +53,25 @@ export default function LoginScreen() {
       >
         <Text style={styles.buttonText}>ログイン</Text>
       </TouchableOpacity>
+
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>または</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <TouchableOpacity
+        testID="login-google-button"
+        style={styles.googleButton}
+        onPress={handleGoogleSignIn}
+        disabled={isSubmitting}
+      >
+        <Text style={styles.googleButtonText}>Googleでログイン</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity testID="login-signup-link" onPress={() => router.push("/(auth)/signup")}>
+        <Text style={styles.linkText}>アカウントをお持ちでない方はこちら</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -72,6 +98,11 @@ const styles = StyleSheet.create({
   error: {
     color: "#d32f2f",
   },
+  linkText: {
+    color: "#2f6fed",
+    textAlign: "center",
+    marginTop: 8,
+  },
   button: {
     backgroundColor: "#2f6fed",
     borderRadius: 8,
@@ -81,6 +112,32 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: "#fff",
+    fontWeight: "600",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#ddd",
+  },
+  dividerText: {
+    color: "#999",
+    fontSize: 12,
+  },
+  googleButton: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  googleButtonText: {
+    color: "#333",
     fontWeight: "600",
   },
 });

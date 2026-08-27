@@ -3,7 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import { getExpoPushTokenAsync, invalidatePushToken } from "../notifications/service";
-import { signIn, signOut, signUp } from "./service";
+import { signIn, signInWithGoogle, signOut, signUp } from "./service";
 import type { AuthCredentials, AuthError } from "./types";
 
 export interface UseAuthSessionResult {
@@ -44,6 +44,7 @@ export function useAuthSession(): UseAuthSessionResult {
 export interface UseAuthActionsResult {
   signUp: (credentials: AuthCredentials) => Promise<boolean>;
   signIn: (credentials: AuthCredentials) => Promise<boolean>;
+  signInWithGoogle: () => Promise<boolean>;
   signOut: () => Promise<boolean>;
   isSubmitting: boolean;
   error: AuthError | null;
@@ -69,6 +70,18 @@ export function useAuthActions(): UseAuthActionsResult {
     setIsSubmitting(true);
     setError(null);
     const result = await signIn(getSupabaseClient(), credentials);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  const runSignInWithGoogle = useCallback(async () => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await signInWithGoogle(getSupabaseClient());
     setIsSubmitting(false);
     if (!result.ok) {
       setError(result.error);
@@ -103,6 +116,7 @@ export function useAuthActions(): UseAuthActionsResult {
   return {
     signUp: runSignUp,
     signIn: runSignIn,
+    signInWithGoogle: runSignInWithGoogle,
     signOut: runSignOut,
     isSubmitting,
     error,

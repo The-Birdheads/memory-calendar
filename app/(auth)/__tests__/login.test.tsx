@@ -5,7 +5,7 @@ import LoginScreen from "../login";
 import { useAuthActions } from "../../../src/features/auth/hooks";
 
 jest.mock("expo-router", () => ({
-  router: { replace: jest.fn() },
+  router: { replace: jest.fn(), push: jest.fn() },
 }));
 
 jest.mock("../../../src/features/auth/hooks", () => ({
@@ -62,6 +62,50 @@ describe("LoginScreen", () => {
     await fireEvent.press(getByTestId("login-submit-button"));
 
     await waitFor(() => expect(signIn).toHaveBeenCalledTimes(1));
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("navigates to the signup screen when the signup link is pressed", async () => {
+    (useAuthActions as jest.Mock).mockReturnValue({ signIn: jest.fn(), isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<LoginScreen />);
+
+    await fireEvent.press(getByTestId("login-signup-link"));
+
+    expect(router.push).toHaveBeenCalledWith("/(auth)/signup");
+  });
+
+  it("signs in with Google and navigates to the calendar on success", async () => {
+    const signInWithGoogle = jest.fn().mockResolvedValue(true);
+    (useAuthActions as jest.Mock).mockReturnValue({
+      signIn: jest.fn(),
+      signInWithGoogle,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<LoginScreen />);
+
+    await fireEvent.press(getByTestId("login-google-button"));
+
+    await waitFor(() => expect(signInWithGoogle).toHaveBeenCalled());
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/(tabs)/calendar"));
+  });
+
+  it("does not navigate when Google sign-in fails", async () => {
+    const signInWithGoogle = jest.fn().mockResolvedValue(false);
+    (useAuthActions as jest.Mock).mockReturnValue({
+      signIn: jest.fn(),
+      signInWithGoogle,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<LoginScreen />);
+
+    await fireEvent.press(getByTestId("login-google-button"));
+
+    await waitFor(() => expect(signInWithGoogle).toHaveBeenCalled());
     expect(router.replace).not.toHaveBeenCalled();
   });
 });

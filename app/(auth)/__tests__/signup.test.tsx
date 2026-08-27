@@ -5,7 +5,7 @@ import SignupScreen from "../signup";
 import { useAuthActions } from "../../../src/features/auth/hooks";
 
 jest.mock("expo-router", () => ({
-  router: { replace: jest.fn() },
+  router: { replace: jest.fn(), push: jest.fn() },
 }));
 
 jest.mock("../../../src/features/auth/hooks", () => ({
@@ -47,5 +47,15 @@ describe("SignupScreen", () => {
     const { getByText } = await render(<SignupScreen />);
 
     expect(getByText("このメールアドレスは既に登録されています")).toBeTruthy();
+  });
+
+  it("navigates to the login screen when the login link is pressed", async () => {
+    (useAuthActions as jest.Mock).mockReturnValue({ signUp: jest.fn(), isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<SignupScreen />);
+
+    await fireEvent.press(getByTestId("signup-login-link"));
+
+    expect(router.push).toHaveBeenCalledWith("/(auth)/login");
   });
 });

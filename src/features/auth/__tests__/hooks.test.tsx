@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
 import { getExpoPushTokenAsync, invalidatePushToken } from "../../notifications/service";
-import { signIn, signOut, signUp } from "../service";
+import { signIn, signInWithGoogle, signOut, signUp } from "../service";
 import { useAuthActions, useAuthSession } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
@@ -13,6 +13,7 @@ jest.mock("../service", () => ({
   signIn: jest.fn(),
   signUp: jest.fn(),
   signOut: jest.fn(),
+  signInWithGoogle: jest.fn(),
 }));
 
 jest.mock("../../notifications/service", () => ({
@@ -190,5 +191,36 @@ describe("useAuthActions", () => {
 
     expect(success).toBe(true);
     expect(signOut).toHaveBeenCalledWith({});
+  });
+
+  it("returns true and keeps error null when Google sign-in succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (signInWithGoogle as jest.Mock).mockResolvedValue({ ok: true, value: { user: { id: "u1" } } });
+
+    const { result } = await renderHook(() => useAuthActions());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.signInWithGoogle();
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(signInWithGoogle).toHaveBeenCalledWith({});
+  });
+
+  it("returns false and sets the error when Google sign-in fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (signInWithGoogle as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Cancelled" } });
+
+    const { result } = await renderHook(() => useAuthActions());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.signInWithGoogle();
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Cancelled" });
   });
 });

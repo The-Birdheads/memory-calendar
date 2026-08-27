@@ -1,6 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import * as WebBrowser from "expo-web-browser";
 
-import { getAuthErrorMessageJa, signIn, signOut, signUp } from "../service";
+import { getAuthErrorMessageJa, signIn, signInWithGoogle, signOut, signUp } from "../service";
+
+jest.mock("expo-web-browser", () => ({
+  openAuthSessionAsync: jest.fn(),
+  maybeCompleteAuthSession: jest.fn(),
+}));
+
+jest.mock("expo-linking", () => ({
+  createURL: jest.fn(() => "memorycalendar://auth-callback"),
+}));
 
 function createMockClient(authOverrides: Record<string, jest.Mock> = {}): SupabaseClient {
   return {
@@ -8,6 +18,8 @@ function createMockClient(authOverrides: Record<string, jest.Mock> = {}): Supaba
       signUp: jest.fn(),
       signInWithPassword: jest.fn(),
       signOut: jest.fn(),
+      signInWithOAuth: jest.fn(),
+      setSession: jest.fn(),
       ...authOverrides,
     },
   } as unknown as SupabaseClient;
@@ -89,10 +101,86 @@ describe("signOut", () => {
   });
 });
 
+describe("signInWithGoogle", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("opens the Google OAuth URL and sets the session from the callback tokens", async () => {
+    const session = { user: { id: "u1" } };
+    const client = createMockClient({
+      signInWithOAuth: jest.fn().mockResolvedValue({
+        data: { url: "https://accounts.google.com/o/oauth2/auth?..." },
+        error: null,
+      }),
+      setSession: jest.fn().mockResolvedValue({ data: { session }, error: null }),
+    });
+    (WebBrowser.openAuthSessionAsync as jest.Mock).mockResolvedValue({
+      type: "success",
+      url: "memorycalendar://auth-callback#access_token=at-1&refresh_token=rt-1",
+    });
+
+    const result = await signInWithGoogle(client);
+
+    expect(result).toEqual({ ok: true, value: session });
+    expect(client.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: { redirectTo: "memorycalendar://auth-callback", skipBrowserRedirect: true },
+    });
+    expect(client.auth.setSession).toHaveBeenCalledWith({
+      access_token: "at-1",
+      refresh_token: "rt-1",
+    });
+  });
+
+  it("returns a Cancelled error when the user dismisses the browser", async () => {
+    const client = createMockClient({
+      signInWithOAuth: jest.fn().mockResolvedValue({
+        data: { url: "https://accounts.google.com/o/oauth2/auth?..." },
+        error: null,
+      }),
+    });
+    (WebBrowser.openAuthSessionAsync as jest.Mock).mockResolvedValue({ type: "dismiss" });
+
+    const result = await signInWithGoogle(client);
+
+    expect(result).toEqual({ ok: false, error: { type: "Cancelled" } });
+  });
+
+  it("returns an error when starting the OAuth flow fails", async () => {
+    const client = createMockClient({
+      signInWithOAuth: jest.fn().mockResolvedValue({ data: { url: null }, error: { message: "provider not enabled" } }),
+    });
+
+    const result = await signInWithGoogle(client);
+
+    expect(result).toEqual({ ok: false, error: { type: "Unknown", message: "provider not enabled" } });
+    expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+  });
+
+  it("returns an error when the callback URL has no tokens", async () => {
+    const client = createMockClient({
+      signInWithOAuth: jest.fn().mockResolvedValue({
+        data: { url: "https://accounts.google.com/o/oauth2/auth?..." },
+        error: null,
+      }),
+    });
+    (WebBrowser.openAuthSessionAsync as jest.Mock).mockResolvedValue({
+      type: "success",
+      url: "memorycalendar://auth-callback#error=access_denied",
+    });
+
+    const result = await signInWithGoogle(client);
+
+    expect(result.ok).toBe(false);
+  });
+});
+
 describe("getAuthErrorMessageJa", () => {
   it("returns a Japanese message for each known error type", () => {
     expect(getAuthErrorMessageJa({ type: "InvalidCredentials" })).toContain("正しくありません");
     expect(getAuthErrorMessageJa({ type: "EmailAlreadyInUse" })).toContain("登録されています");
+    expect(getAuthErrorMessageJa({ type: "Cancelled" })).toContain("キャンセル");
     expect(getAuthErrorMessageJa({ type: "Unknown", message: "x" })).toContain(
       "エラーが発生しました"
     );
