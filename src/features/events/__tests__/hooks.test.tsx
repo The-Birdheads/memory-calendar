@@ -232,7 +232,7 @@ describe("useEventsInRange", () => {
 
     await renderHook(() => useEventsInRange("cal-1", range));
 
-    await waitFor(() => expect(client.channel).toHaveBeenCalledWith("events-cal-1"));
+    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^events-cal-1-/)));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
       { event: "*", schema: "public", table: "events", filter: "calendar_id=eq.cal-1" },

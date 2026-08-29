@@ -460,8 +460,8 @@ describe("EventDetailScreen", () => {
 
     const { getByText } = await render(<EventDetailScreen />);
 
-    expect(getByText("渋谷")).toBeTruthy();
-    expect(getByText("https://example.com")).toBeTruthy();
+    expect(getByText(/渋谷/)).toBeTruthy();
+    expect(getByText(/https:\/\/example\.com/)).toBeTruthy();
   });
 
   it("opens the edit modal pre-filled with the current event values and submits the update", async () => {

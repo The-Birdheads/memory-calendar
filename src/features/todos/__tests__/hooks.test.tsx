@@ -124,7 +124,7 @@ describe("useTodosByCalendar", () => {
 
     await renderHook(() => useTodosByCalendar("cal-1"));
 
-    await waitFor(() => expect(client.channel).toHaveBeenCalledWith("todos-cal-1"));
+    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^todos-cal-1-/)));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
       { event: "*", schema: "public", table: "todos" },

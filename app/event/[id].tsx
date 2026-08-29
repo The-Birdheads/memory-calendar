@@ -39,25 +39,10 @@ import {
   useTodosByEvent,
 } from "../../src/features/todos/hooks";
 import type { Todo } from "../../src/features/todos/types";
+import { formatDateTimeRange } from "../../src/shared/utils/formatDateTime";
 
 function flattenTagTree(nodes: TagTreeNode[]): Tag[] {
   return nodes.flatMap((node) => [node, ...flattenTagTree(node.children)]);
-}
-
-function formatEventDateTime(startAt: string, endAt: string, isAllDay: boolean): string {
-  const start = new Date(startAt);
-  const end = new Date(endAt);
-  const formatDate = (date: Date) =>
-    `${date.getUTCFullYear()}/${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
-  const formatTime = (date: Date) =>
-    `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
-
-  if (isAllDay) {
-    return formatDate(start) === formatDate(end)
-      ? formatDate(start)
-      : `${formatDate(start)} 〜 ${formatDate(end)}`;
-  }
-  return `${formatDate(start)} ${formatTime(start)} 〜 ${formatDate(end)} ${formatTime(end)}`;
 }
 
 export default function EventDetailScreen() {
@@ -212,7 +197,7 @@ export default function EventDetailScreen() {
   if (isEventLoading || !event) {
     return (
       <>
-        <Stack.Screen options={{ headerShown: true, title: "予定" }} />
+        <Stack.Screen options={{ headerShown: true, title: "予定", headerBackTitle: "" }} />
         <View style={styles.container}>
           <Text>読み込み中...</Text>
         </View>
@@ -222,34 +207,36 @@ export default function EventDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: event.title }} />
-      <ScrollView style={styles.container}>
-      <View style={styles.titleRow}>
-        <Text style={styles.title}>{event.title}</Text>
-        <TouchableOpacity testID="event-edit-button" onPress={handleOpenEditModal}>
-          <Text style={styles.editLink}>編集</Text>
-        </TouchableOpacity>
+      <Stack.Screen options={{ headerShown: true, title: event.title, headerBackTitle: "" }} />
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <View style={styles.headerCard}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{event.title}</Text>
+          <TouchableOpacity testID="event-edit-button" onPress={handleOpenEditModal}>
+            <Text style={styles.editLink}>編集</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.detailInfo}>
+          <Text testID="event-detail-datetime" style={styles.detailText}>
+            🕐 {formatDateTimeRange(event.startAt, event.endAt)}
+          </Text>
+          {event.location ? (
+            <Text testID="event-detail-location" style={styles.detailText}>
+              📍 {event.location}
+            </Text>
+          ) : null}
+          {event.url ? (
+            <Text testID="event-detail-url" style={styles.detailLink}>
+              🔗 {event.url}
+            </Text>
+          ) : null}
+        </View>
       </View>
 
-      <View style={styles.detailInfo}>
-        <Text testID="event-detail-datetime" style={styles.detailText}>
-          {formatEventDateTime(event.startAt, event.endAt, event.isAllDay)}
-        </Text>
-        {event.location ? (
-          <Text testID="event-detail-location" style={styles.detailText}>
-            {event.location}
-          </Text>
-        ) : null}
-        {event.url ? (
-          <Text testID="event-detail-url" style={styles.detailLink}>
-            {event.url}
-          </Text>
-        ) : null}
-      </View>
-
-      <EventTagBadges tags={tags} />
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>タグを追加</Text>
+        <Text style={styles.sectionTitle}>タグ</Text>
+        <EventTagBadges tags={tags} />
         <View style={styles.tagPickerRow}>
           {availableTags.map((tag) => (
             <TouchableOpacity
@@ -382,6 +369,17 @@ export default function EventDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#f2f3f5",
+  },
+  contentContainer: {
+    paddingVertical: 12,
+  },
+  headerCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    overflow: "hidden",
   },
   titleRow: {
     flexDirection: "row",
@@ -391,8 +389,10 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   title: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700",
+    flexShrink: 1,
+    paddingRight: 12,
   },
   editLink: {
     color: "#2f6fed",
@@ -400,14 +400,17 @@ const styles = StyleSheet.create({
   },
   detailInfo: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
-    gap: 4,
+    paddingTop: 8,
+    paddingBottom: 16,
+    gap: 6,
   },
   detailText: {
     color: "#444",
+    fontSize: 14,
   },
   detailLink: {
     color: "#2f6fed",
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
@@ -427,12 +430,17 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   section: {
-    padding: 12,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    padding: 14,
     gap: 8,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
+    color: "#555",
   },
   tagPickerRow: {
     flexDirection: "row",

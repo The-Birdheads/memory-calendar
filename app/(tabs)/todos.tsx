@@ -9,6 +9,7 @@ import {
   useUpdateTodo,
 } from "../../src/features/todos/hooks";
 import type { Todo } from "../../src/features/todos/types";
+import { formatDateTime } from "../../src/shared/utils/formatDateTime";
 
 interface TodoItemRowProps {
   todo: Todo;
@@ -31,7 +32,7 @@ function TodoItemRow({ todo, onToggle, onDelete, onSetReminder }: TodoItemRowPro
           <Text style={styles.deleteText}>削除</Text>
         </TouchableOpacity>
       </View>
-      {todo.reminderAt ? <Text style={styles.meta}>{todo.reminderAt}</Text> : null}
+      {todo.reminderAt ? <Text style={styles.meta}>{formatDateTime(todo.reminderAt)}</Text> : null}
       <View style={styles.reminderRow}>
         <TextInput
           testID={`todo-reminder-input-${todo.id}`}

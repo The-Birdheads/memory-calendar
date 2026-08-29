@@ -30,6 +30,7 @@ import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
 import { useCreateTodo } from "../../src/features/todos/hooks";
+import { formatTime } from "../../src/shared/utils/formatDateTime";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -368,7 +369,10 @@ export default function CalendarScreen() {
             onPress={() => router.push(`/event/${item.id}`)}
           >
             <View style={[styles.categoryDot, { backgroundColor: item.categoryColor ?? "#999999" }]} />
-            <Text>{item.title}</Text>
+            <Text style={styles.eventTime}>
+              {item.isAllDay ? "終日" : `${formatTime(item.startAt)}〜${formatTime(item.endAt)}`}
+            </Text>
+            <Text style={styles.eventTitle}>{item.title}</Text>
           </TouchableOpacity>
         )}
       />
@@ -651,6 +655,14 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+  },
+  eventTime: {
+    color: "#666",
+    fontSize: 12,
+    width: 92,
+  },
+  eventTitle: {
+    flex: 1,
   },
   memberRow: {
     flexDirection: "row",

@@ -12,6 +12,7 @@ import { EventCommentsSection } from "../../src/features/communication/component
 import { EventReactionsBar } from "../../src/features/communication/components/EventReactionsBar";
 import { useEventPhotos, useMemoriesTimeline } from "../../src/features/memories/hooks";
 import { EventPhotosGallery } from "../../src/features/memories/components/EventPhotosGallery";
+import { formatDateTime } from "../../src/shared/utils/formatDateTime";
 
 export default function MemoriesScreen() {
   const { calendars } = useMyCalendars();
@@ -47,7 +48,7 @@ export default function MemoriesScreen() {
           <Text>戻る</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{selectedEntry.title}</Text>
-        <Text style={styles.meta}>{selectedEntry.startAt}</Text>
+        <Text style={styles.meta}>{formatDateTime(selectedEntry.startAt)}</Text>
         <EventPhotosGallery photos={photos} />
         <EventReactionsBar reactions={reactions} onAddReaction={handleAddReaction} />
         <EventCommentsSection comments={comments} onSubmit={handleSubmitComment} />

@@ -100,7 +100,7 @@ describe("TodosScreen", () => {
 
     const { getByText } = await render(<TodosScreen />);
 
-    expect(getByText("2026-08-19T09:00:00.000Z")).toBeTruthy();
+    expect(getByText("2026/08/19 09:00")).toBeTruthy();
   });
 
   it("saves a reminder date and refetches so the list reflects it", async () => {

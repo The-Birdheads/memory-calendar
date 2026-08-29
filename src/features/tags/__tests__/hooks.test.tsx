@@ -80,7 +80,7 @@ describe("useTagTree", () => {
 
     await renderHook(() => useTagTree("cal-1"));
 
-    await waitFor(() => expect(client.channel).toHaveBeenCalledWith("tags-cal-1"));
+    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^tags-cal-1-/)));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
       { event: "*", schema: "public", table: "tags", filter: "calendar_id=eq.cal-1" },

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
+import { formatDateTime } from "../../../shared/utils/formatDateTime";
+
 export interface EventFormValue {
   title: string;
   isAllDay: boolean;
@@ -20,16 +22,8 @@ export const CATEGORY_COLORS: { name: string; hex: string }[] = [
   { name: "purple", hex: "#8e24aa" },
 ];
 
-function formatFieldLabel(date: Date, isAllDay: boolean): string {
-  const y = date.getUTCFullYear();
-  const m = date.getUTCMonth() + 1;
-  const d = date.getUTCDate();
-  if (isAllDay) {
-    return `${y}/${m}/${d}`;
-  }
-  const hh = String(date.getUTCHours()).padStart(2, "0");
-  const mm = String(date.getUTCMinutes()).padStart(2, "0");
-  return `${y}/${m}/${d} ${hh}:${mm}`;
+function formatFieldLabel(date: Date): string {
+  return formatDateTime(date.toISOString());
 }
 
 export interface EventFormFieldsProps {
@@ -66,7 +60,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         onPress={() => setActivePicker("start")}
       >
         <Text style={styles.dateFieldLabel}>開始</Text>
-        <Text>{formatFieldLabel(value.start, value.isAllDay)}</Text>
+        <Text>{formatFieldLabel(value.start)}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -75,7 +69,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         onPress={() => setActivePicker("end")}
       >
         <Text style={styles.dateFieldLabel}>終了</Text>
-        <Text>{formatFieldLabel(value.end, value.isAllDay)}</Text>
+        <Text>{formatFieldLabel(value.end)}</Text>
       </TouchableOpacity>
 
       {activePicker ? (

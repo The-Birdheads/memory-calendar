@@ -5,6 +5,7 @@ import { useMyCalendars } from "../../src/features/calendars/hooks";
 import { usePastEventsByTag } from "../../src/features/history/hooks";
 import { useTagTree } from "../../src/features/tags/hooks";
 import type { TagTreeNode } from "../../src/features/tags/types";
+import { formatDateTime } from "../../src/shared/utils/formatDateTime";
 
 function flattenTags(nodes: TagTreeNode[]): TagTreeNode[] {
   return nodes.flatMap((node) => [node, ...flattenTags(node.children)]);
@@ -55,7 +56,7 @@ export default function HistoryScreen() {
           renderItem={({ item }) => (
             <View style={styles.eventRow} testID={`history-event-${item.id}`}>
               <Text>{item.title}</Text>
-              <Text style={styles.meta}>{item.startAt}</Text>
+              <Text style={styles.meta}>{formatDateTime(item.startAt)}</Text>
             </View>
           )}
         />

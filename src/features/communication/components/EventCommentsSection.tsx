@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
+import { formatDateTime } from "../../../shared/utils/formatDateTime";
 import type { EventComment } from "../types";
 
 export interface EventCommentsSectionProps {
@@ -33,7 +34,7 @@ export function EventCommentsSection({
         <View key={item.id} style={styles.commentRow} testID={`event-comment-${item.id}`}>
           <Text>{item.body}</Text>
           <Text style={styles.meta}>{resolveAuthorName ? resolveAuthorName(item.userId) : item.userId}</Text>
-          <Text style={styles.meta}>{item.createdAt}</Text>
+          <Text style={styles.meta}>{formatDateTime(item.createdAt)}</Text>
           {currentUserId && item.userId === currentUserId ? (
             <TouchableOpacity
               testID={`event-comment-delete-${item.id}`}

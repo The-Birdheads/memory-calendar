@@ -21,7 +21,7 @@ describe("subscribeToTableChanges", () => {
 
     subscribeToTableChanges(client as never, "events-cal-1", "events", onChange);
 
-    expect(client.channel).toHaveBeenCalledWith("events-cal-1");
+    expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^events-cal-1-\d+-\d+$/));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
       { event: "*", schema: "public", table: "events" },
@@ -52,6 +52,18 @@ describe("subscribeToTableChanges", () => {
     cleanup();
 
     expect(channel.unsubscribe).toHaveBeenCalled();
+  });
+
+  it("uses a distinct channel topic for each call with the same base name", () => {
+    const channel = createChannelMock();
+    const client = { channel: jest.fn((_topic: string) => channel) };
+
+    subscribeToTableChanges(client as never, "tags-cal-1", "tags", jest.fn());
+    subscribeToTableChanges(client as never, "tags-cal-1", "tags", jest.fn());
+
+    const [firstTopic] = client.channel.mock.calls[0];
+    const [secondTopic] = client.channel.mock.calls[1];
+    expect(firstTopic).not.toBe(secondTopic);
   });
 
   it("does nothing and returns a no-op cleanup when the client has no channel method", () => {
