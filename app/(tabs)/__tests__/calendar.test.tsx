@@ -1,4 +1,5 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { router } from "expo-router";
 
 import CalendarScreen from "../calendar";
 import { useAuthSession } from "../../../src/features/auth/hooks";
@@ -12,6 +13,11 @@ import {
 } from "../../../src/features/calendars/hooks";
 import { computeDateRange } from "../../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../../src/features/events/hooks";
+import { useCreateTodo } from "../../../src/features/todos/hooks";
+
+jest.mock("expo-router", () => ({
+  router: { push: jest.fn() },
+}));
 
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
@@ -29,6 +35,10 @@ jest.mock("../../../src/features/calendars/hooks", () => ({
 jest.mock("../../../src/features/events/hooks", () => ({
   useEventsInRange: jest.fn(),
   useCreateEvent: jest.fn(),
+}));
+
+jest.mock("../../../src/features/todos/hooks", () => ({
+  useCreateTodo: jest.fn(),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => {
@@ -90,7 +100,12 @@ function mockCommonHooks() {
     error: null,
   });
   (useCreateEvent as jest.Mock).mockReturnValue({
-    createEvent: jest.fn().mockResolvedValue(true),
+    createEvent: jest.fn().mockResolvedValue({ id: "event-created-1" }),
+    isSubmitting: false,
+    error: null,
+  });
+  (useCreateTodo as jest.Mock).mockReturnValue({
+    createTodo: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -206,7 +221,12 @@ describe("CalendarScreen", () => {
       error: null,
     });
     (useCreateEvent as jest.Mock).mockReturnValue({
-      createEvent: jest.fn().mockResolvedValue(true),
+      createEvent: jest.fn().mockResolvedValue({ id: "event-created-1" }),
+      isSubmitting: false,
+      error: null,
+    });
+    (useCreateTodo as jest.Mock).mockReturnValue({
+      createTodo: jest.fn().mockResolvedValue(true),
       isSubmitting: false,
       error: null,
     });
@@ -332,7 +352,7 @@ describe("CalendarScreen", () => {
   it("opens the creation modal from the FAB and cancels without creating", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
-    const createEventMock = jest.fn().mockResolvedValue(true);
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
     (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
 
     const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
@@ -351,7 +371,7 @@ describe("CalendarScreen", () => {
     mockCommonHooks();
     const refetch = jest.fn();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch });
-    const createEventMock = jest.fn().mockResolvedValue(true);
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
     (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
 
     const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
@@ -384,10 +404,92 @@ describe("CalendarScreen", () => {
     await waitFor(() => expect(queryByTestId("event-create-title-input")).toBeNull());
   });
 
+  it("includes location and url when provided", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "オンライン飲み会");
+    await fireEvent.changeText(getByTestId("event-create-location-input"), "自宅");
+    await fireEvent.changeText(getByTestId("event-create-url-input"), "https://example.com/meeting");
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() =>
+      expect(createEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ location: "自宅", url: "https://example.com/meeting" })
+      )
+    );
+  });
+
+  it("adds checklist ToDo items to the created event when the ToDo toggle is on", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+    const createTodoMock = jest.fn().mockResolvedValue(true);
+    (useCreateTodo as jest.Mock).mockReturnValue({ createTodo: createTodoMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "旅行");
+
+    await fireEvent.press(getByTestId("event-create-has-todos-toggle"));
+    await fireEvent.changeText(getByTestId("event-create-todo-input"), "パスポート確認");
+    await fireEvent.press(getByTestId("event-create-todo-add"));
+    await fireEvent.changeText(getByTestId("event-create-todo-input"), "荷造り");
+    await fireEvent.press(getByTestId("event-create-todo-add"));
+
+    expect(getByTestId("event-create-todo-item-0")).toBeTruthy();
+    expect(getByTestId("event-create-todo-item-1")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(createTodoMock).toHaveBeenCalledWith({ eventId: "event-created-1", title: "パスポート確認" })
+    );
+    expect(createTodoMock).toHaveBeenCalledWith({ eventId: "event-created-1", title: "荷造り" });
+  });
+
+  it("does not create ToDo items when the ToDo toggle is off", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+    const createTodoMock = jest.fn().mockResolvedValue(true);
+    (useCreateTodo as jest.Mock).mockReturnValue({ createTodo: createTodoMock, isSubmitting: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    expect(queryByTestId("event-create-todo-input")).toBeNull();
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "会議");
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+    expect(createTodoMock).not.toHaveBeenCalled();
+  });
+
+  it("navigates to the event detail screen when an event row is pressed", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [TODAY_EVENT], isLoading: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-event-event-1"));
+
+    expect(router.push).toHaveBeenCalledWith("/event/event-1");
+  });
+
   it("passes isAllDay true when the all-day toggle is on", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
-    const createEventMock = jest.fn().mockResolvedValue(true);
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
     (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
 
     const { getByTestId } = await render(<CalendarScreen />);
@@ -529,7 +631,7 @@ describe("CalendarScreen", () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
     (useCreateEvent as jest.Mock).mockReturnValue({
-      createEvent: jest.fn().mockResolvedValue(false),
+      createEvent: jest.fn().mockResolvedValue(null),
       isSubmitting: false,
       error: { type: "InvalidDateRange" },
     });

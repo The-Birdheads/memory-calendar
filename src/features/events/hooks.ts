@@ -14,7 +14,7 @@ import type {
 } from "./types";
 
 export interface UseCreateEventResult {
-  createEvent: (input: CreateEventInput) => Promise<boolean>;
+  createEvent: (input: CreateEventInput) => Promise<Event | null>;
   isSubmitting: boolean;
   error: EventError | null;
 }
@@ -30,9 +30,9 @@ export function useCreateEvent(): UseCreateEventResult {
     setIsSubmitting(false);
     if (!result.ok) {
       setError(result.error);
-      return false;
+      return null;
     }
-    return true;
+    return result.value;
   }, []);
 
   return { createEvent: runCreateEvent, isSubmitting, error };

@@ -38,6 +38,7 @@ describe("listPastEventsByTag", () => {
           title: "先週の集まり",
           location: null,
           memo: null,
+          url: null,
           categoryColor: "#2f6fed",
           startAt: "2026-08-10T10:00:00.000Z",
           endAt: "2026-08-10T11:00:00.000Z",

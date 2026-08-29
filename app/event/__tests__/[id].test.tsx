@@ -11,7 +11,13 @@ import {
   usePostComment,
   useReactions,
 } from "../../../src/features/communication/hooks";
-import { useDeleteEvent, useEvent, useSetReminderTargets } from "../../../src/features/events/hooks";
+import {
+  useDeleteEvent,
+  useEvent,
+  useSetReminderTargets,
+  useUpdateEvent,
+} from "../../../src/features/events/hooks";
+import type { Event } from "../../../src/features/events/types";
 import { useAddReflection, useEventPhotos } from "../../../src/features/memories/hooks";
 import { useAttachTagsToEvent, useEventTags, useTagTree } from "../../../src/features/tags/hooks";
 import {
@@ -46,7 +52,19 @@ jest.mock("../../../src/features/events/hooks", () => ({
   useEvent: jest.fn(),
   useDeleteEvent: jest.fn(),
   useSetReminderTargets: jest.fn(),
+  useUpdateEvent: jest.fn(),
 }));
+
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { TextInput } = require("react-native");
+  return function MockDateTimePicker({ testID, onChange }: any) {
+    return React.createElement(TextInput, {
+      testID,
+      onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
+    });
+  };
+});
 
 jest.mock("../../../src/features/memories/hooks", () => ({
   useEventPhotos: jest.fn(),
@@ -66,13 +84,14 @@ jest.mock("../../../src/features/todos/hooks", () => ({
   useDeleteTodo: jest.fn(),
 }));
 
-const FUTURE_EVENT = {
+const FUTURE_EVENT: Event = {
   id: "event-1",
   calendarId: "cal-1",
   seriesId: null,
   title: "誕生日会",
   location: null,
   memo: null,
+  url: null,
   categoryColor: "#2f6fed",
   startAt: "2099-01-01T00:00:00.000Z",
   endAt: "2099-01-01T02:00:00.000Z",
@@ -104,15 +123,17 @@ function mockCommonHooks(
     refetchReactions?: jest.Mock;
     refetchTags?: jest.Mock;
     refetchTodos?: jest.Mock;
+    refetchEvent?: jest.Mock;
   } = {}
 ) {
   (useLocalSearchParams as jest.Mock).mockReturnValue({ id: "event-1" });
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } }, isLoading: false });
+  const refetchEvent = overrides.refetchEvent ?? jest.fn();
   (useEvent as jest.Mock).mockReturnValue({
     event: overrides.event === undefined ? FUTURE_EVENT : overrides.event,
     isLoading: overrides.isEventLoading ?? false,
     error: null,
-    refetch: jest.fn(),
+    refetch: refetchEvent,
   });
 
   const refetchComments = overrides.refetchComments ?? jest.fn();
@@ -153,6 +174,11 @@ function mockCommonHooks(
   });
   (useSetReminderTargets as jest.Mock).mockReturnValue({
     setReminderTargets: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useUpdateEvent as jest.Mock).mockReturnValue({
+    updateEvent: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -218,7 +244,7 @@ function mockCommonHooks(
     refetch: jest.fn(),
   });
 
-  return { refetchComments, refetchReactions, refetchTags, refetchTodos };
+  return { refetchComments, refetchReactions, refetchTags, refetchTodos, refetchEvent };
 }
 
 describe("EventDetailScreen", () => {
@@ -426,5 +452,63 @@ describe("EventDetailScreen", () => {
 
     expect(deleteEventMock).not.toHaveBeenCalled();
     expect(queryByTestId("delete-event-confirm-button")).toBeNull();
+  });
+
+  it("shows the event location and url when present", async () => {
+    mockCommonHooks({ event: { ...FUTURE_EVENT, location: "渋谷", url: "https://example.com" } });
+
+    const { getByText } = await render(<EventDetailScreen />);
+
+    expect(getByText("渋谷")).toBeTruthy();
+    expect(getByText("https://example.com")).toBeTruthy();
+  });
+
+  it("opens the edit modal pre-filled with the current event values and submits the update", async () => {
+    const { refetchEvent } = mockCommonHooks({
+      event: { ...FUTURE_EVENT, location: "渋谷", url: "https://example.com" },
+    });
+    const updateEventMock = jest.fn().mockResolvedValue(true);
+    (useUpdateEvent as jest.Mock).mockReturnValue({ updateEvent: updateEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId, getByDisplayValue } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-edit-button"));
+
+    expect(getByDisplayValue("誕生日会")).toBeTruthy();
+    expect(getByDisplayValue("渋谷")).toBeTruthy();
+    expect(getByDisplayValue("https://example.com")).toBeTruthy();
+
+    await fireEvent.changeText(getByTestId("event-edit-title-input"), "誕生日会2");
+    await fireEvent.press(getByTestId("event-edit-submit"));
+
+    await waitFor(() =>
+      expect(updateEventMock).toHaveBeenCalledWith(
+        "event-1",
+        expect.objectContaining({
+          title: "誕生日会2",
+          location: "渋谷",
+          url: "https://example.com",
+          isAllDay: false,
+          categoryColor: "#2f6fed",
+        })
+      )
+    );
+    await waitFor(() => expect(refetchEvent).toHaveBeenCalled());
+  });
+
+  it("closes the edit modal without saving when cancelled", async () => {
+    mockCommonHooks();
+    const updateEventMock = jest.fn().mockResolvedValue(true);
+    (useUpdateEvent as jest.Mock).mockReturnValue({ updateEvent: updateEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-edit-button"));
+    expect(getByTestId("event-edit-cancel")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("event-edit-cancel"));
+
+    expect(updateEventMock).not.toHaveBeenCalled();
+    expect(queryByTestId("event-edit-title-input")).toBeNull();
   });
 });

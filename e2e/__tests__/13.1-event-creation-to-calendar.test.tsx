@@ -13,6 +13,10 @@ import {
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
+jest.mock("expo-router", () => ({
+  router: { push: jest.fn() },
+}));
+
 jest.mock("../../src/shared/api/supabaseClient", () => ({
   getSupabaseClient: jest.fn(),
 }));

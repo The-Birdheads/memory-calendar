@@ -29,15 +29,15 @@ describe("useCreateEvent", () => {
     jest.clearAllMocks();
   });
 
-  it("returns true and clears the error when creation succeeds", async () => {
+  it("returns the created event and clears the error when creation succeeds", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
     (createEvent as jest.Mock).mockResolvedValue({ ok: true, value: { id: "event-1" } });
 
     const { result } = await renderHook(() => useCreateEvent());
 
-    let success = false;
+    let created = null;
     await act(async () => {
-      success = await result.current.createEvent({
+      created = await result.current.createEvent({
         calendarId: "cal-1",
         title: "誕生日会",
         startAt: "2026-09-01T10:00:00.000Z",
@@ -45,7 +45,7 @@ describe("useCreateEvent", () => {
       });
     });
 
-    expect(success).toBe(true);
+    expect(created).toEqual({ id: "event-1" });
     expect(result.current.error).toBeNull();
     expect(createEvent).toHaveBeenCalledWith({}, {
       calendarId: "cal-1",
@@ -55,15 +55,15 @@ describe("useCreateEvent", () => {
     });
   });
 
-  it("returns false and sets the error when creation fails", async () => {
+  it("returns null and sets the error when creation fails", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
     (createEvent as jest.Mock).mockResolvedValue({ ok: false, error: { type: "InvalidDateRange" } });
 
     const { result } = await renderHook(() => useCreateEvent());
 
-    let success = true;
+    let created: unknown = { id: "should-be-cleared" };
     await act(async () => {
-      success = await result.current.createEvent({
+      created = await result.current.createEvent({
         calendarId: "cal-1",
         title: "誕生日会",
         startAt: "2026-09-01T12:00:00.000Z",
@@ -71,7 +71,7 @@ describe("useCreateEvent", () => {
       });
     });
 
-    expect(success).toBe(false);
+    expect(created).toBeNull();
     expect(result.current.error).toEqual({ type: "InvalidDateRange" });
   });
 });

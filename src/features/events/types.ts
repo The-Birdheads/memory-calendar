@@ -5,6 +5,7 @@ export interface Event {
   title: string;
   location: string | null;
   memo: string | null;
+  url: string | null;
   categoryColor: string | null;
   startAt: string;
   endAt: string;
@@ -24,6 +25,7 @@ export interface CreateEventInput {
   isAllDay?: boolean;
   location?: string;
   memo?: string;
+  url?: string;
   categoryColor?: string;
   reminderAt?: string;
 }
@@ -37,6 +39,7 @@ export interface UpdateEventInput {
   isAllDay?: boolean;
   location?: string | null;
   memo?: string | null;
+  url?: string | null;
   categoryColor?: string | null;
   reminderAt?: string | null;
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
@@ -14,8 +14,18 @@ import {
   useReactions,
 } from "../../src/features/communication/hooks";
 import { DeleteEventConfirmModal } from "../../src/features/events/components/DeleteEventConfirmModal";
+import {
+  CATEGORY_COLORS,
+  EventFormFields,
+  type EventFormValue,
+} from "../../src/features/events/components/EventFormFields";
 import { ReminderTargetsPicker } from "../../src/features/events/components/ReminderTargetsPicker";
-import { useDeleteEvent, useEvent, useSetReminderTargets } from "../../src/features/events/hooks";
+import {
+  useDeleteEvent,
+  useEvent,
+  useSetReminderTargets,
+  useUpdateEvent,
+} from "../../src/features/events/hooks";
 import type { ReminderTargetsInput } from "../../src/features/events/types";
 import { EventPhotosGallery } from "../../src/features/memories/components/EventPhotosGallery";
 import { useAddReflection, useEventPhotos } from "../../src/features/memories/hooks";
@@ -34,12 +44,28 @@ function flattenTagTree(nodes: TagTreeNode[]): Tag[] {
   return nodes.flatMap((node) => [node, ...flattenTagTree(node.children)]);
 }
 
+function formatEventDateTime(startAt: string, endAt: string, isAllDay: boolean): string {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const formatDate = (date: Date) =>
+    `${date.getUTCFullYear()}/${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+  const formatTime = (date: Date) =>
+    `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+
+  if (isAllDay) {
+    return formatDate(start) === formatDate(end)
+      ? formatDate(start)
+      : `${formatDate(start)} 〜 ${formatDate(end)}`;
+  }
+  return `${formatDate(start)} ${formatTime(start)} 〜 ${formatDate(end)} ${formatTime(end)}`;
+}
+
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const eventId = id ?? "";
 
   const { session } = useAuthSession();
-  const { event, isLoading: isEventLoading } = useEvent(eventId);
+  const { event, isLoading: isEventLoading, refetch: refetchEvent } = useEvent(eventId);
   const calendarId = event?.calendarId ?? "";
 
   const { comments, refetch: refetchComments } = useComments(eventId);
@@ -65,6 +91,18 @@ export default function EventDetailScreen() {
 
   const { deleteEvent } = useDeleteEvent();
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+
+  const { updateEvent } = useUpdateEvent();
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [editForm, setEditForm] = useState<EventFormValue>({
+    title: "",
+    isAllDay: false,
+    start: new Date(),
+    end: new Date(),
+    location: "",
+    url: "",
+    categoryColor: CATEGORY_COLORS[0].hex,
+  });
 
   const { photos } = useEventPhotos(eventId);
   const { addReflection } = useAddReflection();
@@ -117,6 +155,36 @@ export default function EventDetailScreen() {
     await setReminderTargets(eventId, reminderTargets);
   };
 
+  const handleOpenEditModal = () => {
+    if (!event) return;
+    setEditForm({
+      title: event.title,
+      isAllDay: event.isAllDay,
+      start: new Date(event.startAt),
+      end: new Date(event.endAt),
+      location: event.location ?? "",
+      url: event.url ?? "",
+      categoryColor: event.categoryColor ?? CATEGORY_COLORS[0].hex,
+    });
+    setIsEditModalVisible(true);
+  };
+
+  const handleSubmitEdit = async () => {
+    const success = await updateEvent(eventId, {
+      title: editForm.title,
+      startAt: editForm.start.toISOString(),
+      endAt: editForm.end.toISOString(),
+      isAllDay: editForm.isAllDay,
+      location: editForm.location || null,
+      url: editForm.url || null,
+      categoryColor: editForm.categoryColor,
+    });
+    if (success) {
+      setIsEditModalVisible(false);
+      await refetchEvent();
+    }
+  };
+
   const handleConfirmDelete = async () => {
     const success = await deleteEvent(eventId);
     setIsDeleteModalVisible(false);
@@ -144,7 +212,28 @@ export default function EventDetailScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>{event.title}</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{event.title}</Text>
+        <TouchableOpacity testID="event-edit-button" onPress={handleOpenEditModal}>
+          <Text style={styles.editLink}>編集</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.detailInfo}>
+        <Text testID="event-detail-datetime" style={styles.detailText}>
+          {formatEventDateTime(event.startAt, event.endAt, event.isAllDay)}
+        </Text>
+        {event.location ? (
+          <Text testID="event-detail-location" style={styles.detailText}>
+            {event.location}
+          </Text>
+        ) : null}
+        {event.url ? (
+          <Text testID="event-detail-url" style={styles.detailLink}>
+            {event.url}
+          </Text>
+        ) : null}
+      </View>
 
       <EventTagBadges tags={tags} />
       <View style={styles.section}>
@@ -250,6 +339,27 @@ export default function EventDetailScreen() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteModalVisible(false)}
       />
+
+      <Modal visible={isEditModalVisible} animationType="slide" transparent onRequestClose={() => setIsEditModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <Text style={styles.sectionTitle}>予定を編集</Text>
+            <EventFormFields
+              testIDPrefix="event-edit"
+              value={editForm}
+              onChange={(patch) => setEditForm((prev) => ({ ...prev, ...patch }))}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity testID="event-edit-cancel" onPress={() => setIsEditModalVisible(false)}>
+                <Text>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity testID="event-edit-submit" onPress={handleSubmitEdit}>
+                <Text style={styles.editLink}>保存</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -258,10 +368,48 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
   title: {
     fontSize: 22,
     fontWeight: "700",
+  },
+  editLink: {
+    color: "#2f6fed",
+    fontWeight: "700",
+  },
+  detailInfo: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 4,
+  },
+  detailText: {
+    color: "#444",
+  },
+  detailLink: {
+    color: "#2f6fed",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     padding: 16,
+    maxHeight: "85%",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 16,
   },
   section: {
     padding: 12,

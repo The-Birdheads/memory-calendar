@@ -19,6 +19,7 @@ export interface EventRow {
   title: string;
   location: string | null;
   memo: string | null;
+  url?: string | null;
   category_color: string | null;
   start_at: string;
   end_at: string;
@@ -38,6 +39,7 @@ export function mapEventRow(row: EventRow): Event {
     title: row.title,
     location: row.location,
     memo: row.memo,
+    url: row.url ?? null,
     categoryColor: row.category_color,
     startAt: row.start_at,
     endAt: row.end_at,
@@ -79,6 +81,7 @@ export async function createEvent(
       is_all_day: input.isAllDay ?? false,
       location: input.location ?? null,
       memo: input.memo ?? null,
+      url: input.url ?? null,
       category_color: input.categoryColor ?? null,
       reminder_at: input.reminderAt ?? null,
     })
@@ -119,6 +122,7 @@ function buildUpdatePayload(input: UpdateEventInput, scope: EditScope): Record<s
   if (input.isAllDay !== undefined) payload.is_all_day = input.isAllDay;
   if (input.location !== undefined) payload.location = input.location;
   if (input.memo !== undefined) payload.memo = input.memo;
+  if (input.url !== undefined) payload.url = input.url;
   if (input.categoryColor !== undefined) payload.category_color = input.categoryColor;
   if (input.reminderAt !== undefined) payload.reminder_at = input.reminderAt;
   return payload;

@@ -54,6 +54,7 @@ describe("createEvent", () => {
         title: "誕生日会",
         location: "自宅",
         memo: "ケーキを用意する",
+        url: null,
         categoryColor: "#ff0000",
         startAt: "2026-09-01T10:00:00.000Z",
         endAt: "2026-09-01T12:00:00.000Z",
@@ -74,9 +75,49 @@ describe("createEvent", () => {
       is_all_day: false,
       location: "自宅",
       memo: "ケーキを用意する",
+      url: null,
       category_color: "#ff0000",
       reminder_at: null,
     });
+  });
+
+  it("includes the url when provided", async () => {
+    const row = {
+      id: "event-3",
+      calendar_id: "cal-1",
+      title: "オンライン会議",
+      location: null,
+      memo: null,
+      url: "https://example.com/meeting",
+      category_color: null,
+      start_at: "2026-09-03T09:00:00.000Z",
+      end_at: "2026-09-03T10:00:00.000Z",
+      is_all_day: false,
+      reminder_at: null,
+      created_by: "user-1",
+      updated_by: "user-1",
+      created_at: "2026-08-17T00:00:00.000Z",
+      updated_at: "2026-08-17T00:00:00.000Z",
+    };
+    const insert = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ insert, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await createEvent(client, {
+      calendarId: "cal-1",
+      title: "オンライン会議",
+      startAt: "2026-09-03T09:00:00.000Z",
+      endAt: "2026-09-03T10:00:00.000Z",
+      url: "https://example.com/meeting",
+    });
+
+    expect(result.ok && result.value.url).toBe("https://example.com/meeting");
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.com/meeting" })
+    );
   });
 
   it("omits optional fields when not provided", async () => {
@@ -118,6 +159,7 @@ describe("createEvent", () => {
       is_all_day: false,
       location: null,
       memo: null,
+      url: null,
       category_color: null,
       reminder_at: null,
     });
@@ -205,6 +247,7 @@ describe("updateEvent", () => {
         title: "誕生日会(変更後)",
         location: "自宅",
         memo: "ケーキを用意する",
+        url: null,
         categoryColor: "#ff0000",
         startAt: "2026-09-01T10:00:00.000Z",
         endAt: "2026-09-01T13:00:00.000Z",
@@ -353,6 +396,7 @@ describe("updateEvent", () => {
         title: row.title,
         location: row.location,
         memo: row.memo,
+        url: null,
         categoryColor: row.category_color,
         startAt: row.start_at,
         endAt: row.end_at,
@@ -391,6 +435,38 @@ describe("updateEvent", () => {
     );
 
     expect(update).toHaveBeenCalledWith({ title: "まとめ変更後" });
+  });
+
+  it("includes url in the update payload when provided", async () => {
+    const row = {
+      id: "event-1",
+      calendar_id: "cal-1",
+      title: "オンライン会議",
+      location: null,
+      memo: null,
+      url: "https://example.com/updated",
+      category_color: null,
+      start_at: "2026-09-01T10:00:00.000Z",
+      end_at: "2026-09-01T13:00:00.000Z",
+      is_all_day: false,
+      reminder_at: null,
+      created_by: "user-1",
+      updated_by: "user-1",
+      created_at: "2026-08-17T00:00:00.000Z",
+      updated_at: "2026-08-18T00:00:00.000Z",
+    };
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await updateEvent(client, "event-1", { url: "https://example.com/updated" });
+
+    expect(result).toEqual({ ok: true, value: expect.objectContaining({ url: "https://example.com/updated" }) });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ url: "https://example.com/updated" }));
   });
 });
 
@@ -509,6 +585,7 @@ describe("createRecurringSeries", () => {
           title: "毎週ミーティング",
           location: null,
           memo: null,
+          url: null,
           categoryColor: null,
           startAt: "2026-09-01T10:00:00.000Z",
           endAt: "2026-09-01T11:00:00.000Z",
@@ -526,6 +603,7 @@ describe("createRecurringSeries", () => {
           title: "毎週ミーティング",
           location: null,
           memo: null,
+          url: null,
           categoryColor: null,
           startAt: "2026-09-08T10:00:00.000Z",
           endAt: "2026-09-08T11:00:00.000Z",
@@ -660,6 +738,7 @@ describe("listEventsInRange", () => {
           title: "会議",
           location: null,
           memo: null,
+          url: null,
           categoryColor: "#2f6fed",
           startAt: "2026-09-01T10:00:00.000Z",
           endAt: "2026-09-01T11:00:00.000Z",
@@ -820,6 +899,7 @@ describe("getEvent", () => {
         title: "会議",
         location: null,
         memo: null,
+        url: null,
         categoryColor: "#2f6fed",
         startAt: "2026-09-01T10:00:00.000Z",
         endAt: "2026-09-01T11:00:00.000Z",
