@@ -67,6 +67,19 @@ describe("EventCommentsSection", () => {
     expect(queryByTestId("event-comment-delete-comment-2")).toBeNull();
   });
 
+  it("shows the resolved author name instead of the raw user id when a resolver is given", async () => {
+    const { getByText, queryByText } = await render(
+      <EventCommentsSection
+        comments={COMMENTS}
+        onSubmit={jest.fn()}
+        resolveAuthorName={(userId) => (userId === "user-1" ? "たろう" : userId)}
+      />
+    );
+
+    expect(getByText("たろう")).toBeTruthy();
+    expect(queryByText("user-1")).toBeNull();
+  });
+
   it("calls onDelete and removes the comment from the list when its delete button is pressed", async () => {
     const onDelete = jest.fn();
     const { getByTestId, queryByText, rerender } = await render(

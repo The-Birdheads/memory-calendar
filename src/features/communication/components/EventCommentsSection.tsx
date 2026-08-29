@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import type { EventComment } from "../types";
 
@@ -9,6 +9,7 @@ export interface EventCommentsSectionProps {
   isSubmitting?: boolean;
   currentUserId?: string;
   onDelete?: (commentId: string) => void;
+  resolveAuthorName?: (userId: string) => string;
 }
 
 export function EventCommentsSection({
@@ -17,6 +18,7 @@ export function EventCommentsSection({
   isSubmitting,
   currentUserId,
   onDelete,
+  resolveAuthorName,
 }: EventCommentsSectionProps) {
   const [body, setBody] = useState("");
 
@@ -27,25 +29,21 @@ export function EventCommentsSection({
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={comments}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.commentRow} testID={`event-comment-${item.id}`}>
-            <Text>{item.body}</Text>
-            <Text style={styles.meta}>{item.userId}</Text>
-            <Text style={styles.meta}>{item.createdAt}</Text>
-            {currentUserId && item.userId === currentUserId ? (
-              <TouchableOpacity
-                testID={`event-comment-delete-${item.id}`}
-                onPress={() => onDelete?.(item.id)}
-              >
-                <Text style={styles.deleteText}>削除</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        )}
-      />
+      {comments.map((item) => (
+        <View key={item.id} style={styles.commentRow} testID={`event-comment-${item.id}`}>
+          <Text>{item.body}</Text>
+          <Text style={styles.meta}>{resolveAuthorName ? resolveAuthorName(item.userId) : item.userId}</Text>
+          <Text style={styles.meta}>{item.createdAt}</Text>
+          {currentUserId && item.userId === currentUserId ? (
+            <TouchableOpacity
+              testID={`event-comment-delete-${item.id}`}
+              onPress={() => onDelete?.(item.id)}
+            >
+              <Text style={styles.deleteText}>削除</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ))}
       <TextInput
         testID="event-comment-input"
         style={styles.input}

@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import EventDetailScreen from "../[id]";
@@ -30,6 +30,7 @@ import {
 jest.mock("expo-router", () => ({
   router: { back: jest.fn(), replace: jest.fn() },
   useLocalSearchParams: jest.fn(),
+  Stack: { Screen: () => null },
 }));
 
 jest.mock("../../../src/features/auth/hooks", () => ({
@@ -117,7 +118,7 @@ function mockCommonHooks(
     tags?: unknown[];
     tagTree?: unknown[];
     todos?: unknown[];
-    members?: { userId: string; role: string }[];
+    members?: { userId: string; role: string; displayName?: string | null }[];
     photos?: unknown[];
     refetchComments?: jest.Mock;
     refetchReactions?: jest.Mock;
@@ -510,5 +511,34 @@ describe("EventDetailScreen", () => {
 
     expect(updateEventMock).not.toHaveBeenCalled();
     expect(queryByTestId("event-edit-title-input")).toBeNull();
+  });
+
+  it("shows the commenter's display name instead of their raw user id", async () => {
+    mockCommonHooks({
+      comments: [{ id: "comment-1", eventId: "event-1", userId: "user-2", body: "hi", createdAt: "2026-08-01T00:00:00.000Z" }],
+      members: [
+        { userId: "user-1", role: "owner", displayName: "たろう" },
+        { userId: "user-2", role: "member", displayName: "はなこ" },
+      ],
+    });
+
+    const { getByTestId, queryByText } = await render(<EventDetailScreen />);
+
+    expect(within(getByTestId("event-comment-comment-1")).getByText("はなこ")).toBeTruthy();
+    expect(queryByText("user-2")).toBeNull();
+  });
+
+  it("shows reminder target members' display names instead of their raw user ids", async () => {
+    mockCommonHooks({
+      members: [
+        { userId: "user-1", role: "owner", displayName: "たろう" },
+        { userId: "user-2", role: "member", displayName: "はなこ" },
+      ],
+    });
+
+    const { getByText, queryByText } = await render(<EventDetailScreen />);
+
+    expect(getByText("はなこ")).toBeTruthy();
+    expect(queryByText("user-2")).toBeNull();
   });
 });

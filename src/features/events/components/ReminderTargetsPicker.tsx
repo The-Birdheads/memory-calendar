@@ -6,9 +6,15 @@ export interface ReminderTargetsPickerProps {
   memberUserIds: string[];
   value: ReminderTargetsInput;
   onChange: (value: ReminderTargetsInput) => void;
+  resolveMemberLabel?: (userId: string) => string;
 }
 
-export function ReminderTargetsPicker({ memberUserIds, value, onChange }: ReminderTargetsPickerProps) {
+export function ReminderTargetsPicker({
+  memberUserIds,
+  value,
+  onChange,
+  resolveMemberLabel,
+}: ReminderTargetsPickerProps) {
   const isAll = value === "all";
 
   const toggleMember = (userId: string) => {
@@ -39,7 +45,7 @@ export function ReminderTargetsPicker({ memberUserIds, value, onChange }: Remind
             style={styles.row}
             onPress={() => toggleMember(userId)}
           >
-            <Text>{userId}</Text>
+            <Text>{resolveMemberLabel ? resolveMemberLabel(userId) : userId}</Text>
             {checked ? <Text testID={`reminder-target-member-${userId}-checked`}>✓</Text> : null}
           </TouchableOpacity>
         );

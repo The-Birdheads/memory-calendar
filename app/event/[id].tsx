@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
 import { useCalendarMembers } from "../../src/features/calendars/hooks";
@@ -112,6 +112,13 @@ export default function EventDetailScreen() {
   const attachedTagIds = new Set(tags.map((tag) => tag.id));
   const availableTags = flattenTagTree(tagTree).filter((tag) => !attachedTagIds.has(tag.id));
 
+  const resolveMemberLabel = (userId: string): string => {
+    const member = members.find((m) => m.userId === userId);
+    if (member?.displayName) return member.displayName;
+    if (userId === session?.user.id) return session?.user.email ?? "メンバー";
+    return "メンバー";
+  };
+
   const handlePostComment = async (body: string) => {
     const success = await postComment(eventId, body);
     if (success) await refetchComments();
@@ -204,14 +211,19 @@ export default function EventDetailScreen() {
 
   if (isEventLoading || !event) {
     return (
-      <View style={styles.container}>
-        <Text>読み込み中...</Text>
-      </View>
+      <>
+        <Stack.Screen options={{ headerShown: true, title: "予定" }} />
+        <View style={styles.container}>
+          <Text>読み込み中...</Text>
+        </View>
+      </>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <>
+      <Stack.Screen options={{ headerShown: true, title: event.title }} />
+      <ScrollView style={styles.container}>
       <View style={styles.titleRow}>
         <Text style={styles.title}>{event.title}</Text>
         <TouchableOpacity testID="event-edit-button" onPress={handleOpenEditModal}>
@@ -264,6 +276,7 @@ export default function EventDetailScreen() {
           onSubmit={handlePostComment}
           currentUserId={session?.user.id}
           onDelete={handleDeleteComment}
+          resolveAuthorName={resolveMemberLabel}
         />
       </View>
 
@@ -303,6 +316,7 @@ export default function EventDetailScreen() {
           memberUserIds={members.map((member) => member.userId)}
           value={reminderTargets}
           onChange={setReminderTargetsValue}
+          resolveMemberLabel={resolveMemberLabel}
         />
         <TouchableOpacity testID="event-reminder-targets-save" onPress={handleSaveReminderTargets}>
           <Text>保存</Text>
@@ -360,7 +374,8 @@ export default function EventDetailScreen() {
           </ScrollView>
         </View>
       </Modal>
-    </ScrollView>
+      </ScrollView>
+    </>
   );
 }
 

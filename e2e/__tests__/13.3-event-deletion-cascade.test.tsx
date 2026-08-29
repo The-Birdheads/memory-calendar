@@ -20,6 +20,7 @@ import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 jest.mock("expo-router", () => ({
   router: { back: jest.fn(), replace: jest.fn() },
   useLocalSearchParams: jest.fn(),
+  Stack: { Screen: () => null },
 }));
 
 jest.mock("../../src/shared/api/supabaseClient", () => ({

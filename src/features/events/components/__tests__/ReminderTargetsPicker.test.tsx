@@ -56,6 +56,20 @@ describe("ReminderTargetsPicker", () => {
     expect(onChange).toHaveBeenCalledWith(["user-1", "user-2"]);
   });
 
+  it("shows the resolved member label instead of the raw user id when a resolver is given", async () => {
+    const { getByText, queryByText } = await render(
+      <ReminderTargetsPicker
+        memberUserIds={MEMBER_USER_IDS}
+        value="all"
+        onChange={jest.fn()}
+        resolveMemberLabel={(userId) => (userId === "user-1" ? "たろう" : userId)}
+      />
+    );
+
+    expect(getByText("たろう")).toBeTruthy();
+    expect(queryByText("user-1")).toBeNull();
+  });
+
   it("removes a member from the current selection when pressed again", async () => {
     const onChange = jest.fn();
     const { getByTestId } = await render(
