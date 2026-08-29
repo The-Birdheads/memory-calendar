@@ -13,7 +13,13 @@ import {
 } from "../../../src/features/calendars/hooks";
 import { computeDateRange } from "../../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../../src/features/events/hooks";
-import { useAttachTagsToEvent, useCreateTag, useTagTree } from "../../../src/features/tags/hooks";
+import {
+  useAttachTagsToEvent,
+  useCreateTag,
+  useDeleteTag,
+  useTagTree,
+  useUpdateTag,
+} from "../../../src/features/tags/hooks";
 import { useCreateTodo } from "../../../src/features/todos/hooks";
 
 jest.mock("expo-router", () => ({
@@ -45,6 +51,8 @@ jest.mock("../../../src/features/todos/hooks", () => ({
 jest.mock("../../../src/features/tags/hooks", () => ({
   useTagTree: jest.fn(),
   useCreateTag: jest.fn(),
+  useUpdateTag: jest.fn(),
+  useDeleteTag: jest.fn(),
   useAttachTagsToEvent: jest.fn(),
 }));
 
@@ -143,6 +151,16 @@ function mockCommonHooks() {
   });
   (useCreateTag as jest.Mock).mockReturnValue({
     createTag: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useUpdateTag as jest.Mock).mockReturnValue({
+    updateTag: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useDeleteTag as jest.Mock).mockReturnValue({
+    deleteTag: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -274,6 +292,8 @@ describe("CalendarScreen", () => {
     });
     (useTagTree as jest.Mock).mockReturnValue({ tagTree: [], isLoading: false, error: null, refetch: jest.fn() });
     (useCreateTag as jest.Mock).mockReturnValue({ createTag: jest.fn(), isSubmitting: false, error: null });
+    (useUpdateTag as jest.Mock).mockReturnValue({ updateTag: jest.fn(), isSubmitting: false, error: null });
+    (useDeleteTag as jest.Mock).mockReturnValue({ deleteTag: jest.fn(), isSubmitting: false, error: null });
     (useAttachTagsToEvent as jest.Mock).mockReturnValue({
       attachTagsToEvent: jest.fn(),
       isSubmitting: false,
@@ -509,7 +529,7 @@ describe("CalendarScreen", () => {
     expect(createTodoMock).not.toHaveBeenCalled();
   });
 
-  it("creates a calendar-scoped tag from the tag management modal and refetches the tag tree", async () => {
+  it("opens the tag management modal from the calendar screen and creates a new tag", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
     const refetchTagTree = jest.fn();
@@ -520,8 +540,9 @@ describe("CalendarScreen", () => {
     const { getByTestId } = await render(<CalendarScreen />);
 
     await fireEvent.press(getByTestId("calendar-manage-tags-button"));
-    await fireEvent.changeText(getByTestId("tag-name-input"), "旅行");
-    await fireEvent.press(getByTestId("tag-create-submit"));
+    await fireEvent.press(getByTestId("tag-management-new-button"));
+    await fireEvent.changeText(getByTestId("edit-tag-name-input"), "旅行");
+    await fireEvent.press(getByTestId("edit-tag-save-button"));
 
     await waitFor(() =>
       expect(createTagMock).toHaveBeenCalledWith({

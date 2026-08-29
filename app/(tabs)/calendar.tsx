@@ -29,8 +29,8 @@ import { useCreateEvent, useEventsInRange } from "../../src/features/events/hook
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
-import { TagTreeSection, type CreateTagFormValue } from "../../src/features/tags/components/TagTreeSection";
-import { useAttachTagsToEvent, useCreateTag, useTagTree } from "../../src/features/tags/hooks";
+import { TagManagementModal } from "../../src/features/tags/components/TagManagementModal";
+import { useAttachTagsToEvent, useTagTree } from "../../src/features/tags/hooks";
 import type { TagTreeNode } from "../../src/features/tags/types";
 import { useCreateTodo } from "../../src/features/todos/hooks";
 import { formatTime } from "../../src/shared/utils/formatDateTime";
@@ -81,7 +81,6 @@ export default function CalendarScreen() {
   const { createTodo } = useCreateTodo();
 
   const { tagTree, refetch: refetchTagTree } = useTagTree(activeCalendarId);
-  const { createTag } = useCreateTag();
   const { attachTagsToEvent } = useAttachTagsToEvent();
   const availableTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
   const [isTagModalVisible, setIsTagModalVisible] = useState(false);
@@ -161,19 +160,6 @@ export default function CalendarScreen() {
     setSelectedTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
     );
-  };
-
-  const handleCreateTag = async (value: CreateTagFormValue) => {
-    const success = await createTag({
-      calendarId: activeCalendarId,
-      name: value.name,
-      color: value.color,
-      level: value.level,
-      parentId: value.parentId ?? null,
-    });
-    if (success) {
-      await refetchTagTree();
-    }
   };
 
   const handleAddTodoItem = () => {
@@ -342,25 +328,14 @@ export default function CalendarScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={isTagModalVisible} transparent animationType="slide">
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>タグを管理</Text>
-              <TagTreeSection tagTree={tagTree} onCreateTag={handleCreateTag} />
-              <TouchableOpacity testID="calendar-manage-tags-close" onPress={() => setIsTagModalVisible(false)}>
-                <Text>閉じる</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+      {isTagModalVisible ? (
+        <TagManagementModal
+          calendars={calendars}
+          initialCalendarId={activeCalendarId}
+          onClose={() => setIsTagModalVisible(false)}
+          onChange={refetchTagTree}
+        />
+      ) : null}
 
       <View style={styles.viewModeRow}>
         <TouchableOpacity testID="calendar-today-button" onPress={handleToday} style={styles.todayButton}>
