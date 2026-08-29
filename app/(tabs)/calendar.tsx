@@ -29,8 +29,15 @@ import { useCreateEvent, useEventsInRange } from "../../src/features/events/hook
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
+import { TagTreeSection, type CreateTagFormValue } from "../../src/features/tags/components/TagTreeSection";
+import { useAttachTagsToEvent, useCreateTag, useTagTree } from "../../src/features/tags/hooks";
+import type { TagTreeNode } from "../../src/features/tags/types";
 import { useCreateTodo } from "../../src/features/todos/hooks";
 import { formatTime } from "../../src/shared/utils/formatDateTime";
+
+function flattenTagTree(nodes: TagTreeNode[]): TagTreeNode[] {
+  return nodes.flatMap((node) => [node, ...flattenTagTree(node.children)]);
+}
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -72,6 +79,13 @@ export default function CalendarScreen() {
   const { events, refetch: refetchEvents } = useEventsInRange(activeCalendarId, range);
   const { createEvent, error: createEventError } = useCreateEvent();
   const { createTodo } = useCreateTodo();
+
+  const { tagTree, refetch: refetchTagTree } = useTagTree(activeCalendarId);
+  const { createTag } = useCreateTag();
+  const { attachTagsToEvent } = useAttachTagsToEvent();
+  const availableTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
+  const [isTagModalVisible, setIsTagModalVisible] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [newEventForm, setNewEventForm] = useState<EventFormValue>(() => ({
@@ -139,7 +153,27 @@ export default function CalendarScreen() {
     setHasTodos(false);
     setTodoItems([]);
     setNewTodoItemText("");
+    setSelectedTagIds([]);
     setIsCreateModalVisible(true);
+  };
+
+  const handleToggleTagSelection = (tagId: string) => {
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
+  };
+
+  const handleCreateTag = async (value: CreateTagFormValue) => {
+    const success = await createTag({
+      calendarId: activeCalendarId,
+      name: value.name,
+      color: value.color,
+      level: value.level,
+      parentId: value.parentId ?? null,
+    });
+    if (success) {
+      await refetchTagTree();
+    }
   };
 
   const handleAddTodoItem = () => {
@@ -194,6 +228,9 @@ export default function CalendarScreen() {
           await createTodo({ eventId: createdEvent.id, title });
         }
       }
+      if (selectedTagIds.length > 0) {
+        await attachTagsToEvent(createdEvent.id, selectedTagIds);
+      }
       setIsCreateModalVisible(false);
       await refetchEvents();
     }
@@ -225,6 +262,15 @@ export default function CalendarScreen() {
         {activeCalendarId ? (
           <TouchableOpacity testID="calendar-invite-button" style={styles.inviteButton} onPress={handleGenerateInvite}>
             <Text style={styles.inviteButtonText}>招待</Text>
+          </TouchableOpacity>
+        ) : null}
+        {activeCalendarId ? (
+          <TouchableOpacity
+            testID="calendar-manage-tags-button"
+            style={styles.inviteButton}
+            onPress={() => setIsTagModalVisible(true)}
+          >
+            <Text style={styles.inviteButtonText}>タグ管理</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -289,6 +335,26 @@ export default function CalendarScreen() {
                 testID="calendar-onboarding-cancel"
                 onPress={() => setIsOnboardingModalVisible(false)}
               >
+                <Text>閉じる</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={isTagModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>タグを管理</Text>
+              <TagTreeSection tagTree={tagTree} onCreateTag={handleCreateTag} />
+              <TouchableOpacity testID="calendar-manage-tags-close" onPress={() => setIsTagModalVisible(false)}>
                 <Text>閉じる</Text>
               </TouchableOpacity>
             </View>
@@ -419,6 +485,30 @@ export default function CalendarScreen() {
               value={newEventForm}
               onChange={(patch) => setNewEventForm((prev) => ({ ...prev, ...patch }))}
             />
+
+            {availableTagsFlat.length > 0 ? (
+              <View style={styles.tagPickerSection}>
+                <Text style={styles.tagPickerLabel}>タグ</Text>
+                <View style={styles.tagPickerRow}>
+                  {availableTagsFlat.map((tag) => (
+                    <TouchableOpacity
+                      key={tag.id}
+                      testID={`event-create-tag-${tag.id}`}
+                      style={[
+                        styles.tagChip,
+                        { borderColor: tag.color },
+                        selectedTagIds.includes(tag.id) && { backgroundColor: tag.color },
+                      ]}
+                      onPress={() => handleToggleTagSelection(tag.id)}
+                    >
+                      <Text style={selectedTagIds.includes(tag.id) && styles.tagChipTextSelected}>
+                        {tag.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ) : null}
 
             <TouchableOpacity
               testID="event-create-has-todos-toggle"
@@ -730,6 +820,28 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 8,
+  },
+  tagPickerSection: {
+    gap: 6,
+  },
+  tagPickerLabel: {
+    color: "#666",
+    fontSize: 12,
+  },
+  tagPickerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  tagChip: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  tagChipTextSelected: {
+    color: "#fff",
+    fontWeight: "700",
   },
   todoChecklist: {
     gap: 8,

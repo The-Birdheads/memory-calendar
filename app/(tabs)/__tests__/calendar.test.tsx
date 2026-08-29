@@ -13,6 +13,7 @@ import {
 } from "../../../src/features/calendars/hooks";
 import { computeDateRange } from "../../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../../src/features/events/hooks";
+import { useAttachTagsToEvent, useCreateTag, useTagTree } from "../../../src/features/tags/hooks";
 import { useCreateTodo } from "../../../src/features/todos/hooks";
 
 jest.mock("expo-router", () => ({
@@ -39,6 +40,12 @@ jest.mock("../../../src/features/events/hooks", () => ({
 
 jest.mock("../../../src/features/todos/hooks", () => ({
   useCreateTodo: jest.fn(),
+}));
+
+jest.mock("../../../src/features/tags/hooks", () => ({
+  useTagTree: jest.fn(),
+  useCreateTag: jest.fn(),
+  useAttachTagsToEvent: jest.fn(),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => {
@@ -70,6 +77,10 @@ const TODAY_EVENT = {
   startAt: "2026-08-18T09:00:00.000Z",
   endAt: "2026-08-18T09:30:00.000Z",
 };
+
+const TAG_TREE = [
+  { id: "tag-a", calendarId: "cal-1", parentId: null, level: "major", name: "旅行", color: "#ff0000", createdAt: "2026-08-01T00:00:00.000Z", children: [] },
+];
 
 const OTHER_DAY_EVENT = {
   id: "event-2",
@@ -121,6 +132,22 @@ function mockCommonHooks() {
   });
   (useJoinByInvite as jest.Mock).mockReturnValue({
     joinByInvite: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useTagTree as jest.Mock).mockReturnValue({
+    tagTree: TAG_TREE,
+    isLoading: false,
+    error: null,
+    refetch: jest.fn(),
+  });
+  (useCreateTag as jest.Mock).mockReturnValue({
+    createTag: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useAttachTagsToEvent as jest.Mock).mockReturnValue({
+    attachTagsToEvent: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -242,6 +269,13 @@ describe("CalendarScreen", () => {
     });
     (useJoinByInvite as jest.Mock).mockReturnValue({
       joinByInvite: jest.fn().mockResolvedValue(true),
+      isSubmitting: false,
+      error: null,
+    });
+    (useTagTree as jest.Mock).mockReturnValue({ tagTree: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useCreateTag as jest.Mock).mockReturnValue({ createTag: jest.fn(), isSubmitting: false, error: null });
+    (useAttachTagsToEvent as jest.Mock).mockReturnValue({
+      attachTagsToEvent: jest.fn(),
       isSubmitting: false,
       error: null,
     });
@@ -473,6 +507,79 @@ describe("CalendarScreen", () => {
 
     await waitFor(() => expect(createEventMock).toHaveBeenCalled());
     expect(createTodoMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a calendar-scoped tag from the tag management modal and refetches the tag tree", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    const refetchTagTree = jest.fn();
+    (useTagTree as jest.Mock).mockReturnValue({ tagTree: [], isLoading: false, error: null, refetch: refetchTagTree });
+    const createTagMock = jest.fn().mockResolvedValue(true);
+    (useCreateTag as jest.Mock).mockReturnValue({ createTag: createTagMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-manage-tags-button"));
+    await fireEvent.changeText(getByTestId("tag-name-input"), "旅行");
+    await fireEvent.press(getByTestId("tag-create-submit"));
+
+    await waitFor(() =>
+      expect(createTagMock).toHaveBeenCalledWith({
+        calendarId: "cal-1",
+        name: "旅行",
+        color: "#2f6fed",
+        level: "major",
+        parentId: null,
+      })
+    );
+    await waitFor(() => expect(refetchTagTree).toHaveBeenCalled());
+  });
+
+  it("attaches the selected calendar tags to a newly created event", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useTagTree as jest.Mock).mockReturnValue({ tagTree: TAG_TREE, isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+    const attachTagsToEventMock = jest.fn().mockResolvedValue(true);
+    (useAttachTagsToEvent as jest.Mock).mockReturnValue({
+      attachTagsToEvent: attachTagsToEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "旅行の計画");
+    await fireEvent.press(getByTestId("event-create-tag-tag-a"));
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+    await waitFor(() => expect(attachTagsToEventMock).toHaveBeenCalledWith("event-created-1", ["tag-a"]));
+  });
+
+  it("does not attach tags when none are selected", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useTagTree as jest.Mock).mockReturnValue({ tagTree: TAG_TREE, isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+    const attachTagsToEventMock = jest.fn().mockResolvedValue(true);
+    (useAttachTagsToEvent as jest.Mock).mockReturnValue({
+      attachTagsToEvent: attachTagsToEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "会議");
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+    expect(attachTagsToEventMock).not.toHaveBeenCalled();
   });
 
   it("navigates to the event detail screen when an event row is pressed", async () => {

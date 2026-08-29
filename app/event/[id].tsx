@@ -197,7 +197,7 @@ export default function EventDetailScreen() {
   if (isEventLoading || !event) {
     return (
       <>
-        <Stack.Screen options={{ headerShown: true, title: "予定", headerBackTitle: "" }} />
+        <Stack.Screen options={{ headerShown: true, title: "予定" }} />
         <View style={styles.container}>
           <Text>読み込み中...</Text>
         </View>
@@ -207,7 +207,7 @@ export default function EventDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: event.title, headerBackTitle: "" }} />
+      <Stack.Screen options={{ headerShown: true, title: event.title }} />
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.headerCard}>
         <View style={styles.titleRow}>
