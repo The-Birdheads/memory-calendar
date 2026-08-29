@@ -4,6 +4,7 @@ import {
   attachTagsToEvent,
   createTag,
   deleteTag,
+  detachTagFromEvent,
   listTagsForEvent,
   listTagTree,
   updateTag,
@@ -284,6 +285,37 @@ describe("attachTagsToEvent", () => {
     } as unknown as SupabaseClient;
 
     const result = await attachTagsToEvent(client, "event-1", ["tag-1"]);
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("detachTagFromEvent", () => {
+  it("deletes the matching event_tags row", async () => {
+    const eq2 = jest.fn().mockResolvedValue({ error: null });
+    const eq1 = jest.fn().mockReturnValue({ eq: eq2 });
+    const del = jest.fn().mockReturnValue({ eq: eq1 });
+    const client = {
+      from: jest.fn().mockReturnValue({ delete: del }),
+    } as unknown as SupabaseClient;
+
+    const result = await detachTagFromEvent(client, "event-1", "tag-1");
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(client.from).toHaveBeenCalledWith("event_tags");
+    expect(eq1).toHaveBeenCalledWith("event_id", "event-1");
+    expect(eq2).toHaveBeenCalledWith("tag_id", "tag-1");
+  });
+
+  it("maps an RLS/permission error to Forbidden", async () => {
+    const eq2 = jest.fn().mockResolvedValue({ error: { message: "permission denied", code: "42501" } });
+    const eq1 = jest.fn().mockReturnValue({ eq: eq2 });
+    const del = jest.fn().mockReturnValue({ eq: eq1 });
+    const client = {
+      from: jest.fn().mockReturnValue({ delete: del }),
+    } as unknown as SupabaseClient;
+
+    const result = await detachTagFromEvent(client, "event-1", "tag-1");
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

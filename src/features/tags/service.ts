@@ -153,6 +153,20 @@ export async function attachTagsToEvent(
   return ok(undefined);
 }
 
+export async function detachTagFromEvent(
+  client: SupabaseClient,
+  eventId: string,
+  tagId: string
+): Promise<Result<void, TagError>> {
+  const { error } = await client.from("event_tags").delete().eq("event_id", eventId).eq("tag_id", tagId);
+
+  if (error) {
+    return err(mapTagError(error));
+  }
+
+  return ok(undefined);
+}
+
 export async function listTagsForEvent(
   client: SupabaseClient,
   eventId: string

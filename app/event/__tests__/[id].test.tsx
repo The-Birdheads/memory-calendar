@@ -19,7 +19,12 @@ import {
 } from "../../../src/features/events/hooks";
 import type { Event } from "../../../src/features/events/types";
 import { useAddReflection, useEventPhotos } from "../../../src/features/memories/hooks";
-import { useAttachTagsToEvent, useEventTags, useTagTree } from "../../../src/features/tags/hooks";
+import {
+  useAttachTagsToEvent,
+  useDetachTagFromEvent,
+  useEventTags,
+  useTagTree,
+} from "../../../src/features/tags/hooks";
 import {
   useCreateTodo,
   useDeleteTodo,
@@ -76,6 +81,7 @@ jest.mock("../../../src/features/tags/hooks", () => ({
   useEventTags: jest.fn(),
   useTagTree: jest.fn(),
   useAttachTagsToEvent: jest.fn(),
+  useDetachTagFromEvent: jest.fn(),
 }));
 
 jest.mock("../../../src/features/todos/hooks", () => ({
@@ -214,6 +220,11 @@ function mockCommonHooks(
     isSubmitting: false,
     error: null,
   });
+  (useDetachTagFromEvent as jest.Mock).mockReturnValue({
+    detachTagFromEvent: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
 
   const refetchTodos = overrides.refetchTodos ?? jest.fn();
   (useTodosByEvent as jest.Mock).mockReturnValue({
@@ -319,7 +330,30 @@ describe("EventDetailScreen", () => {
     expect(getByTestId("event-tag-badge-tag-a")).toBeTruthy();
   });
 
-  it("attaches an available tag and refetches", async () => {
+  it("shows a message when no tags are attached yet", async () => {
+    mockCommonHooks({ tags: [] });
+
+    const { getByText, queryByTestId } = await render(<EventDetailScreen />);
+
+    expect(getByText("タグはまだありません（編集から追加できます）")).toBeTruthy();
+    expect(queryByTestId("event-tag-badge-tag-a")).toBeNull();
+  });
+
+  it("pre-selects the event's current tags in the edit modal's tag picker", async () => {
+    mockCommonHooks({
+      tags: [TAG_A],
+      tagTree: [{ ...TAG_A, children: [] }, { ...TAG_B, children: [] }],
+    });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-edit-button"));
+
+    expect(getByTestId("event-edit-tag-tag-a")).toBeTruthy();
+    expect(getByTestId("event-edit-tag-tag-b")).toBeTruthy();
+  });
+
+  it("adds and removes tags via the edit modal and refetches on save", async () => {
     const { refetchTags } = mockCommonHooks({
       tags: [TAG_A],
       tagTree: [{ ...TAG_A, children: [] }, { ...TAG_B, children: [] }],
@@ -330,14 +364,53 @@ describe("EventDetailScreen", () => {
       isSubmitting: false,
       error: null,
     });
+    const detachTagFromEventMock = jest.fn().mockResolvedValue(true);
+    (useDetachTagFromEvent as jest.Mock).mockReturnValue({
+      detachTagFromEvent: detachTagFromEventMock,
+      isSubmitting: false,
+      error: null,
+    });
 
-    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+    const { getByTestId } = await render(<EventDetailScreen />);
 
-    expect(queryByTestId("event-tag-attach-tag-a")).toBeNull();
-    await fireEvent.press(getByTestId("event-tag-attach-tag-b"));
+    await fireEvent.press(getByTestId("event-edit-button"));
+    // tag-a is already attached; toggling it off should detach it on save.
+    await fireEvent.press(getByTestId("event-edit-tag-tag-a"));
+    // tag-b is not attached yet; toggling it on should attach it on save.
+    await fireEvent.press(getByTestId("event-edit-tag-tag-b"));
+    await fireEvent.press(getByTestId("event-edit-submit"));
 
     await waitFor(() => expect(attachTagsToEventMock).toHaveBeenCalledWith("event-1", ["tag-b"]));
+    await waitFor(() => expect(detachTagFromEventMock).toHaveBeenCalledWith("event-1", "tag-a"));
     await waitFor(() => expect(refetchTags).toHaveBeenCalled());
+  });
+
+  it("does not touch tags on save when the selection is unchanged", async () => {
+    const { refetchEvent } = mockCommonHooks({
+      tags: [TAG_A],
+      tagTree: [{ ...TAG_A, children: [] }],
+    });
+    const attachTagsToEventMock = jest.fn().mockResolvedValue(true);
+    (useAttachTagsToEvent as jest.Mock).mockReturnValue({
+      attachTagsToEvent: attachTagsToEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+    const detachTagFromEventMock = jest.fn().mockResolvedValue(true);
+    (useDetachTagFromEvent as jest.Mock).mockReturnValue({
+      detachTagFromEvent: detachTagFromEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-edit-button"));
+    await fireEvent.press(getByTestId("event-edit-submit"));
+
+    await waitFor(() => expect(refetchEvent).toHaveBeenCalled());
+    expect(attachTagsToEventMock).not.toHaveBeenCalled();
+    expect(detachTagFromEventMock).not.toHaveBeenCalled();
   });
 
   it("adds a todo scoped to the event and refetches", async () => {

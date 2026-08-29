@@ -13,7 +13,12 @@ import {
 } from "../../src/features/communication/hooks";
 import { useAddReflection, useEventPhotos } from "../../src/features/memories/hooks";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
-import { useAttachTagsToEvent, useEventTags, useTagTree } from "../../src/features/tags/hooks";
+import {
+  useAttachTagsToEvent,
+  useDetachTagFromEvent,
+  useEventTags,
+  useTagTree,
+} from "../../src/features/tags/hooks";
 import { useCreateTodo, useDeleteTodo, useToggleDone, useTodosByEvent } from "../../src/features/todos/hooks";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
@@ -52,6 +57,7 @@ jest.mock("../../src/features/tags/hooks", () => ({
   useEventTags: jest.fn(),
   useTagTree: jest.fn(),
   useAttachTagsToEvent: jest.fn(),
+  useDetachTagFromEvent: jest.fn(),
 }));
 
 jest.mock("../../src/features/todos/hooks", () => ({
@@ -99,6 +105,7 @@ describe("13.3 予定削除フローの検証", () => {
     (useEventTags as jest.Mock).mockReturnValue({ tags: [], isLoading: false, error: null, refetch: jest.fn() });
     (useTagTree as jest.Mock).mockReturnValue({ tagTree: [], isLoading: false, error: null, refetch: jest.fn() });
     (useAttachTagsToEvent as jest.Mock).mockReturnValue({ attachTagsToEvent: jest.fn(), isSubmitting: false, error: null });
+    (useDetachTagFromEvent as jest.Mock).mockReturnValue({ detachTagFromEvent: jest.fn(), isSubmitting: false, error: null });
     (useTodosByEvent as jest.Mock).mockReturnValue({ todos: [], isLoading: false, error: null, refetch: jest.fn() });
     (useCreateTodo as jest.Mock).mockReturnValue({ createTodo: jest.fn(), isSubmitting: false, error: null });
     (useToggleDone as jest.Mock).mockReturnValue({ toggleDone: jest.fn(), isSubmitting: false, error: null });

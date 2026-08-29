@@ -6,6 +6,7 @@ import {
   attachTagsToEvent,
   createTag,
   deleteTag,
+  detachTagFromEvent,
   listTagsForEvent,
   listTagTree,
   updateTag,
@@ -134,6 +135,31 @@ export function useAttachTagsToEvent(): UseAttachTagsToEventResult {
   }, []);
 
   return { attachTagsToEvent: runAttachTagsToEvent, isSubmitting, error };
+}
+
+export interface UseDetachTagFromEventResult {
+  detachTagFromEvent: (eventId: string, tagId: string) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TagError | null;
+}
+
+export function useDetachTagFromEvent(): UseDetachTagFromEventResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const runDetachTagFromEvent = useCallback(async (eventId: string, tagId: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await detachTagFromEvent(getSupabaseClient(), eventId, tagId);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { detachTagFromEvent: runDetachTagFromEvent, isSubmitting, error };
 }
 
 export interface UseUpdateTagResult {

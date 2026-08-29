@@ -30,6 +30,7 @@ import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
 import { TagManagementModal } from "../../src/features/tags/components/TagManagementModal";
+import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useTagTree } from "../../src/features/tags/hooks";
 import type { TagTreeNode } from "../../src/features/tags/types";
 import { useCreateTodo } from "../../src/features/todos/hooks";
@@ -461,29 +462,12 @@ export default function CalendarScreen() {
               onChange={(patch) => setNewEventForm((prev) => ({ ...prev, ...patch }))}
             />
 
-            {availableTagsFlat.length > 0 ? (
-              <View style={styles.tagPickerSection}>
-                <Text style={styles.tagPickerLabel}>タグ</Text>
-                <View style={styles.tagPickerRow}>
-                  {availableTagsFlat.map((tag) => (
-                    <TouchableOpacity
-                      key={tag.id}
-                      testID={`event-create-tag-${tag.id}`}
-                      style={[
-                        styles.tagChip,
-                        { borderColor: tag.color },
-                        selectedTagIds.includes(tag.id) && { backgroundColor: tag.color },
-                      ]}
-                      onPress={() => handleToggleTagSelection(tag.id)}
-                    >
-                      <Text style={selectedTagIds.includes(tag.id) && styles.tagChipTextSelected}>
-                        {tag.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            ) : null}
+            <TagPickerRow
+              testIDPrefix="event-create"
+              availableTags={availableTagsFlat}
+              selectedTagIds={selectedTagIds}
+              onToggle={handleToggleTagSelection}
+            />
 
             <TouchableOpacity
               testID="event-create-has-todos-toggle"
@@ -795,28 +779,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 8,
-  },
-  tagPickerSection: {
-    gap: 6,
-  },
-  tagPickerLabel: {
-    color: "#666",
-    fontSize: 12,
-  },
-  tagPickerRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  tagChip: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  tagChipTextSelected: {
-    color: "#fff",
-    fontWeight: "700",
   },
   todoChecklist: {
     gap: 8,

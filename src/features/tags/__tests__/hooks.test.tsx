@@ -5,6 +5,7 @@ import {
   attachTagsToEvent,
   createTag,
   deleteTag,
+  detachTagFromEvent,
   listTagsForEvent,
   listTagTree,
   updateTag,
@@ -13,6 +14,7 @@ import {
   useAttachTagsToEvent,
   useCreateTag,
   useDeleteTag,
+  useDetachTagFromEvent,
   useEventTags,
   useTagTree,
   useUpdateTag,
@@ -26,6 +28,7 @@ jest.mock("../service", () => ({
   createTag: jest.fn(),
   listTagTree: jest.fn(),
   attachTagsToEvent: jest.fn(),
+  detachTagFromEvent: jest.fn(),
   listTagsForEvent: jest.fn(),
   updateTag: jest.fn(),
   deleteTag: jest.fn(),
@@ -210,6 +213,43 @@ describe("useAttachTagsToEvent", () => {
     let success = true;
     await act(async () => {
       success = await result.current.attachTagsToEvent("event-1", ["tag-1"]);
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useDetachTagFromEvent", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when it succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (detachTagFromEvent as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    const { result } = await renderHook(() => useDetachTagFromEvent());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.detachTagFromEvent("event-1", "tag-1");
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(detachTagFromEvent).toHaveBeenCalledWith({}, "event-1", "tag-1");
+  });
+
+  it("returns false and sets the error when it fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (detachTagFromEvent as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useDetachTagFromEvent());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.detachTagFromEvent("event-1", "tag-1");
     });
 
     expect(success).toBe(false);

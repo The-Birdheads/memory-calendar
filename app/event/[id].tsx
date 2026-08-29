@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
@@ -30,7 +40,13 @@ import type { ReminderTargetsInput } from "../../src/features/events/types";
 import { EventPhotosGallery } from "../../src/features/memories/components/EventPhotosGallery";
 import { useAddReflection, useEventPhotos } from "../../src/features/memories/hooks";
 import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
-import { useAttachTagsToEvent, useEventTags, useTagTree } from "../../src/features/tags/hooks";
+import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
+import {
+  useAttachTagsToEvent,
+  useDetachTagFromEvent,
+  useEventTags,
+  useTagTree,
+} from "../../src/features/tags/hooks";
 import type { Tag, TagTreeNode } from "../../src/features/tags/types";
 import {
   useCreateTodo,
@@ -63,6 +79,8 @@ export default function EventDetailScreen() {
   const { tags, refetch: refetchTags } = useEventTags(eventId);
   const { tagTree } = useTagTree(calendarId);
   const { attachTagsToEvent } = useAttachTagsToEvent();
+  const { detachTagFromEvent } = useDetachTagFromEvent();
+  const [selectedEditTagIds, setSelectedEditTagIds] = useState<string[]>([]);
 
   const { todos, refetch: refetchTodos } = useTodosByEvent(eventId);
   const { createTodo } = useCreateTodo();
@@ -94,8 +112,7 @@ export default function EventDetailScreen() {
   const [reflectionBody, setReflectionBody] = useState("");
 
   const isPast = event ? new Date(event.endAt) < new Date() : false;
-  const attachedTagIds = new Set(tags.map((tag) => tag.id));
-  const availableTags = flattenTagTree(tagTree).filter((tag) => !attachedTagIds.has(tag.id));
+  const allTagsFlat = flattenTagTree(tagTree);
 
   const resolveMemberLabel = (userId: string): string => {
     const member = members.find((m) => m.userId === userId);
@@ -119,9 +136,10 @@ export default function EventDetailScreen() {
     if (success) await refetchReactions();
   };
 
-  const handleAttachTag = async (tagId: string) => {
-    const success = await attachTagsToEvent(eventId, [tagId]);
-    if (success) await refetchTags();
+  const handleToggleEditTag = (tagId: string) => {
+    setSelectedEditTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
   };
 
   const handleAddTodo = async () => {
@@ -158,6 +176,7 @@ export default function EventDetailScreen() {
       url: event.url ?? "",
       categoryColor: event.categoryColor ?? CATEGORY_COLORS[0].hex,
     });
+    setSelectedEditTagIds(tags.map((tag) => tag.id));
     setIsEditModalVisible(true);
   };
 
@@ -172,6 +191,18 @@ export default function EventDetailScreen() {
       categoryColor: editForm.categoryColor,
     });
     if (success) {
+      const currentTagIds = tags.map((tag) => tag.id);
+      const tagIdsToAttach = selectedEditTagIds.filter((id) => !currentTagIds.includes(id));
+      const tagIdsToDetach = currentTagIds.filter((id) => !selectedEditTagIds.includes(id));
+      if (tagIdsToAttach.length > 0) {
+        await attachTagsToEvent(eventId, tagIdsToAttach);
+      }
+      for (const tagId of tagIdsToDetach) {
+        await detachTagFromEvent(eventId, tagId);
+      }
+      if (tagIdsToAttach.length > 0 || tagIdsToDetach.length > 0) {
+        await refetchTags();
+      }
       setIsEditModalVisible(false);
       await refetchEvent();
     }
@@ -197,7 +228,9 @@ export default function EventDetailScreen() {
   if (isEventLoading || !event) {
     return (
       <>
-        <Stack.Screen options={{ headerShown: true, title: "予定" }} />
+        <Stack.Screen
+          options={{ headerShown: true, title: "予定", headerBackButtonDisplayMode: "minimal" }}
+        />
         <View style={styles.container}>
           <Text>読み込み中...</Text>
         </View>
@@ -207,7 +240,9 @@ export default function EventDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: event.title }} />
+      <Stack.Screen
+        options={{ headerShown: true, title: event.title, headerBackButtonDisplayMode: "minimal" }}
+      />
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.headerCard}>
         <View style={styles.titleRow}>
@@ -236,19 +271,11 @@ export default function EventDetailScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>タグ</Text>
-        <EventTagBadges tags={tags} />
-        <View style={styles.tagPickerRow}>
-          {availableTags.map((tag) => (
-            <TouchableOpacity
-              key={tag.id}
-              testID={`event-tag-attach-${tag.id}`}
-              style={[styles.tagOption, { borderColor: tag.color }]}
-              onPress={() => handleAttachTag(tag.id)}
-            >
-              <Text>{tag.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {tags.length > 0 ? (
+          <EventTagBadges tags={tags} />
+        ) : (
+          <Text style={styles.emptyText}>タグはまだありません（編集から追加できます）</Text>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -341,25 +368,42 @@ export default function EventDetailScreen() {
         onCancel={() => setIsDeleteModalVisible(false)}
       />
 
-      <Modal visible={isEditModalVisible} animationType="slide" transparent onRequestClose={() => setIsEditModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.sectionTitle}>予定を編集</Text>
-            <EventFormFields
-              testIDPrefix="event-edit"
-              value={editForm}
-              onChange={(patch) => setEditForm((prev) => ({ ...prev, ...patch }))}
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity testID="event-edit-cancel" onPress={() => setIsEditModalVisible(false)}>
-                <Text>キャンセル</Text>
-              </TouchableOpacity>
-              <TouchableOpacity testID="event-edit-submit" onPress={handleSubmitEdit}>
-                <Text style={styles.editLink}>保存</Text>
-              </TouchableOpacity>
+      <Modal visible={isEditModalVisible} transparent animationType="slide" onRequestClose={() => setIsEditModalVisible(false)}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>予定を編集</Text>
+
+              <EventFormFields
+                testIDPrefix="event-edit"
+                value={editForm}
+                onChange={(patch) => setEditForm((prev) => ({ ...prev, ...patch }))}
+              />
+
+              <TagPickerRow
+                testIDPrefix="event-edit"
+                availableTags={allTagsFlat}
+                selectedTagIds={selectedEditTagIds}
+                onToggle={handleToggleEditTag}
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity testID="event-edit-cancel" onPress={() => setIsEditModalVisible(false)}>
+                  <Text>キャンセル</Text>
+                </TouchableOpacity>
+                <TouchableOpacity testID="event-edit-submit" style={styles.createButton} onPress={handleSubmitEdit}>
+                  <Text style={styles.createButtonText}>保存</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       </ScrollView>
     </>
@@ -414,20 +458,39 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  modalScrollContent: {
+    flexGrow: 1,
     justifyContent: "flex-end",
   },
-  modalContent: {
+  modalCard: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 16,
-    maxHeight: "85%",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
   },
   modalActions: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 16,
+    justifyContent: "flex-end",
+    gap: 20,
+    marginTop: 8,
+  },
+  createButton: {
+    backgroundColor: "#2f6fed",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: "#fff",
+    fontWeight: "600",
   },
   section: {
     backgroundColor: "#fff",
@@ -442,16 +505,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#555",
   },
-  tagPickerRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  tagOption: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  emptyText: {
+    color: "#999",
+    fontSize: 13,
   },
   todoRow: {
     flexDirection: "row",
