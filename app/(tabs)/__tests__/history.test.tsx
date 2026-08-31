@@ -62,15 +62,19 @@ describe("HistoryScreen", () => {
     expect(getByText("先週の集まり")).toBeTruthy();
   });
 
-  it("shows tag filter options including nested tags", async () => {
+  it("shows only top-level tag filters at first, revealing children once their parent is selected", async () => {
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
     (useTagTree as jest.Mock).mockReturnValue({ tagTree: TAG_TREE, isLoading: false, error: null });
     (usePastEventsByTag as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
 
-    const { getByTestId } = await render(<HistoryScreen />);
+    const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
 
     expect(getByTestId("history-tag-filter-all")).toBeTruthy();
     expect(getByTestId("history-tag-filter-tag-1")).toBeTruthy();
+    expect(queryByTestId("history-tag-filter-tag-2")).toBeNull();
+
+    await fireEvent.press(getByTestId("history-tag-filter-tag-1"));
+
     expect(getByTestId("history-tag-filter-tag-2")).toBeTruthy();
   });
 
@@ -81,6 +85,7 @@ describe("HistoryScreen", () => {
 
     const { getByTestId } = await render(<HistoryScreen />);
 
+    await fireEvent.press(getByTestId("history-tag-filter-tag-1"));
     await fireEvent.press(getByTestId("history-tag-filter-tag-2"));
 
     await waitFor(() => expect(usePastEventsByTag).toHaveBeenLastCalledWith("cal-1", "tag-2"));

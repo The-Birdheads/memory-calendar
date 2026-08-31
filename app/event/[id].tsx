@@ -47,7 +47,6 @@ import {
   useEventTags,
   useTagTree,
 } from "../../src/features/tags/hooks";
-import type { Tag, TagTreeNode } from "../../src/features/tags/types";
 import {
   useCreateTodo,
   useDeleteTodo,
@@ -56,10 +55,6 @@ import {
 } from "../../src/features/todos/hooks";
 import type { Todo } from "../../src/features/todos/types";
 import { formatDateTimeRange } from "../../src/shared/utils/formatDateTime";
-
-function flattenTagTree(nodes: TagTreeNode[]): Tag[] {
-  return nodes.flatMap((node) => [node, ...flattenTagTree(node.children)]);
-}
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -112,7 +107,6 @@ export default function EventDetailScreen() {
   const [reflectionBody, setReflectionBody] = useState("");
 
   const isPast = event ? new Date(event.endAt) < new Date() : false;
-  const allTagsFlat = flattenTagTree(tagTree);
 
   const resolveMemberLabel = (userId: string): string => {
     const member = members.find((m) => m.userId === userId);
@@ -388,7 +382,7 @@ export default function EventDetailScreen() {
 
               <TagPickerRow
                 testIDPrefix="event-edit"
-                availableTags={allTagsFlat}
+                tagTree={tagTree}
                 selectedTagIds={selectedEditTagIds}
                 onToggle={handleToggleEditTag}
               />

@@ -1,20 +1,26 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import type { Tag } from "../types";
+import { flattenVisibleTagTree } from "../tagTree";
+import type { TagTreeNode } from "../types";
 
 export interface TagPickerRowProps {
   testIDPrefix: string;
-  availableTags: Tag[];
+  tagTree: TagTreeNode[];
   selectedTagIds: string[];
   onToggle: (tagId: string) => void;
 }
 
 /**
- * Toggle-style tag chip picker shared by the event create and edit forms, so
- * both flows offer the same "select the calendar's tags for this event" UX.
+ * Toggle-style tag chip picker shared by the event create and edit forms.
+ * Only 大分類 (major) tags are shown at first; selecting one reveals its
+ * 中分類 children, and selecting one of those reveals its 小分類 children,
+ * so the picker drills down one level at a time instead of dumping every
+ * tag in the calendar into one flat list.
  */
-export function TagPickerRow({ testIDPrefix, availableTags, selectedTagIds, onToggle }: TagPickerRowProps) {
-  if (availableTags.length === 0) {
+export function TagPickerRow({ testIDPrefix, tagTree, selectedTagIds, onToggle }: TagPickerRowProps) {
+  const visibleTags = flattenVisibleTagTree(tagTree, selectedTagIds);
+
+  if (visibleTags.length === 0) {
     return null;
   }
 
@@ -22,7 +28,7 @@ export function TagPickerRow({ testIDPrefix, availableTags, selectedTagIds, onTo
     <View style={styles.section}>
       <Text style={styles.label}>タグ</Text>
       <View style={styles.row}>
-        {availableTags.map((tag) => {
+        {visibleTags.map((tag) => {
           const selected = selectedTagIds.includes(tag.id);
           return (
             <TouchableOpacity

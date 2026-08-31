@@ -32,13 +32,8 @@ import type { Event } from "../../src/features/events/types";
 import { TagManagementModal } from "../../src/features/tags/components/TagManagementModal";
 import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useTagTree } from "../../src/features/tags/hooks";
-import type { TagTreeNode } from "../../src/features/tags/types";
 import { useCreateTodo } from "../../src/features/todos/hooks";
 import { formatTime } from "../../src/shared/utils/formatDateTime";
-
-function flattenTagTree(nodes: TagTreeNode[]): TagTreeNode[] {
-  return nodes.flatMap((node) => [node, ...flattenTagTree(node.children)]);
-}
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -83,7 +78,6 @@ export default function CalendarScreen() {
 
   const { tagTree, refetch: refetchTagTree } = useTagTree(activeCalendarId);
   const { attachTagsToEvent } = useAttachTagsToEvent();
-  const availableTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
   const [isTagModalVisible, setIsTagModalVisible] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
@@ -464,7 +458,7 @@ export default function CalendarScreen() {
 
             <TagPickerRow
               testIDPrefix="event-create"
-              availableTags={availableTagsFlat}
+              tagTree={tagTree}
               selectedTagIds={selectedTagIds}
               onToggle={handleToggleTagSelection}
             />

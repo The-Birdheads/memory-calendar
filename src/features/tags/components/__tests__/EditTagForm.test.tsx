@@ -115,6 +115,64 @@ describe("EditTagForm", () => {
 
     await fireEvent.press(getByTestId("edit-tag-level-minor"));
 
+    expect(getByTestId("edit-tag-grandparent-tag-1")).toBeTruthy();
+  });
+
+  it("drills down: picking the 大分類 first reveals only that 大分類's 中分類 children as parent choices", async () => {
+    const midOfTag1 = { ...MAJOR_TAG, id: "tag-4", level: "mid" as const, parentId: "tag-1", name: "誕生日" };
+    const midOfTag2 = {
+      ...MAJOR_TAG,
+      id: "tag-5",
+      level: "mid" as const,
+      parentId: "tag-2",
+      name: "国内旅行",
+      color: "#00ff00",
+    };
+    const onSave = jest.fn();
+    const { getByTestId, queryByTestId } = await render(
+      <EditTagForm
+        tag={MAJOR_TAG}
+        allTags={[MAJOR_TAG, OTHER_MAJOR_TAG, midOfTag1, midOfTag2]}
+        onSave={onSave}
+      />
+    );
+
+    await fireEvent.press(getByTestId("edit-tag-level-minor"));
+
+    // no 中分類 parent choices are shown until a 大分類 is picked
+    expect(queryByTestId("edit-tag-parent-tag-4")).toBeNull();
+    expect(queryByTestId("edit-tag-parent-tag-5")).toBeNull();
+
+    await fireEvent.press(getByTestId("edit-tag-grandparent-tag-2"));
+
+    // only tag-2's own mid child is offered, not tag-1's
+    expect(getByTestId("edit-tag-parent-tag-5")).toBeTruthy();
+    expect(queryByTestId("edit-tag-parent-tag-4")).toBeNull();
+
+    await fireEvent.press(getByTestId("edit-tag-parent-tag-5"));
+    await fireEvent.press(getByTestId("edit-tag-save-button"));
+
+    expect(onSave).toHaveBeenCalledWith({
+      name: "行事",
+      color: lightenHexColor("#00ff00", 0.35),
+      level: "minor",
+      parentId: "tag-5",
+    });
+  });
+
+  it("resets the chosen 大分類/中分類 when switching away from and back to 小分類", async () => {
+    const midOfTag1 = { ...MAJOR_TAG, id: "tag-4", level: "mid" as const, parentId: "tag-1", name: "誕生日" };
+    const { getByTestId, queryByTestId } = await render(
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, midOfTag1]} onSave={jest.fn()} />
+    );
+
+    await fireEvent.press(getByTestId("edit-tag-level-minor"));
+    await fireEvent.press(getByTestId("edit-tag-grandparent-tag-1"));
     expect(getByTestId("edit-tag-parent-tag-4")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("edit-tag-level-major"));
+    await fireEvent.press(getByTestId("edit-tag-level-minor"));
+
+    expect(queryByTestId("edit-tag-parent-tag-4")).toBeNull();
   });
 });

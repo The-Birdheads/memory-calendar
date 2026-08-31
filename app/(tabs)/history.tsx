@@ -4,6 +4,7 @@ import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "
 import { useMyCalendars } from "../../src/features/calendars/hooks";
 import { usePastEventsByTag } from "../../src/features/history/hooks";
 import { useTagTree } from "../../src/features/tags/hooks";
+import { flattenVisibleTagTree, getAncestorChainIds } from "../../src/features/tags/tagTree";
 import type { TagTreeNode } from "../../src/features/tags/types";
 import { formatDateTime } from "../../src/shared/utils/formatDateTime";
 
@@ -19,7 +20,16 @@ export default function HistoryScreen() {
   const [selectedTagId, setSelectedTagId] = useState<string | undefined>(undefined);
   const { events } = usePastEventsByTag(activeCalendarId, selectedTagId);
 
-  const flatTags = useMemo(() => flattenTags(tagTree), [tagTree]);
+  // 大分類 → 中分類 → 小分類 の順にドリルダウンして選択肢を表示する。
+  const allTagsFlat = useMemo(() => flattenTags(tagTree), [tagTree]);
+  const expandedTagIds = useMemo(
+    () => getAncestorChainIds(selectedTagId, allTagsFlat),
+    [selectedTagId, allTagsFlat]
+  );
+  const visibleTags = useMemo(
+    () => flattenVisibleTagTree(tagTree, expandedTagIds),
+    [tagTree, expandedTagIds]
+  );
 
   return (
     <View style={styles.container}>
@@ -33,7 +43,7 @@ export default function HistoryScreen() {
         >
           <Text>すべて</Text>
         </TouchableOpacity>
-        {flatTags.map((tag) => (
+        {visibleTags.map((tag) => (
           <TouchableOpacity
             key={tag.id}
             testID={`history-tag-filter-${tag.id}`}

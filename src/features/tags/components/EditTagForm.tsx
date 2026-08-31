@@ -38,9 +38,22 @@ export function EditTagForm({ tag, allTags, onSave }: EditTagFormProps) {
   const [level, setLevel] = useState<TagLevel>(tag.level);
   const [parentId, setParentId] = useState<string | null>(tag.parentId);
   const [majorColor, setMajorColor] = useState(tag.level === "major" ? tag.color : TAG_COLORS[0].hex);
+  // For a 小分類 (minor) tag, the parent (中分類) is chosen in two steps: first
+  // pick its 大分類, then pick one of that 大分類's 中分類 children as the
+  // actual parent. grandparentId tracks the first step.
+  const [grandparentId, setGrandparentId] = useState<string | null>(() => {
+    if (tag.level !== "minor" || !tag.parentId) return null;
+    return allTags.find((candidate) => candidate.id === tag.parentId)?.parentId ?? null;
+  });
 
   const eligibleParentLevel = PARENT_LEVEL[level];
   const eligibleParents = eligibleParentsFor(level, allTags, tag.id);
+  const majorTags = allTags.filter((candidate) => candidate.level === "major");
+  const midChildrenOfGrandparent = grandparentId
+    ? allTags.filter(
+        (candidate) => candidate.level === "mid" && candidate.parentId === grandparentId && candidate.id !== tag.id
+      )
+    : [];
   const parentTag = parentId ? allTags.find((candidate) => candidate.id === parentId) : undefined;
   const computedColor =
     level === "major" ? majorColor : lightenHexColor(parentTag?.color ?? majorColor, AUTO_SHADE_AMOUNT);
@@ -50,6 +63,12 @@ export function EditTagForm({ tag, allTags, onSave }: EditTagFormProps) {
       return;
     }
     setLevel(nextLevel);
+    setParentId(null);
+    setGrandparentId(null);
+  };
+
+  const handleSelectGrandparent = (nextGrandparentId: string) => {
+    setGrandparentId(nextGrandparentId);
     setParentId(null);
   };
 
@@ -107,7 +126,36 @@ export function EditTagForm({ tag, allTags, onSave }: EditTagFormProps) {
         })}
       </View>
 
-      {eligibleParentLevel ? (
+      {level === "minor" ? (
+        <>
+          <View style={styles.parentRow}>
+            {majorTags.map((major) => (
+              <TouchableOpacity
+                key={major.id}
+                testID={`edit-tag-grandparent-${major.id}`}
+                onPress={() => handleSelectGrandparent(major.id)}
+                style={[styles.parentButton, major.id === grandparentId && styles.parentButtonActive]}
+              >
+                <Text>{major.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {grandparentId ? (
+            <View style={styles.parentRow}>
+              {midChildrenOfGrandparent.map((mid) => (
+                <TouchableOpacity
+                  key={mid.id}
+                  testID={`edit-tag-parent-${mid.id}`}
+                  onPress={() => setParentId(mid.id)}
+                  style={[styles.parentButton, mid.id === parentId && styles.parentButtonActive]}
+                >
+                  <Text>{mid.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+        </>
+      ) : eligibleParentLevel ? (
         <View style={styles.parentRow}>
           {eligibleParents.map((candidate) => (
             <TouchableOpacity
