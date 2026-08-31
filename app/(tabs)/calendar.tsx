@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   ScrollView,
   StyleSheet,
@@ -27,6 +28,7 @@ import { CATEGORY_COLORS, EventFormFields, type EventFormValue } from "../../src
 import { computeDateRange } from "../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../src/features/events/hooks";
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
+import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
 import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
 import { TagManagementModal } from "../../src/features/tags/components/TagManagementModal";
@@ -132,6 +134,19 @@ export default function CalendarScreen() {
     setFocusedDate(next);
     setSelectedDateKey(toDateKey(next.toISOString()));
   };
+
+  const monthSwipeResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_event, gestureState) =>
+        Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5,
+      onPanResponderRelease: (_event, gestureState) => {
+        const direction = resolveMonthSwipeDirection(gestureState.dx, gestureState.dy);
+        if (direction !== null) {
+          shiftFocusedDate(direction);
+        }
+      },
+    })
+  ).current;
 
   const openCreateModal = () => {
     const base = new Date(`${selectedDateKey}T09:00:00.000Z`);
@@ -348,7 +363,7 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.gridContainer}>
+      <View style={styles.gridContainer} testID="calendar-grid-container" {...monthSwipeResponder.panHandlers}>
         <View style={styles.weekdayRow}>
           {WEEKDAY_LABELS.map((label) => (
             <Text key={label} style={styles.weekdayLabel}>
