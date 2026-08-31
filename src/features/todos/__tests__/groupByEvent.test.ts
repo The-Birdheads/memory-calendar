@@ -14,6 +14,7 @@ function makeTodo(overrides: Partial<TodoWithEventTitle>): TodoWithEventTitle {
     updatedAt: "2026-08-01T00:00:00.000Z",
     eventTitle: "event",
     eventStartAt: "2026-08-01T00:00:00.000Z",
+    eventEndAt: "2026-08-01T00:00:00.000Z",
     ...overrides,
   };
 }

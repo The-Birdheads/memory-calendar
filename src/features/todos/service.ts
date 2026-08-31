@@ -16,7 +16,7 @@ interface TodoRow {
 }
 
 interface TodoRowWithEvent extends TodoRow {
-  events: { calendar_id: string; title: string; start_at: string };
+  events: { calendar_id: string; title: string; start_at: string; end_at: string };
 }
 
 function mapTodoRow(row: TodoRow): Todo {
@@ -34,7 +34,12 @@ function mapTodoRow(row: TodoRow): Todo {
 }
 
 function mapTodoRowWithEventTitle(row: TodoRowWithEvent): TodoWithEventTitle {
-  return { ...mapTodoRow(row), eventTitle: row.events.title, eventStartAt: row.events.start_at };
+  return {
+    ...mapTodoRow(row),
+    eventTitle: row.events.title,
+    eventStartAt: row.events.start_at,
+    eventEndAt: row.events.end_at,
+  };
 }
 
 function mapTodoError(error: PostgrestError): TodoError {
@@ -67,7 +72,7 @@ export async function listTodosByCalendar(
 ): Promise<Result<TodoWithEventTitle[], TodoError>> {
   const { data, error } = await client
     .from("todos")
-    .select("*, events!inner(calendar_id, title, start_at)")
+    .select("*, events!inner(calendar_id, title, start_at, end_at)")
     .eq("events.calendar_id", calendarId);
 
   if (error || !data) {

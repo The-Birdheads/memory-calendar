@@ -46,6 +46,28 @@ describe("EventFormFields", () => {
     expect(onChange).toHaveBeenCalledWith({ isAllDay: true });
   });
 
+  function flattenStyle(style: unknown): Record<string, unknown> {
+    return Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+  }
+
+  it("shows the all-day toggle as an off switch when isAllDay is false", async () => {
+    const { getByTestId } = await render(
+      <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />
+    );
+
+    const flattened = flattenStyle(getByTestId("event-create-allday-switch").props.style);
+    expect(flattened.backgroundColor).toBe("#d8d8dc");
+  });
+
+  it("shows the all-day toggle as an on switch when isAllDay is true", async () => {
+    const { getByTestId } = await render(
+      <EventFormFields testIDPrefix="event-create" value={{ ...BASE_VALUE, isAllDay: true }} onChange={jest.fn()} />
+    );
+
+    const flattened = flattenStyle(getByTestId("event-create-allday-switch").props.style);
+    expect(flattened.backgroundColor).toBe("#2f6fed");
+  });
+
   it("shows the start/end labels with a time when not all-day", async () => {
     const { getByText } = await render(
       <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />

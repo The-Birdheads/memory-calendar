@@ -564,7 +564,7 @@ describe("CalendarScreen", () => {
         title: "誕生日会",
         startAt: "2026-09-01T10:00:00.000Z",
         endAt: "2026-09-01T12:00:00.000Z",
-        isAllDay: false,
+        isAllDay: true,
         categoryColor: "#43a047",
       })
     );
@@ -728,7 +728,7 @@ describe("CalendarScreen", () => {
     expect(router.push).toHaveBeenCalledWith("/event/event-1");
   });
 
-  it("passes isAllDay true when the all-day toggle is on", async () => {
+  it("defaults new events to all-day (the all-day toggle starts on)", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
     const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
@@ -738,7 +738,6 @@ describe("CalendarScreen", () => {
 
     await fireEvent.press(getByTestId("calendar-add-event-fab"));
     await fireEvent.changeText(getByTestId("event-create-title-input"), "旅行");
-    await fireEvent.press(getByTestId("event-create-allday-toggle"));
 
     await fireEvent.press(getByTestId("event-create-start-button"));
     await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-09-01T00:00:00.000Z");
@@ -753,6 +752,35 @@ describe("CalendarScreen", () => {
     await waitFor(() =>
       expect(createEventMock).toHaveBeenCalledWith(
         expect.objectContaining({ isAllDay: true, title: "旅行" })
+      )
+    );
+  });
+
+  it("passes isAllDay false when the all-day toggle is turned off", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "会議");
+    await fireEvent.press(getByTestId("event-create-allday-toggle"));
+
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-09-01T10:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-09-01T11:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() =>
+      expect(createEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ isAllDay: false, title: "会議" })
       )
     );
   });

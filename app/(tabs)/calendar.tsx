@@ -41,7 +41,7 @@ import { formatTime } from "../../src/shared/utils/formatDateTime";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
-const MAX_DOTS_PER_CELL = 2;
+const MAX_DOTS_PER_CELL = 3;
 
 function toDateKey(iso: string): string {
   return iso.slice(0, 10);
@@ -113,7 +113,7 @@ export default function CalendarScreen() {
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [newEventForm, setNewEventForm] = useState<EventFormValue>(() => ({
     title: "",
-    isAllDay: false,
+    isAllDay: true,
     start: new Date(),
     end: new Date(),
     location: "",
@@ -191,7 +191,7 @@ export default function CalendarScreen() {
     const base = new Date(`${selectedDateKey}T09:00:00.000Z`);
     setNewEventForm({
       title: "",
-      isAllDay: false,
+      isAllDay: true,
       start: base,
       end: base,
       location: "",
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
   },
   gridCell: {
     flex: 1,
-    aspectRatio: 1,
+    minHeight: 96,
     alignItems: "center",
     paddingTop: 4,
     gap: 2,
@@ -740,9 +740,9 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
   gridDayBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -750,7 +750,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2f6fed",
   },
   gridDayText: {
-    fontSize: 12,
+    fontSize: 13,
   },
   gridDaySaturday: {
     color: "#2f6fed",
@@ -769,16 +769,17 @@ const styles = StyleSheet.create({
   },
   gridEventBar: {
     borderRadius: 3,
-    paddingHorizontal: 2,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
   },
   gridEventBarText: {
-    fontSize: 8,
-    lineHeight: 10,
+    fontSize: 11,
+    lineHeight: 14,
     color: "#fff",
     fontWeight: "600",
   },
   gridDotOverflow: {
-    fontSize: 8,
+    fontSize: 10,
     color: "#888",
     textAlign: "center",
   },

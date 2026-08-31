@@ -3,6 +3,7 @@ import { FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } 
 import { router } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
+import { formatEventDateRangeLabel } from "../../src/features/todos/formatEventDateRangeLabel";
 import { groupTodosByEvent, type EventTodoGroup } from "../../src/features/todos/groupByEvent";
 import {
   useDeleteTodo,
@@ -11,7 +12,6 @@ import {
   useUpdateTodo,
 } from "../../src/features/todos/hooks";
 import type { TodoWithEventTitle } from "../../src/features/todos/types";
-import { formatDateTime } from "../../src/shared/utils/formatDateTime";
 
 function toDateKey(iso: string): string {
   return iso.slice(0, 10);
@@ -27,6 +27,7 @@ interface TodoItemRowProps {
 function TodoItemRow({ todo, onToggle, onDelete, onSetReminder }: TodoItemRowProps) {
   const [isReminderModalVisible, setIsReminderModalVisible] = useState(false);
   const [reminderText, setReminderText] = useState(todo.reminderAt ?? "");
+  const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
 
   const openReminderModal = () => {
     setReminderText(todo.reminderAt ?? "");
@@ -38,6 +39,11 @@ function TodoItemRow({ todo, onToggle, onDelete, onSetReminder }: TodoItemRowPro
     setIsReminderModalVisible(false);
   };
 
+  const handleConfirmDelete = () => {
+    onDelete(todo.id);
+    setIsDeleteConfirmVisible(false);
+  };
+
   const hasReminder = todo.reminderAt !== null;
 
   return (
@@ -47,24 +53,19 @@ function TodoItemRow({ todo, onToggle, onDelete, onSetReminder }: TodoItemRowPro
           <Text>{todo.isDone ? "☑" : "☐"}</Text>
         </TouchableOpacity>
         <Text style={[styles.todoTitle, todo.isDone && styles.doneText]}>{todo.title}</Text>
-        <TouchableOpacity testID={`todo-delete-${todo.id}`} onPress={() => onDelete(todo.id)}>
-          <Text style={styles.deleteText}>削除</Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity
-        testID={`todo-reminder-open-${todo.id}`}
-        style={styles.reminderSummaryRow}
-        onPress={openReminderModal}
-      >
         <Text
           testID={`todo-reminder-icon-${todo.id}`}
           style={[styles.reminderIcon, !hasReminder && styles.reminderIconInactive]}
         >
           ⏰
         </Text>
-        {hasReminder ? <Text style={styles.meta}>{formatDateTime(todo.reminderAt as string)}</Text> : null}
-      </TouchableOpacity>
+        <TouchableOpacity testID={`todo-settings-${todo.id}`} onPress={openReminderModal}>
+          <Text style={styles.rowIcon}>⚙️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity testID={`todo-delete-${todo.id}`} onPress={() => setIsDeleteConfirmVisible(true)}>
+          <Text style={styles.rowIcon}>🗑️</Text>
+        </TouchableOpacity>
+      </View>
 
       <Modal
         visible={isReminderModalVisible}
@@ -91,6 +92,30 @@ function TodoItemRow({ todo, onToggle, onDelete, onSetReminder }: TodoItemRowPro
               </TouchableOpacity>
               <TouchableOpacity testID={`todo-reminder-save-${todo.id}`} onPress={handleSaveReminder}>
                 <Text style={styles.settingsLink}>保存</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isDeleteConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsDeleteConfirmVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>ToDoを削除しますか?</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                testID={`todo-delete-cancel-${todo.id}`}
+                onPress={() => setIsDeleteConfirmVisible(false)}
+              >
+                <Text>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity testID={`todo-delete-confirm-${todo.id}`} onPress={handleConfirmDelete}>
+                <Text style={styles.deleteConfirmText}>削除する</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -143,9 +168,14 @@ function EventSection({
           <Text style={styles.sectionChevron}>{isCollapsed ? "▶" : "▼"}</Text>
           <Text style={styles.sectionTitle}>{group.eventTitle}</Text>
         </TouchableOpacity>
-        <TouchableOpacity testID={`todo-section-calendar-${group.eventId}`} onPress={handleGoToCalendar}>
-          <Text style={styles.calendarLink}>カレンダーへ</Text>
-        </TouchableOpacity>
+        <View style={styles.sectionHeaderRight}>
+          <Text style={styles.sectionDateLabel}>
+            {formatEventDateRangeLabel(group.eventStartAt, group.eventEndAt)}
+          </Text>
+          <TouchableOpacity testID={`todo-section-calendar-${group.eventId}`} onPress={handleGoToCalendar}>
+            <Text style={styles.calendarLink}>カレンダーへ</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {!isCollapsed
@@ -298,6 +328,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+  sectionHeaderRight: {
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  sectionDateLabel: {
+    color: "#999",
+    fontSize: 11,
+  },
   calendarLink: {
     color: "#2f6fed",
     fontWeight: "700",
@@ -320,19 +358,6 @@ const styles = StyleSheet.create({
     color: "#999",
     textDecorationLine: "line-through",
   },
-  deleteText: {
-    color: "#d32f2f",
-  },
-  meta: {
-    color: "#666",
-    fontSize: 12,
-  },
-  reminderSummaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingLeft: 32,
-  },
   reminderIcon: {
     fontSize: 14,
   },
@@ -340,8 +365,15 @@ const styles = StyleSheet.create({
     opacity: 0.35,
     textDecorationLine: "line-through",
   },
+  rowIcon: {
+    fontSize: 15,
+  },
   settingsLink: {
     color: "#2f6fed",
+    fontWeight: "700",
+  },
+  deleteConfirmText: {
+    color: "#d32f2f",
     fontWeight: "700",
   },
   modalOverlay: {

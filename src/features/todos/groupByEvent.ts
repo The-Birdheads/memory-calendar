@@ -4,6 +4,7 @@ export interface EventTodoGroup {
   eventId: string;
   eventTitle: string;
   eventStartAt: string;
+  eventEndAt: string;
   todos: TodoWithEventTitle[];
 }
 
@@ -24,6 +25,7 @@ export function groupTodosByEvent(todos: TodoWithEventTitle[]): EventTodoGroup[]
         eventId: todo.eventId,
         eventTitle: todo.eventTitle,
         eventStartAt: todo.eventStartAt,
+        eventEndAt: todo.eventEndAt,
         todos: [todo],
       });
     }

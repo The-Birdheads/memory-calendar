@@ -48,10 +48,16 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
       <TouchableOpacity
         testID={`${testIDPrefix}-allday-toggle`}
         style={styles.alldayRow}
+        activeOpacity={0.7}
         onPress={() => onChange({ isAllDay: !value.isAllDay })}
       >
         <Text>終日</Text>
-        {value.isAllDay ? <Text testID={`${testIDPrefix}-allday-checked`}>✓</Text> : null}
+        <View
+          testID={`${testIDPrefix}-allday-switch`}
+          style={[styles.switchTrack, value.isAllDay && styles.switchTrackOn]}
+        >
+          <View style={[styles.switchThumb, value.isAllDay && styles.switchThumbOn]} />
+        </View>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -157,6 +163,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 8,
+  },
+  switchTrack: {
+    width: 46,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#d8d8dc",
+    padding: 2,
+    justifyContent: "center",
+  },
+  switchTrackOn: {
+    backgroundColor: "#2f6fed",
+  },
+  switchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  switchThumbOn: {
+    transform: [{ translateX: 18 }],
   },
   dateField: {
     flexDirection: "row",
