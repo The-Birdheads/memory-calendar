@@ -10,7 +10,7 @@ import {
   toggleDone,
   updateTodo,
 } from "./service";
-import type { CreateTodoInput, Todo, TodoError, UpdateTodoInput } from "./types";
+import type { CreateTodoInput, Todo, TodoError, TodoWithEventTitle, UpdateTodoInput } from "./types";
 
 export interface UseCreateTodoResult {
   createTodo: (input: CreateTodoInput) => Promise<boolean>;
@@ -38,14 +38,14 @@ export function useCreateTodo(): UseCreateTodoResult {
 }
 
 export interface UseTodosByCalendarResult {
-  todos: Todo[];
+  todos: TodoWithEventTitle[];
   isLoading: boolean;
   error: TodoError | null;
   refetch: () => Promise<void>;
 }
 
 export function useTodosByCalendar(calendarId: string): UseTodosByCalendarResult {
-  const [todos, setTodos] = useState<Todo[]>([]);
+  const [todos, setTodos] = useState<TodoWithEventTitle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<TodoError | null>(null);
 

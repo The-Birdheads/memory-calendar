@@ -121,7 +121,7 @@ describe("listTodosByCalendar", () => {
         created_by: "user-1",
         created_at: "2026-08-18T00:00:00.000Z",
         updated_at: "2026-08-18T00:00:00.000Z",
-        events: { calendar_id: "cal-1" },
+        events: { calendar_id: "cal-1", title: "誕生日会" },
       },
       {
         id: "todo-2",
@@ -132,7 +132,7 @@ describe("listTodosByCalendar", () => {
         created_by: "user-1",
         created_at: "2026-08-17T00:00:00.000Z",
         updated_at: "2026-08-17T00:00:00.000Z",
-        events: { calendar_id: "cal-1" },
+        events: { calendar_id: "cal-1", title: "夏祭り" },
       },
     ];
     const select = jest.fn().mockReturnThis();
@@ -155,6 +155,7 @@ describe("listTodosByCalendar", () => {
           createdBy: "user-1",
           createdAt: "2026-08-18T00:00:00.000Z",
           updatedAt: "2026-08-18T00:00:00.000Z",
+          eventTitle: "誕生日会",
         },
         {
           id: "todo-2",
@@ -165,11 +166,12 @@ describe("listTodosByCalendar", () => {
           createdBy: "user-1",
           createdAt: "2026-08-17T00:00:00.000Z",
           updatedAt: "2026-08-17T00:00:00.000Z",
+          eventTitle: "夏祭り",
         },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("todos");
-    expect(select).toHaveBeenCalledWith("*, events!inner(calendar_id)");
+    expect(select).toHaveBeenCalledWith("*, events!inner(calendar_id, title)");
     expect(eq).toHaveBeenCalledWith("events.calendar_id", "cal-1");
   });
 

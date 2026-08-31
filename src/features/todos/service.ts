@@ -1,7 +1,7 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
 import { err, ok, type Result } from "../../shared/types/result";
-import type { CreateTodoInput, Todo, TodoError, UpdateTodoInput } from "./types";
+import type { CreateTodoInput, Todo, TodoError, TodoWithEventTitle, UpdateTodoInput } from "./types";
 
 interface TodoRow {
   id: string;
@@ -13,6 +13,10 @@ interface TodoRow {
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+interface TodoRowWithEvent extends TodoRow {
+  events: { calendar_id: string; title: string };
 }
 
 function mapTodoRow(row: TodoRow): Todo {
@@ -27,6 +31,10 @@ function mapTodoRow(row: TodoRow): Todo {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function mapTodoRowWithEventTitle(row: TodoRowWithEvent): TodoWithEventTitle {
+  return { ...mapTodoRow(row), eventTitle: row.events.title };
 }
 
 function mapTodoError(error: PostgrestError): TodoError {
@@ -56,17 +64,17 @@ export async function createTodo(
 export async function listTodosByCalendar(
   client: SupabaseClient,
   calendarId: string
-): Promise<Result<Todo[], TodoError>> {
+): Promise<Result<TodoWithEventTitle[], TodoError>> {
   const { data, error } = await client
     .from("todos")
-    .select("*, events!inner(calendar_id)")
+    .select("*, events!inner(calendar_id, title)")
     .eq("events.calendar_id", calendarId);
 
   if (error || !data) {
     return err(mapTodoError(error as PostgrestError));
   }
 
-  return ok((data as TodoRow[]).map(mapTodoRow));
+  return ok((data as TodoRowWithEvent[]).map(mapTodoRowWithEventTitle));
 }
 
 export async function toggleDone(

@@ -10,6 +10,11 @@ export interface Todo {
   updatedAt: string;
 }
 
+/** A todo along with the title of the event it belongs to, for calendar-wide listings. */
+export interface TodoWithEventTitle extends Todo {
+  eventTitle: string;
+}
+
 export interface CreateTodoInput {
   eventId: string;
   title: string;
