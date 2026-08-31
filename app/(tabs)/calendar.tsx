@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
 import {
@@ -54,6 +54,11 @@ function formatMonthLabel(date: Date): string {
 }
 
 export default function CalendarScreen() {
+  const { date: dateParam, calendarId: calendarIdParam } = useLocalSearchParams<{
+    date?: string;
+    calendarId?: string;
+  }>();
+
   const { session } = useAuthSession();
   const { calendars, refetch: refetchCalendars } = useMyCalendars();
   const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(null);
@@ -72,6 +77,22 @@ export default function CalendarScreen() {
 
   const [focusedDate, setFocusedDate] = useState(() => new Date());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayDateKey());
+
+  // Jumps the calendar to a specific date/calendar when navigated here with
+  // ?date=&calendarId= (e.g. "カレンダーへ" from a ToDo's event section).
+  useEffect(() => {
+    if (calendarIdParam) {
+      setSelectedCalendarId(calendarIdParam);
+    }
+  }, [calendarIdParam]);
+
+  useEffect(() => {
+    if (!dateParam) return;
+    const parsed = new Date(`${dateParam}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime())) return;
+    setFocusedDate(parsed);
+    setSelectedDateKey(dateParam);
+  }, [dateParam]);
 
   const range = useMemo(() => computeDateRange("month", focusedDate), [focusedDate]);
   const { events, refetch: refetchEvents } = useEventsInRange(activeCalendarId, range);
@@ -128,8 +149,17 @@ export default function CalendarScreen() {
     setSelectedDateKey(toDateKey(now.toISOString()));
   };
 
+  // The swipe gesture's PanResponder is created once (see monthSwipeResponder
+  // below) and keeps calling whatever shiftFocusedDate closure existed at that
+  // first render, so shiftFocusedDate must read the CURRENT focusedDate via a
+  // ref instead of closing over the (stale, first-render) `focusedDate`
+  // variable directly - otherwise every swipe recomputes from that original
+  // month instead of the month actually on screen.
+  const focusedDateRef = useRef(focusedDate);
+  focusedDateRef.current = focusedDate;
+
   const shiftFocusedDate = (direction: 1 | -1) => {
-    const next = new Date(focusedDate);
+    const next = new Date(focusedDateRef.current);
     next.setUTCMonth(next.getUTCMonth() + direction);
     setFocusedDate(next);
     setSelectedDateKey(toDateKey(next.toISOString()));

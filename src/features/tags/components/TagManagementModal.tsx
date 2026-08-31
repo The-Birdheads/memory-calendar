@@ -4,6 +4,7 @@ import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { useCreateTag, useDeleteTag, useTagTree, useUpdateTag } from "../hooks";
 import { EditTagForm } from "./EditTagForm";
 import { DeleteTagConfirmModal } from "./DeleteTagConfirmModal";
+import { TagLevelIcon } from "./TagLevelIcon";
 import type { Tag, TagTreeNode, UpdateTagInput } from "../types";
 
 function flattenTagTree(nodes: TagTreeNode[]): TagTreeNode[] {
@@ -22,7 +23,7 @@ function renderTagRow(node: TagTreeNode, depth: number, onSelect: (tag: Tag) => 
         style={[styles.tagRow, { paddingLeft: 16 + depth * 16 }]}
         onPress={() => onSelect(node)}
       >
-        <View style={[styles.colorDot, { backgroundColor: node.color }]} />
+        <TagLevelIcon testID={`tag-management-tag-icon-${node.id}`} level={node.level} color={node.color} />
         <Text>{node.name}</Text>
       </TouchableOpacity>
       {node.children.map((child) => renderTagRow(child, depth + 1, onSelect))}
@@ -253,11 +254,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingVertical: 8,
-  },
-  colorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
   },
   newButton: {
     alignSelf: "flex-start",

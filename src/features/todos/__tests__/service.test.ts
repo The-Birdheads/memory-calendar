@@ -121,7 +121,7 @@ describe("listTodosByCalendar", () => {
         created_by: "user-1",
         created_at: "2026-08-18T00:00:00.000Z",
         updated_at: "2026-08-18T00:00:00.000Z",
-        events: { calendar_id: "cal-1", title: "誕生日会" },
+        events: { calendar_id: "cal-1", title: "誕生日会", start_at: "2026-08-20T10:00:00.000Z" },
       },
       {
         id: "todo-2",
@@ -132,7 +132,7 @@ describe("listTodosByCalendar", () => {
         created_by: "user-1",
         created_at: "2026-08-17T00:00:00.000Z",
         updated_at: "2026-08-17T00:00:00.000Z",
-        events: { calendar_id: "cal-1", title: "夏祭り" },
+        events: { calendar_id: "cal-1", title: "夏祭り", start_at: "2026-07-15T09:00:00.000Z" },
       },
     ];
     const select = jest.fn().mockReturnThis();
@@ -156,6 +156,7 @@ describe("listTodosByCalendar", () => {
           createdAt: "2026-08-18T00:00:00.000Z",
           updatedAt: "2026-08-18T00:00:00.000Z",
           eventTitle: "誕生日会",
+          eventStartAt: "2026-08-20T10:00:00.000Z",
         },
         {
           id: "todo-2",
@@ -167,11 +168,12 @@ describe("listTodosByCalendar", () => {
           createdAt: "2026-08-17T00:00:00.000Z",
           updatedAt: "2026-08-17T00:00:00.000Z",
           eventTitle: "夏祭り",
+          eventStartAt: "2026-07-15T09:00:00.000Z",
         },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("todos");
-    expect(select).toHaveBeenCalledWith("*, events!inner(calendar_id, title)");
+    expect(select).toHaveBeenCalledWith("*, events!inner(calendar_id, title, start_at)");
     expect(eq).toHaveBeenCalledWith("events.calendar_id", "cal-1");
   });
 

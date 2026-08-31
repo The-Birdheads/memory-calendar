@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 import CalendarScreen from "../calendar";
 import { useAuthSession } from "../../../src/features/auth/hooks";
@@ -24,6 +24,7 @@ import { useCreateTodo } from "../../../src/features/todos/hooks";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn() },
+  useLocalSearchParams: jest.fn().mockReturnValue({}),
 }));
 
 jest.mock("../../../src/features/auth/hooks", () => ({
@@ -401,6 +402,24 @@ describe("CalendarScreen", () => {
     await fireEvent.press(getByTestId("calendar-month-prev"));
     await fireEvent.press(getByTestId("calendar-month-prev"));
     expect(getByText("2026年7月")).toBeTruthy();
+  });
+
+  it("jumps to the month/day and switches to the calendar given via ?date=&calendarId= (e.g. from the ToDo screen)", async () => {
+    mockCommonHooks();
+    (useLocalSearchParams as jest.Mock).mockReturnValue({ date: "2026-09-10", calendarId: "cal-2" });
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByText } = await render(<CalendarScreen />);
+
+    expect(getByText("2026年9月")).toBeTruthy();
+    await waitFor(() =>
+      expect(useEventsInRange).toHaveBeenLastCalledWith(
+        "cal-2",
+        computeDateRange("month", new Date("2026-09-10T00:00:00.000Z"))
+      )
+    );
+
+    (useLocalSearchParams as jest.Mock).mockReturnValue({});
   });
 
   it("opens the creation modal from the FAB and cancels without creating", async () => {

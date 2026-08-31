@@ -1,4 +1,5 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { router } from "expo-router";
 
 import TodosScreen from "../todos";
 import { useMyCalendars } from "../../../src/features/calendars/hooks";
@@ -8,6 +9,10 @@ import {
   useTodosByCalendar,
   useUpdateTodo,
 } from "../../../src/features/todos/hooks";
+
+jest.mock("expo-router", () => ({
+  router: { push: jest.fn() },
+}));
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
@@ -26,8 +31,40 @@ const CALENDARS = [
 ];
 
 const TODOS = [
-  { id: "todo-1", eventId: "event-1", title: "飲み物を買う", isDone: false, completedAt: null, reminderAt: null, eventTitle: "誕生日会" },
-  { id: "todo-2", eventId: "event-1", title: "会場を予約する", isDone: true, completedAt: "2026-08-17T00:00:00.000Z", reminderAt: "2026-08-19T09:00:00.000Z", eventTitle: "誕生日会" },
+  {
+    id: "todo-1",
+    eventId: "event-1",
+    title: "楽譜購入",
+    isDone: false,
+    completedAt: null,
+    reminderAt: null,
+    eventTitle: "発表会",
+    eventStartAt: "2026-09-10T10:00:00.000Z",
+  },
+  {
+    id: "todo-2",
+    eventId: "event-1",
+    title: "練習",
+    isDone: true,
+    completedAt: "2026-08-17T00:00:00.000Z",
+    reminderAt: "2026-08-19T09:00:00.000Z",
+    eventTitle: "発表会",
+    eventStartAt: "2026-09-10T10:00:00.000Z",
+  },
+];
+
+const TODOS_TWO_EVENTS = [
+  ...TODOS,
+  {
+    id: "todo-3",
+    eventId: "event-2",
+    title: "花火を買う",
+    isDone: false,
+    completedAt: null,
+    reminderAt: null,
+    eventTitle: "夏祭り",
+    eventStartAt: "2026-08-01T10:00:00.000Z",
+  },
 ];
 
 function mockCommonHooks(todos: typeof TODOS, refetch = jest.fn()) {
@@ -43,15 +80,24 @@ describe("TodosScreen", () => {
     jest.clearAllMocks();
   });
 
-  it("shows todos separated into done and not-done sections", async () => {
+  it("groups todos into a section per linked event", async () => {
     mockCommonHooks(TODOS);
 
     const { getByTestId, getByText } = await render(<TodosScreen />);
 
-    expect(getByText("未完了")).toBeTruthy();
-    expect(getByText("完了")).toBeTruthy();
+    expect(getByText("発表会")).toBeTruthy();
     expect(getByTestId("todo-item-todo-1")).toBeTruthy();
     expect(getByTestId("todo-item-todo-2")).toBeTruthy();
+  });
+
+  it("orders sections by the linked event's start time", async () => {
+    mockCommonHooks(TODOS_TWO_EVENTS);
+
+    const { getByTestId } = await render(<TodosScreen />);
+
+    const container = getByTestId("todos-section-list");
+    const sectionIds = container.props.data.map((group: { eventId: string }) => group.eventId);
+    expect(sectionIds).toEqual(["event-2", "event-1"]);
   });
 
   it("shows a calendar switcher and updates the list when switched", async () => {
@@ -65,6 +111,35 @@ describe("TodosScreen", () => {
     await fireEvent.press(getByTestId("todos-calendar-switch-cal-2"));
 
     await waitFor(() => expect(useTodosByCalendar).toHaveBeenLastCalledWith("cal-2"));
+  });
+
+  it("collapses and expands a section when its header is pressed", async () => {
+    mockCommonHooks(TODOS);
+
+    const { getByTestId, queryByTestId } = await render(<TodosScreen />);
+
+    expect(getByTestId("todo-item-todo-1")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("todo-section-event-1"));
+    expect(queryByTestId("todo-item-todo-1")).toBeNull();
+
+    await fireEvent.press(getByTestId("todo-section-event-1"));
+    expect(getByTestId("todo-item-todo-1")).toBeTruthy();
+  });
+
+  it("navigates to the calendar screen on the event's date when 'カレンダーへ' is pressed", async () => {
+    mockCommonHooks(TODOS);
+
+    const { getByTestId } = await render(<TodosScreen />);
+
+    await fireEvent.press(getByTestId("todo-section-calendar-event-1"));
+
+    expect(router.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: "/(tabs)/calendar",
+        params: expect.objectContaining({ date: "2026-09-10", calendarId: "cal-1" }),
+      })
+    );
   });
 
   it("toggles done state and refetches so the list updates immediately", async () => {
@@ -95,32 +170,33 @@ describe("TodosScreen", () => {
     await waitFor(() => expect(refetch).toHaveBeenCalled());
   });
 
-  it("shows which event each todo belongs to", async () => {
+  function flattenStyle(style: unknown): Record<string, unknown> {
+    return Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+  }
+
+  it("shows the reminder icon active with the formatted time when a reminder is set", async () => {
+    mockCommonHooks(TODOS);
+
+    const { getByTestId, getByText, queryByTestId } = await render(<TodosScreen />);
+
+    expect(getByText("2026/08/19 09:00")).toBeTruthy();
+    const flattened = flattenStyle(getByTestId("todo-reminder-icon-todo-2").props.style);
+    expect(flattened.opacity).toBeUndefined();
+    expect(flattened.textDecorationLine).toBeUndefined();
+    expect(queryByTestId("todo-reminder-input-todo-2")).toBeNull();
+  });
+
+  it("shows the reminder icon inactive (dimmed + struck through) when no reminder is set", async () => {
     mockCommonHooks(TODOS);
 
     const { getByTestId } = await render(<TodosScreen />);
 
-    expect(getByTestId("todo-event-todo-1")).toHaveTextContent("📅 誕生日会");
+    const flattened = flattenStyle(getByTestId("todo-reminder-icon-todo-1").props.style);
+    expect(flattened.opacity).toBeLessThan(1);
+    expect(flattened.textDecorationLine).toBe("line-through");
   });
 
-  it("shows the current reminder date when set, without exposing the input until settings is opened", async () => {
-    mockCommonHooks(TODOS);
-
-    const { getByText, queryByTestId } = await render(<TodosScreen />);
-
-    expect(getByText("⏰ 2026/08/19 09:00")).toBeTruthy();
-    expect(queryByTestId("todo-reminder-input-todo-1")).toBeNull();
-  });
-
-  it("shows a not-set message when no reminder is set", async () => {
-    mockCommonHooks(TODOS);
-
-    const { getByText } = await render(<TodosScreen />);
-
-    expect(getByText("リマインド未設定")).toBeTruthy();
-  });
-
-  it("opens the reminder modal from the settings button and saves a reminder date", async () => {
+  it("opens the reminder modal from the icon and saves a reminder date", async () => {
     const refetch = jest.fn();
     mockCommonHooks(TODOS, refetch);
     const updateTodoMock = jest.fn().mockResolvedValue(true);

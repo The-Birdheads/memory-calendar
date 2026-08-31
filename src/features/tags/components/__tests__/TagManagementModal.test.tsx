@@ -2,6 +2,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import { TagManagementModal } from "../TagManagementModal";
 import { useCreateTag, useDeleteTag, useTagTree, useUpdateTag } from "../../hooks";
+import type { TagTreeNode } from "../../types";
 
 jest.mock("../../hooks", () => ({
   useTagTree: jest.fn(),
@@ -15,7 +16,7 @@ const CALENDARS = [
   { id: "cal-2", name: "友人グループ" },
 ];
 
-const TAG_TREE = [
+const TAG_TREE: TagTreeNode[] = [
   {
     id: "tag-1",
     calendarId: "cal-1",
@@ -28,7 +29,7 @@ const TAG_TREE = [
   },
 ];
 
-function mockHooks(overrides: { tagTree?: typeof TAG_TREE; refetch?: jest.Mock } = {}) {
+function mockHooks(overrides: { tagTree?: TagTreeNode[]; refetch?: jest.Mock } = {}) {
   const refetch = overrides.refetch ?? jest.fn();
   (useTagTree as jest.Mock).mockReturnValue({
     tagTree: overrides.tagTree ?? TAG_TREE,
@@ -69,6 +70,36 @@ describe("TagManagementModal", () => {
     expect(getByTestId("tag-management-calendar-cal-1")).toBeTruthy();
     expect(getByTestId("tag-management-calendar-cal-2")).toBeTruthy();
     expect(getByText("行事")).toBeTruthy();
+  });
+
+  it("shows a distinct shape icon per tag level in the list", async () => {
+    mockHooks({
+      tagTree: [
+        {
+          ...TAG_TREE[0],
+          children: [
+            {
+              id: "tag-mid",
+              calendarId: "cal-1",
+              parentId: "tag-1",
+              level: "mid" as const,
+              name: "誕生日",
+              color: "#00ff00",
+              createdAt: "2026-08-18T00:00:00.000Z",
+              children: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    const { getByTestId } = await render(
+      <TagManagementModal calendars={CALENDARS} initialCalendarId="cal-1" onClose={jest.fn()} />
+    );
+
+    const majorIconStyle = getByTestId("tag-management-tag-icon-tag-1").props.style;
+    const midIconStyle = getByTestId("tag-management-tag-icon-tag-mid").props.style;
+    expect(majorIconStyle).not.toEqual(midIconStyle);
   });
 
   it("re-queries the tag tree for the newly selected calendar when switched", async () => {
