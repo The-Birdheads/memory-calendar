@@ -126,16 +126,25 @@ export default function CalendarScreen() {
   const [todoItems, setTodoItems] = useState<string[]>([]);
   const [newTodoItemText, setNewTodoItemText] = useState("");
 
-  // Measured pixel height of the area holding the week rows, captured via
-  // onLayout. Nested flex:1 alone doesn't reliably keep a 6-week month from
-  // overflowing past the screen (rounding/ambient-layout quirks), so once we
-  // have a real measurement we size each row explicitly from it - the floor
-  // division guarantees rowHeight * weekCount never exceeds the measured
-  // area, so the last week can never be clipped.
-  const [weeksAreaHeight, setWeeksAreaHeight] = useState<number | null>(null);
+  // Relying on nested flex:1 alone to size the grid turned out unreliable in
+  // practice (the grid could end up far shorter than the space actually
+  // available, or spill past the screen on a 6-week month) - the root
+  // <View>'s own bounded height is trustworthy, but flex distribution
+  // through several intermediate levels was not. So instead we measure the
+  // real rendered height of everything ABOVE and BELOW the grid (both
+  // naturally-sized content, which onLayout always reports correctly) and
+  // compute the grid's height ourselves as the remainder, applying it as an
+  // explicit height rather than hoping flex:1 fills it correctly.
+  const [containerHeight, setContainerHeight] = useState<number | null>(null);
+  const [aboveGridHeight, setAboveGridHeight] = useState<number | null>(null);
+  const [belowGridHeight, setBelowGridHeight] = useState<number | null>(null);
+
+  const gridContainerHeight =
+    containerHeight !== null && aboveGridHeight !== null && belowGridHeight !== null
+      ? Math.max(200, containerHeight - aboveGridHeight - belowGridHeight)
+      : null;
 
   const monthGrid = useMemo(() => buildMonthGrid(focusedDate), [focusedDate]);
-  const rowHeight = weeksAreaHeight !== null ? Math.floor(weeksAreaHeight / monthGrid.length) : null;
   const eventsForSelectedDate = events.filter((event) =>
     expandEventDateKeys(event.startAt, event.endAt).includes(selectedDateKey)
   );
@@ -312,7 +321,15 @@ export default function CalendarScreen() {
             ) : null,
         }}
       />
-      <View style={styles.container}>
+      <View
+        testID="calendar-container"
+        style={styles.container}
+        onLayout={(event) => setContainerHeight(event.nativeEvent.layout.height)}
+      >
+      <View
+        testID="calendar-above-grid"
+        onLayout={(event) => setAboveGridHeight(event.nativeEvent.layout.height)}
+      >
       <View style={styles.switcher}>
         {calendars.map((calendar) => (
           <TouchableOpacity
@@ -356,6 +373,17 @@ export default function CalendarScreen() {
           </TouchableOpacity>
         </View>
       ) : null}
+
+      <View style={styles.monthHeaderRow}>
+        <TouchableOpacity testID="calendar-month-prev" onPress={() => shiftFocusedDate(-1)} style={styles.monthNavButton}>
+          <Text style={styles.monthNavText}>‹</Text>
+        </TouchableOpacity>
+        <Text style={styles.monthLabel}>{formatMonthLabel(focusedDate)}</Text>
+        <TouchableOpacity testID="calendar-month-next" onPress={() => shiftFocusedDate(1)} style={styles.monthNavButton}>
+          <Text style={styles.monthNavText}>›</Text>
+        </TouchableOpacity>
+      </View>
+      </View>
 
       <Modal visible={isOnboardingModalVisible} transparent animationType="fade">
         <KeyboardAvoidingView
@@ -417,17 +445,14 @@ export default function CalendarScreen() {
         />
       ) : null}
 
-      <View style={styles.monthHeaderRow}>
-        <TouchableOpacity testID="calendar-month-prev" onPress={() => shiftFocusedDate(-1)} style={styles.monthNavButton}>
-          <Text style={styles.monthNavText}>‹</Text>
-        </TouchableOpacity>
-        <Text style={styles.monthLabel}>{formatMonthLabel(focusedDate)}</Text>
-        <TouchableOpacity testID="calendar-month-next" onPress={() => shiftFocusedDate(1)} style={styles.monthNavButton}>
-          <Text style={styles.monthNavText}>›</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.gridContainer} testID="calendar-grid-container" {...monthSwipeResponder.panHandlers}>
+      <View
+        style={[
+          styles.gridContainer,
+          gridContainerHeight !== null ? { height: gridContainerHeight, flex: 0 } : { flex: 1 },
+        ]}
+        testID="calendar-grid-container"
+        {...monthSwipeResponder.panHandlers}
+      >
         <View style={styles.weekdayRow}>
           {WEEKDAY_LABELS.map((label, index) => (
             <Text
@@ -442,17 +467,9 @@ export default function CalendarScreen() {
             </Text>
           ))}
         </View>
-        <View
-          testID="calendar-weeks-area"
-          style={styles.weeksArea}
-          onLayout={(event) => setWeeksAreaHeight(event.nativeEvent.layout.height)}
-        >
+        <View testID="calendar-weeks-area" style={styles.weeksArea}>
           {monthGrid.map((week, weekIndex) => (
-            <View
-              key={weekIndex}
-              testID={`calendar-grid-row-${weekIndex}`}
-              style={[styles.gridRow, rowHeight !== null && { height: rowHeight }]}
-            >
+            <View key={weekIndex} testID={`calendar-grid-row-${weekIndex}`} style={styles.gridRow}>
               {week.map((cell) => {
                 const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
                 const isToday = cell.dateKey === todayDateKey();
@@ -568,26 +585,31 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <FlatList
-        data={members}
-        keyExtractor={(item) => item.userId}
-        renderItem={({ item }) => (
-          <View style={styles.memberRow}>
-            <Text>
-              {item.displayName ??
-                (item.userId === session?.user.id ? session?.user.email ?? "メンバー" : "メンバー")}
-            </Text>
-            {isOwner && item.role !== "owner" ? (
-              <TouchableOpacity
-                testID={`remove-member-${item.userId}`}
-                onPress={() => handleRemove(item.userId)}
-              >
-                <Text style={styles.removeText}>削除</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        )}
-      />
+      <View
+        testID="calendar-below-grid"
+        onLayout={(event) => setBelowGridHeight(event.nativeEvent.layout.height)}
+      >
+        <FlatList
+          data={members}
+          keyExtractor={(item) => item.userId}
+          renderItem={({ item }) => (
+            <View style={styles.memberRow}>
+              <Text>
+                {item.displayName ??
+                  (item.userId === session?.user.id ? session?.user.email ?? "メンバー" : "メンバー")}
+              </Text>
+              {isOwner && item.role !== "owner" ? (
+                <TouchableOpacity
+                  testID={`remove-member-${item.userId}`}
+                  onPress={() => handleRemove(item.userId)}
+                >
+                  <Text style={styles.removeText}>削除</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          )}
+        />
+      </View>
 
       <TouchableOpacity testID="calendar-add-event-fab" style={styles.fab} onPress={openCreateModal}>
         <Text style={styles.fabText}>+</Text>
