@@ -748,14 +748,96 @@ describe("listEventsInRange", () => {
           updatedBy: "user-1",
           createdAt: "2026-08-17T00:00:00.000Z",
           updatedAt: "2026-08-17T00:00:00.000Z",
+          tagColor: null,
         },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("events");
+    expect(select).toHaveBeenCalledWith("*, event_tags(tags(color, level))");
     expect(eq).toHaveBeenCalledWith("calendar_id", "cal-1");
     expect(lte).toHaveBeenCalledWith("start_at", "2026-09-30T23:59:59.999Z");
     expect(gte).toHaveBeenCalledWith("end_at", "2026-09-01T00:00:00.000Z");
     expect(order).toHaveBeenCalledWith("start_at", { ascending: true });
+  });
+
+  it("uses the 大分類 tag's color as tagColor when the event has multiple attached tags", async () => {
+    const rows = [
+      {
+        id: "event-1",
+        calendar_id: "cal-1",
+        series_id: null,
+        title: "会議",
+        location: null,
+        memo: null,
+        category_color: "#2f6fed",
+        start_at: "2026-09-01T10:00:00.000Z",
+        end_at: "2026-09-01T11:00:00.000Z",
+        is_all_day: false,
+        reminder_at: null,
+        created_by: "user-1",
+        updated_by: "user-1",
+        created_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000Z",
+        event_tags: [
+          { tags: { color: "#ffcccc", level: "minor" } },
+          { tags: { color: "#ff0000", level: "major" } },
+          { tags: { color: "#ff8888", level: "mid" } },
+        ],
+      },
+    ];
+    const select = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const lte = jest.fn().mockReturnThis();
+    const gte = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, eq, lte, gte, order }),
+    } as unknown as SupabaseClient;
+
+    const result = await listEventsInRange(client, "cal-1", {
+      start: "2026-09-01T00:00:00.000Z",
+      end: "2026-09-30T23:59:59.999Z",
+    });
+
+    expect(result.ok && result.value[0].tagColor).toBe("#ff0000");
+  });
+
+  it("falls back to the only attached tag's color when it isn't a 大分類", async () => {
+    const rows = [
+      {
+        id: "event-1",
+        calendar_id: "cal-1",
+        series_id: null,
+        title: "会議",
+        location: null,
+        memo: null,
+        category_color: "#2f6fed",
+        start_at: "2026-09-01T10:00:00.000Z",
+        end_at: "2026-09-01T11:00:00.000Z",
+        is_all_day: false,
+        reminder_at: null,
+        created_by: "user-1",
+        updated_by: "user-1",
+        created_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000Z",
+        event_tags: [{ tags: { color: "#ffcccc", level: "minor" } }],
+      },
+    ];
+    const select = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const lte = jest.fn().mockReturnThis();
+    const gte = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, eq, lte, gte, order }),
+    } as unknown as SupabaseClient;
+
+    const result = await listEventsInRange(client, "cal-1", {
+      start: "2026-09-01T00:00:00.000Z",
+      end: "2026-09-30T23:59:59.999Z",
+    });
+
+    expect(result.ok && result.value[0].tagColor).toBe("#ffcccc");
   });
 
   it("maps a Supabase error to Forbidden", async () => {

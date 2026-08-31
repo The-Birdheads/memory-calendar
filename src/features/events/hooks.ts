@@ -9,6 +9,7 @@ import type {
   EditScope,
   Event,
   EventError,
+  EventWithTagColor,
   ReminderTargetsInput,
   UpdateEventInput,
 } from "./types";
@@ -92,14 +93,14 @@ export function useDeleteEvent(): UseDeleteEventResult {
 }
 
 export interface UseEventsInRangeResult {
-  events: Event[];
+  events: EventWithTagColor[];
   isLoading: boolean;
   error: EventError | null;
   refetch: () => Promise<void>;
 }
 
 export function useEventsInRange(calendarId: string, range: DateRange): UseEventsInRangeResult {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<EventWithTagColor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<EventError | null>(null);
 

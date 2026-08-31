@@ -46,6 +46,32 @@ describe("EventFormFields", () => {
     expect(onChange).toHaveBeenCalledWith({ isAllDay: true });
   });
 
+  it("shows the start/end labels with a time when not all-day", async () => {
+    const { getByText } = await render(
+      <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />
+    );
+
+    expect(getByText("2026/09/01 09:00")).toBeTruthy();
+    expect(getByText("2026/09/01 10:00")).toBeTruthy();
+  });
+
+  it("shows the start/end labels without a time when all-day, and uses a date-only picker", async () => {
+    const allDayValue: EventFormValue = {
+      ...BASE_VALUE,
+      isAllDay: true,
+      end: new Date("2026-09-03T10:00:00.000Z"),
+    };
+    const { getByText, getByTestId } = await render(
+      <EventFormFields testIDPrefix="event-create" value={allDayValue} onChange={jest.fn()} />
+    );
+
+    expect(getByText("2026/09/01")).toBeTruthy();
+    expect(getByText("2026/09/03")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    expect(getByTestId("event-create-start-picker")).toBeTruthy();
+  });
+
   it("shows the picker and calls onChange with the new start date when picked", async () => {
     const onChange = jest.fn();
     const { getByTestId } = await render(

@@ -26,7 +26,9 @@ import {
 import { getCalendarErrorMessageJa } from "../../src/features/calendars/service";
 import { CATEGORY_COLORS, EventFormFields, type EventFormValue } from "../../src/features/events/components/EventFormFields";
 import { computeDateRange } from "../../src/features/events/dateRange";
+import { expandEventDateKeys } from "../../src/features/events/eventDateKeys";
 import { useCreateEvent, useEventsInRange } from "../../src/features/events/hooks";
+import { isJapaneseHoliday } from "../../src/features/events/japaneseHolidays";
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
 import { getEventErrorMessageJa } from "../../src/features/events/service";
@@ -39,7 +41,7 @@ import { formatTime } from "../../src/shared/utils/formatDateTime";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
-const MAX_DOTS_PER_CELL = 3;
+const MAX_DOTS_PER_CELL = 2;
 
 function toDateKey(iso: string): string {
   return iso.slice(0, 10);
@@ -51,6 +53,10 @@ function todayDateKey(): string {
 
 function formatMonthLabel(date: Date): string {
   return `${date.getUTCFullYear()}年${date.getUTCMonth() + 1}月`;
+}
+
+function resolveEventColor(event: Pick<Event, "categoryColor"> & { tagColor?: string | null }): string {
+  return event.tagColor ?? event.categoryColor ?? "#999999";
 }
 
 export default function CalendarScreen() {
@@ -119,15 +125,18 @@ export default function CalendarScreen() {
   const [newTodoItemText, setNewTodoItemText] = useState("");
 
   const monthGrid = useMemo(() => buildMonthGrid(focusedDate), [focusedDate]);
-  const eventsForSelectedDate = events.filter((event) => toDateKey(event.startAt) === selectedDateKey);
+  const eventsForSelectedDate = events.filter((event) =>
+    expandEventDateKeys(event.startAt, event.endAt).includes(selectedDateKey)
+  );
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, Event[]>();
     events.forEach((event) => {
-      const key = toDateKey(event.startAt);
-      const list = map.get(key) ?? [];
-      list.push(event);
-      map.set(key, list);
+      for (const key of expandEventDateKeys(event.startAt, event.endAt)) {
+        const list = map.get(key) ?? [];
+        list.push(event);
+        map.set(key, list);
+      }
     });
     return map;
   }, [events]);
@@ -395,8 +404,15 @@ export default function CalendarScreen() {
 
       <View style={styles.gridContainer} testID="calendar-grid-container" {...monthSwipeResponder.panHandlers}>
         <View style={styles.weekdayRow}>
-          {WEEKDAY_LABELS.map((label) => (
-            <Text key={label} style={styles.weekdayLabel}>
+          {WEEKDAY_LABELS.map((label, index) => (
+            <Text
+              key={label}
+              style={[
+                styles.weekdayLabel,
+                index === 6 && styles.weekdaySaturday,
+                index === 0 && styles.weekdaySunday,
+              ]}
+            >
               {label}
             </Text>
           ))}
@@ -407,6 +423,9 @@ export default function CalendarScreen() {
               const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
               const isToday = cell.dateKey === todayDateKey();
               const isSelected = cell.dateKey === selectedDateKey;
+              const dayOfWeek = new Date(`${cell.dateKey}T00:00:00.000Z`).getUTCDay();
+              const isSaturday = dayOfWeek === 6;
+              const isSundayOrHoliday = dayOfWeek === 0 || isJapaneseHoliday(cell.dateKey);
               return (
                 <TouchableOpacity
                   key={cell.dateKey}
@@ -419,15 +438,28 @@ export default function CalendarScreen() {
                   onPress={() => setSelectedDateKey(cell.dateKey)}
                 >
                   <View style={[styles.gridDayBadge, isToday && styles.gridDayBadgeToday]}>
-                    <Text style={[styles.gridDayText, isToday && styles.gridDayTextToday]}>{cell.day}</Text>
+                    <Text
+                      style={[
+                        styles.gridDayText,
+                        isSaturday && styles.gridDaySaturday,
+                        isSundayOrHoliday && styles.gridDaySunday,
+                        isToday && styles.gridDayTextToday,
+                      ]}
+                    >
+                      {cell.day}
+                    </Text>
                   </View>
-                  <View style={styles.gridDotsRow}>
+                  <View style={styles.gridEventList}>
                     {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => (
                       <View
                         key={event.id}
                         testID={`calendar-grid-dot-${event.id}`}
-                        style={[styles.gridDot, { backgroundColor: event.categoryColor ?? "#999999" }]}
-                      />
+                        style={[styles.gridEventBar, { backgroundColor: resolveEventColor(event) }]}
+                      >
+                        <Text style={styles.gridEventBarText} numberOfLines={1}>
+                          {event.title}
+                        </Text>
+                      </View>
                     ))}
                     {cellEvents.length > MAX_DOTS_PER_CELL ? (
                       <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
@@ -449,7 +481,7 @@ export default function CalendarScreen() {
             testID={`calendar-event-${item.id}`}
             onPress={() => router.push(`/event/${item.id}`)}
           >
-            <View style={[styles.categoryDot, { backgroundColor: item.categoryColor ?? "#999999" }]} />
+            <View style={[styles.categoryDot, { backgroundColor: resolveEventColor(item) }]} />
             <Text style={styles.eventTime}>
               {item.isAllDay ? "終日" : `${formatTime(item.startAt)}〜${formatTime(item.endAt)}`}
             </Text>
@@ -684,6 +716,12 @@ const styles = StyleSheet.create({
     color: "#888",
     paddingVertical: 4,
   },
+  weekdaySaturday: {
+    color: "#2f6fed",
+  },
+  weekdaySunday: {
+    color: "#e53935",
+  },
   gridRow: {
     flexDirection: "row",
   },
@@ -714,23 +752,35 @@ const styles = StyleSheet.create({
   gridDayText: {
     fontSize: 12,
   },
+  gridDaySaturday: {
+    color: "#2f6fed",
+  },
+  gridDaySunday: {
+    color: "#e53935",
+  },
   gridDayTextToday: {
     color: "#fff",
     fontWeight: "700",
   },
-  gridDotsRow: {
-    flexDirection: "row",
-    gap: 2,
-    minHeight: 6,
+  gridEventList: {
+    width: "100%",
+    gap: 1,
+    paddingHorizontal: 2,
   },
-  gridDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+  gridEventBar: {
+    borderRadius: 3,
+    paddingHorizontal: 2,
+  },
+  gridEventBarText: {
+    fontSize: 8,
+    lineHeight: 10,
+    color: "#fff",
+    fontWeight: "600",
   },
   gridDotOverflow: {
     fontSize: 8,
     color: "#888",
+    textAlign: "center",
   },
   eventRow: {
     flexDirection: "row",

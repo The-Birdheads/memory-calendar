@@ -17,6 +17,11 @@ export interface Event {
   updatedAt: string;
 }
 
+/** An event plus the color of its "primary" attached tag (大分類 > 中分類 > 小分類, or null if untagged). */
+export interface EventWithTagColor extends Event {
+  tagColor: string | null;
+}
+
 export interface CreateEventInput {
   calendarId: string;
   title: string;

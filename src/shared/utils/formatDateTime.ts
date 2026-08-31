@@ -13,9 +13,18 @@ export function formatDateTime(iso: string): string {
   return `${y}/${m}/${d} ${hh}:${mm}`;
 }
 
-/** Formats a start/end pair as "YYYY/MM/DD hh:mm 〜 YYYY/MM/DD hh:mm". */
-export function formatDateTimeRange(startIso: string, endIso: string): string {
-  return `${formatDateTime(startIso)} 〜 ${formatDateTime(endIso)}`;
+/** Formats just the "YYYY/MM/DD" portion of an ISO date-time string (zero-padded, UTC). */
+export function formatDateOnly(iso: string): string {
+  return formatDateTime(iso).slice(0, 10);
+}
+
+/**
+ * Formats a start/end pair as "YYYY/MM/DD hh:mm 〜 YYYY/MM/DD hh:mm", or as
+ * "YYYY/MM/DD 〜 YYYY/MM/DD" (no time) when isAllDay is true.
+ */
+export function formatDateTimeRange(startIso: string, endIso: string, isAllDay = false): string {
+  const format = isAllDay ? formatDateOnly : formatDateTime;
+  return `${format(startIso)} 〜 ${format(endIso)}`;
 }
 
 /** Formats just the "hh:mm" portion of an ISO date-time string (zero-padded, UTC). */

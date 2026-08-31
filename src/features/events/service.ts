@@ -8,9 +8,27 @@ import type {
   EditScope,
   Event,
   EventError,
+  EventWithTagColor,
   ReminderTargetsInput,
   UpdateEventInput,
 } from "./types";
+
+const TAG_LEVEL_PRIORITY = ["major", "mid", "minor"];
+
+interface EventTagJoinRow {
+  tags: { color: string; level: string } | null;
+}
+
+function pickPrimaryTagColor(eventTags: EventTagJoinRow[]): string | null {
+  const tags = eventTags.map((row) => row.tags).filter((tag): tag is { color: string; level: string } => tag !== null);
+  if (tags.length === 0) return null;
+
+  for (const level of TAG_LEVEL_PRIORITY) {
+    const match = tags.find((tag) => tag.level === level);
+    if (match) return match.color;
+  }
+  return tags[0].color;
+}
 
 export interface EventRow {
   id: string;
@@ -274,10 +292,10 @@ export async function listEventsInRange(
   client: SupabaseClient,
   calendarId: string,
   range: DateRange
-): Promise<Result<Event[], EventError>> {
+): Promise<Result<EventWithTagColor[], EventError>> {
   const { data, error } = await client
     .from("events")
-    .select()
+    .select("*, event_tags(tags(color, level))")
     .eq("calendar_id", calendarId)
     .lte("start_at", range.end)
     .gte("end_at", range.start)
@@ -287,7 +305,12 @@ export async function listEventsInRange(
     return err(mapEventError(error as PostgrestError));
   }
 
-  return ok((data as EventRow[]).map(mapEventRow));
+  return ok(
+    (data as (EventRow & { event_tags: EventTagJoinRow[] })[]).map((row) => ({
+      ...mapEventRow(row),
+      tagColor: pickPrimaryTagColor(row.event_tags ?? []),
+    }))
+  );
 }
 
 export async function getEvent(

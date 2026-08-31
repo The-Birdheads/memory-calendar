@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import CalendarScreen from "../calendar";
@@ -346,6 +346,101 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-grid-dot-event-2")).toBeTruthy();
   });
 
+  it("shows a few characters of the event title inside its grid marker", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({
+      events: [TODAY_EVENT],
+      isLoading: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    expect(within(getByTestId("calendar-grid-dot-event-1")).getByText("朝会")).toBeTruthy();
+  });
+
+  it("colors the grid marker and day-list dot with the event's primary tag color when tagged", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({
+      events: [{ ...TODAY_EVENT, categoryColor: "#2f6fed", tagColor: "#e53935" }],
+      isLoading: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    const gridMarkerStyle = getByTestId("calendar-grid-dot-event-1").props.style;
+    const flattened = Array.isArray(gridMarkerStyle)
+      ? Object.assign({}, ...gridMarkerStyle.filter(Boolean))
+      : gridMarkerStyle;
+    expect(flattened.backgroundColor).toBe("#e53935");
+  });
+
+  it("shows a multi-day event on every day it spans, on the grid and in the day list", async () => {
+    mockCommonHooks();
+    const multiDayEvent = {
+      id: "event-3",
+      calendarId: "cal-1",
+      title: "旅行",
+      categoryColor: "#43a047",
+      startAt: "2026-08-18T09:00:00.000Z",
+      endAt: "2026-08-20T18:00:00.000Z",
+    };
+    (useEventsInRange as jest.Mock).mockReturnValue({
+      events: [multiDayEvent],
+      isLoading: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    // The marker for the multi-day event shows up on all three days it spans.
+    for (const dateKey of ["2026-08-18", "2026-08-19", "2026-08-20"]) {
+      expect(
+        within(getByTestId(`calendar-grid-cell-${dateKey}`)).getByTestId("calendar-grid-dot-event-3")
+      ).toBeTruthy();
+    }
+
+    expect(getByTestId("calendar-event-event-3")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-19"));
+    expect(getByTestId("calendar-event-event-3")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-20"));
+    expect(getByTestId("calendar-event-event-3")).toBeTruthy();
+  });
+
+  it("colors Saturday blue and Sunday/holidays red in the weekday header and grid day numbers", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId, getAllByText } = await render(<CalendarScreen />);
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+
+    const weekdayLabels = getAllByText("土");
+    const saturdayHeaderStyle = flattenStyle(weekdayLabels[0].props.style);
+    expect(saturdayHeaderStyle.color).toBe("#2f6fed");
+
+    const sundayHeaderStyle = flattenStyle(getAllByText("日")[0].props.style);
+    expect(sundayHeaderStyle.color).toBe("#e53935");
+
+    // 2026-08-22 is a Saturday; 2026-08-23 is a Sunday.
+    const saturdayCell = within(getByTestId("calendar-grid-cell-2026-08-22"));
+    const saturdayDayStyle = flattenStyle(saturdayCell.getByText("22").props.style);
+    expect(saturdayDayStyle.color).toBe("#2f6fed");
+
+    const sundayCell = within(getByTestId("calendar-grid-cell-2026-08-23"));
+    const sundayDayStyle = flattenStyle(sundayCell.getByText("23").props.style);
+    expect(sundayDayStyle.color).toBe("#e53935");
+
+    // 2026-08-11 (山の日, Mountain Day) is a Japanese national holiday and a Tuesday.
+    const holidayCell = within(getByTestId("calendar-grid-cell-2026-08-11"));
+    const holidayDayStyle = flattenStyle(holidayCell.getByText("11").props.style);
+    expect(holidayDayStyle.color).toBe("#e53935");
+  });
+
   it("shows only the selected date's events, colored by category, and updates when a grid cell is selected", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({
@@ -354,15 +449,15 @@ describe("CalendarScreen", () => {
       error: null,
     });
 
-    const { getByText, queryByText, getByTestId } = await render(<CalendarScreen />);
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
 
-    expect(getByText("朝会")).toBeTruthy();
-    expect(queryByText("外出")).toBeNull();
+    expect(getByTestId("calendar-event-event-1")).toBeTruthy();
+    expect(queryByTestId("calendar-event-event-2")).toBeNull();
 
     await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-20"));
 
-    expect(getByText("外出")).toBeTruthy();
-    expect(queryByText("朝会")).toBeNull();
+    expect(getByTestId("calendar-event-event-2")).toBeTruthy();
+    expect(queryByTestId("calendar-event-event-1")).toBeNull();
   });
 
   it("resets to today's events when the today button is pressed", async () => {
@@ -373,15 +468,15 @@ describe("CalendarScreen", () => {
       error: null,
     });
 
-    const { getByText, queryByText, getByTestId } = await render(<CalendarScreen />);
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
 
     await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-20"));
-    expect(getByText("外出")).toBeTruthy();
+    expect(getByTestId("calendar-event-event-2")).toBeTruthy();
 
     await fireEvent.press(getByTestId("calendar-today-button"));
 
-    expect(getByText("朝会")).toBeTruthy();
-    expect(queryByText("外出")).toBeNull();
+    expect(getByTestId("calendar-event-event-1")).toBeTruthy();
+    expect(queryByTestId("calendar-event-event-2")).toBeNull();
   });
 
   it("moves to the next/previous month and updates the label and query range", async () => {

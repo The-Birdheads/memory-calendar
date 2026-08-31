@@ -90,7 +90,7 @@ describe("13.1 予定作成からカレンダー月表示への反映", () => {
     const fakeClient = createFakeSupabaseClient();
     (getSupabaseClient as jest.Mock).mockReturnValue(fakeClient);
 
-    const { getByTestId, getByText, queryByText } = await render(<CalendarScreen />);
+    const { getByTestId, getAllByText, queryByText } = await render(<CalendarScreen />);
 
     expect(queryByText("誕生日会")).toBeNull();
 
@@ -107,7 +107,7 @@ describe("13.1 予定作成からカレンダー月表示への反映", () => {
 
     await fireEvent.press(getByTestId("event-create-submit"));
 
-    await waitFor(() => expect(getByText("誕生日会")).toBeTruthy());
+    await waitFor(() => expect(getAllByText("誕生日会").length).toBeGreaterThan(0));
     expect(fakeClient.getTable("events")).toHaveLength(1);
     expect(fakeClient.getTable("events")[0]).toMatchObject({ calendar_id: "cal-1", title: "誕生日会" });
   });

@@ -1,4 +1,4 @@
-import { formatDateTime, formatDateTimeRange, formatTime } from "../formatDateTime";
+import { formatDateOnly, formatDateTime, formatDateTimeRange, formatTime } from "../formatDateTime";
 
 describe("formatDateTime", () => {
   it("formats an ISO string as zero-padded YYYY/MM/DD hh:mm", () => {
@@ -10,10 +10,22 @@ describe("formatDateTime", () => {
   });
 });
 
+describe("formatDateOnly", () => {
+  it("formats just the zero-padded YYYY/MM/DD portion", () => {
+    expect(formatDateOnly("2026-09-15T10:30:00.000Z")).toBe("2026/09/15");
+  });
+});
+
 describe("formatDateTimeRange", () => {
   it("joins the formatted start and end with a wave dash", () => {
     expect(formatDateTimeRange("2026-09-15T10:00:00.000Z", "2026-09-15T12:30:00.000Z")).toBe(
       "2026/09/15 10:00 〜 2026/09/15 12:30"
+    );
+  });
+
+  it("omits the time when isAllDay is true", () => {
+    expect(formatDateTimeRange("2026-09-15T10:00:00.000Z", "2026-09-17T12:30:00.000Z", true)).toBe(
+      "2026/09/15 〜 2026/09/17"
     );
   });
 });

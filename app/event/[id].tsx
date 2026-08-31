@@ -248,7 +248,7 @@ export default function EventDetailScreen() {
 
         <View style={styles.detailInfo}>
           <Text testID="event-detail-datetime" style={styles.detailText}>
-            🕐 {formatDateTimeRange(event.startAt, event.endAt)}
+            🕐 {formatDateTimeRange(event.startAt, event.endAt, event.isAllDay)}
           </Text>
           {event.location ? (
             <Text testID="event-detail-location" style={styles.detailText}>
