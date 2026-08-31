@@ -14,10 +14,17 @@ import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
 import { useAttachTagsToEvent, useCreateTag, useTagTree } from "../../src/features/tags/hooks";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
-jest.mock("expo-router", () => ({
-  router: { push: jest.fn() },
-  useLocalSearchParams: jest.fn().mockReturnValue({}),
-}));
+jest.mock("expo-router", () => {
+  const React = require("react");
+  return {
+    router: { push: jest.fn() },
+    useLocalSearchParams: jest.fn().mockReturnValue({}),
+    Tabs: {
+      Screen: ({ options }: any) =>
+        React.createElement(React.Fragment, null, options?.headerLeft?.(), options?.headerRight?.()),
+    },
+  };
+});
 
 jest.mock("../../src/shared/api/supabaseClient", () => ({
   getSupabaseClient: jest.fn(),

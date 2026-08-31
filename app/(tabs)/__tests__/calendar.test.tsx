@@ -22,10 +22,19 @@ import {
 } from "../../../src/features/tags/hooks";
 import { useCreateTodo } from "../../../src/features/todos/hooks";
 
-jest.mock("expo-router", () => ({
-  router: { push: jest.fn() },
-  useLocalSearchParams: jest.fn().mockReturnValue({}),
-}));
+jest.mock("expo-router", () => {
+  const React = require("react");
+  return {
+    router: { push: jest.fn() },
+    useLocalSearchParams: jest.fn().mockReturnValue({}),
+    // Renders headerLeft/headerRight inline so tests can still reach the
+    // buttons that now live in the native header via <Tabs.Screen options>.
+    Tabs: {
+      Screen: ({ options }: any) =>
+        React.createElement(React.Fragment, null, options?.headerLeft?.(), options?.headerRight?.()),
+    },
+  };
+});
 
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
@@ -330,6 +339,32 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-grid-cell-2026-08-18")).toBeTruthy();
     expect(getByTestId("calendar-grid-cell-2026-08-01")).toBeTruthy();
     expect(getByTestId("calendar-grid-cell-2026-08-31")).toBeTruthy();
+  });
+
+  it("sizes every week row from the measured grid area so a 6-week month always fits on screen", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    // August 2026 spans 6 calendar weeks (rows 0-5).
+    expect(getByTestId("calendar-grid-row-5")).toBeTruthy();
+
+    await fireEvent(getByTestId("calendar-weeks-area"), "layout", {
+      nativeEvent: { layout: { height: 601, width: 375, x: 0, y: 0 } },
+    });
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+
+    // 601 / 6 weeks floors to 100px/row, so all 6 rows (600px) fit within
+    // the measured 601px area with room to spare - never overflowing it.
+    for (let weekIndex = 0; weekIndex < 6; weekIndex += 1) {
+      await waitFor(() => {
+        const rowStyle = flattenStyle(getByTestId(`calendar-grid-row-${weekIndex}`).props.style);
+        expect(rowStyle.height).toBe(100);
+      });
+    }
   });
 
   it("shows event dots on grid cells that have events", async () => {

@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { Tabs, router, useLocalSearchParams } from "expo-router";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
 import {
@@ -126,7 +126,16 @@ export default function CalendarScreen() {
   const [todoItems, setTodoItems] = useState<string[]>([]);
   const [newTodoItemText, setNewTodoItemText] = useState("");
 
+  // Measured pixel height of the area holding the week rows, captured via
+  // onLayout. Nested flex:1 alone doesn't reliably keep a 6-week month from
+  // overflowing past the screen (rounding/ambient-layout quirks), so once we
+  // have a real measurement we size each row explicitly from it - the floor
+  // division guarantees rowHeight * weekCount never exceeds the measured
+  // area, so the last week can never be clipped.
+  const [weeksAreaHeight, setWeeksAreaHeight] = useState<number | null>(null);
+
   const monthGrid = useMemo(() => buildMonthGrid(focusedDate), [focusedDate]);
+  const rowHeight = weeksAreaHeight !== null ? Math.floor(weeksAreaHeight / monthGrid.length) : null;
   const eventsForSelectedDate = events.filter((event) =>
     expandEventDateKeys(event.startAt, event.endAt).includes(selectedDateKey)
   );
@@ -279,7 +288,31 @@ export default function CalendarScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <>
+      <Tabs.Screen
+        options={{
+          headerLeft: () => (
+            <TouchableOpacity
+              testID="calendar-today-button"
+              onPress={handleToday}
+              style={styles.headerTodayButton}
+            >
+              <Text style={styles.headerTodayText}>今日</Text>
+            </TouchableOpacity>
+          ),
+          headerRight: () =>
+            activeCalendarId ? (
+              <TouchableOpacity
+                testID="calendar-manage-tags-button"
+                onPress={() => setIsTagModalVisible(true)}
+                style={styles.headerTagButton}
+              >
+                <Text style={styles.headerTagButtonText}>タグ管理</Text>
+              </TouchableOpacity>
+            ) : null,
+        }}
+      />
+      <View style={styles.container}>
       <View style={styles.switcher}>
         {calendars.map((calendar) => (
           <TouchableOpacity
@@ -304,15 +337,6 @@ export default function CalendarScreen() {
         {activeCalendarId ? (
           <TouchableOpacity testID="calendar-invite-button" style={styles.inviteButton} onPress={handleGenerateInvite}>
             <Text style={styles.inviteButtonText}>招待</Text>
-          </TouchableOpacity>
-        ) : null}
-        {activeCalendarId ? (
-          <TouchableOpacity
-            testID="calendar-manage-tags-button"
-            style={styles.inviteButton}
-            onPress={() => setIsTagModalVisible(true)}
-          >
-            <Text style={styles.inviteButtonText}>タグ管理</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -393,12 +417,6 @@ export default function CalendarScreen() {
         />
       ) : null}
 
-      <View style={styles.viewModeRow}>
-        <TouchableOpacity testID="calendar-today-button" onPress={handleToday} style={styles.todayButton}>
-          <Text>今日</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.monthHeaderRow}>
         <TouchableOpacity testID="calendar-month-prev" onPress={() => shiftFocusedDate(-1)} style={styles.monthNavButton}>
           <Text style={styles.monthNavText}>‹</Text>
@@ -424,9 +442,17 @@ export default function CalendarScreen() {
             </Text>
           ))}
         </View>
-        <View style={styles.weeksArea}>
+        <View
+          testID="calendar-weeks-area"
+          style={styles.weeksArea}
+          onLayout={(event) => setWeeksAreaHeight(event.nativeEvent.layout.height)}
+        >
           {monthGrid.map((week, weekIndex) => (
-            <View key={weekIndex} style={styles.gridRow}>
+            <View
+              key={weekIndex}
+              testID={`calendar-grid-row-${weekIndex}`}
+              style={[styles.gridRow, rowHeight !== null && { height: rowHeight }]}
+            >
               {week.map((cell) => {
                 const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
                 const isToday = cell.dateKey === todayDateKey();
@@ -648,7 +674,8 @@ export default function CalendarScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+      </View>
+    </>
   );
 }
 
@@ -720,17 +747,22 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 1,
   },
-  viewModeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-  },
-  todayButton: {
-    marginLeft: "auto",
+  headerTodayButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
+  },
+  headerTodayText: {
+    color: "#2f6fed",
+    fontSize: 16,
+  },
+  headerTagButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  headerTagButtonText: {
+    color: "#2f6fed",
+    fontSize: 14,
+    fontWeight: "600",
   },
   monthHeaderRow: {
     flexDirection: "row",
