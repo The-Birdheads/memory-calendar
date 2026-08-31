@@ -401,6 +401,7 @@ describe("CalendarScreen", () => {
       ).toBeTruthy();
     }
 
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
     expect(getByTestId("calendar-event-event-3")).toBeTruthy();
 
     await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-19"));
@@ -451,6 +452,7 @@ describe("CalendarScreen", () => {
 
     const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
 
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
     expect(getByTestId("calendar-event-event-1")).toBeTruthy();
     expect(queryByTestId("calendar-event-event-2")).toBeNull();
 
@@ -458,6 +460,62 @@ describe("CalendarScreen", () => {
 
     expect(getByTestId("calendar-event-event-2")).toBeTruthy();
     expect(queryByTestId("calendar-event-event-1")).toBeNull();
+  });
+
+  it("shows the selected day's events in a slide-up modal, with its date in the header, closed by default", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({
+      events: [TODAY_EVENT],
+      isLoading: false,
+      error: null,
+    });
+
+    const { getByTestId, getByText, queryByTestId } = await render(<CalendarScreen />);
+
+    expect(queryByTestId("calendar-event-event-1")).toBeNull();
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+    expect(getByText("8月18日 火曜日")).toBeTruthy();
+    expect(getByTestId("calendar-event-event-1")).toBeTruthy();
+  });
+
+  it("shows an empty message in the day-events modal when the selected day has no events", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+    expect(getByText("予定はありません")).toBeTruthy();
+  });
+
+  it("closes the day-events modal from its close button", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [TODAY_EVENT], isLoading: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+    expect(getByTestId("calendar-event-event-1")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("calendar-day-modal-close"));
+
+    expect(queryByTestId("calendar-event-event-1")).toBeNull();
+  });
+
+  it("opens the create-event modal, pre-filled for the selected day, from the day-events modal's + button", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-20"));
+    await fireEvent.press(getByTestId("calendar-day-modal-add"));
+
+    expect(queryByTestId("calendar-event-event-1")).toBeNull();
+    expect(getByTestId("event-create-title-input")).toBeTruthy();
   });
 
   it("resets to today's events when the today button is pressed", async () => {
@@ -723,6 +781,7 @@ describe("CalendarScreen", () => {
 
     const { getByTestId } = await render(<CalendarScreen />);
 
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
     await fireEvent.press(getByTestId("calendar-event-event-1"));
 
     expect(router.push).toHaveBeenCalledWith("/event/event-1");

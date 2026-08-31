@@ -27,6 +27,7 @@ import { getCalendarErrorMessageJa } from "../../src/features/calendars/service"
 import { CATEGORY_COLORS, EventFormFields, type EventFormValue } from "../../src/features/events/components/EventFormFields";
 import { computeDateRange } from "../../src/features/events/dateRange";
 import { expandEventDateKeys } from "../../src/features/events/eventDateKeys";
+import { formatDayHeaderLabel } from "../../src/features/events/formatDayHeaderLabel";
 import { useCreateEvent, useEventsInRange } from "../../src/features/events/hooks";
 import { isJapaneseHoliday } from "../../src/features/events/japaneseHolidays";
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
@@ -110,6 +111,7 @@ export default function CalendarScreen() {
   const [isTagModalVisible, setIsTagModalVisible] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
+  const [isDayEventsModalVisible, setIsDayEventsModalVisible] = useState(false);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [newEventForm, setNewEventForm] = useState<EventFormValue>(() => ({
     title: "",
@@ -156,6 +158,11 @@ export default function CalendarScreen() {
     const now = new Date();
     setFocusedDate(now);
     setSelectedDateKey(toDateKey(now.toISOString()));
+  };
+
+  const handleSelectDateCell = (dateKey: string) => {
+    setSelectedDateKey(dateKey);
+    setIsDayEventsModalVisible(true);
   };
 
   // The swipe gesture's PanResponder is created once (see monthSwipeResponder
@@ -417,78 +424,123 @@ export default function CalendarScreen() {
             </Text>
           ))}
         </View>
-        {monthGrid.map((week, weekIndex) => (
-          <View key={weekIndex} style={styles.gridRow}>
-            {week.map((cell) => {
-              const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
-              const isToday = cell.dateKey === todayDateKey();
-              const isSelected = cell.dateKey === selectedDateKey;
-              const dayOfWeek = new Date(`${cell.dateKey}T00:00:00.000Z`).getUTCDay();
-              const isSaturday = dayOfWeek === 6;
-              const isSundayOrHoliday = dayOfWeek === 0 || isJapaneseHoliday(cell.dateKey);
-              return (
-                <TouchableOpacity
-                  key={cell.dateKey}
-                  testID={`calendar-grid-cell-${cell.dateKey}`}
-                  style={[
-                    styles.gridCell,
-                    isSelected && styles.gridCellSelected,
-                    !cell.isCurrentMonth && styles.gridCellMuted,
-                  ]}
-                  onPress={() => setSelectedDateKey(cell.dateKey)}
-                >
-                  <View style={[styles.gridDayBadge, isToday && styles.gridDayBadgeToday]}>
-                    <Text
-                      style={[
-                        styles.gridDayText,
-                        isSaturday && styles.gridDaySaturday,
-                        isSundayOrHoliday && styles.gridDaySunday,
-                        isToday && styles.gridDayTextToday,
-                      ]}
-                    >
-                      {cell.day}
-                    </Text>
-                  </View>
-                  <View style={styles.gridEventList}>
-                    {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => (
-                      <View
-                        key={event.id}
-                        testID={`calendar-grid-dot-${event.id}`}
-                        style={[styles.gridEventBar, { backgroundColor: resolveEventColor(event) }]}
+        <View style={styles.weeksArea}>
+          {monthGrid.map((week, weekIndex) => (
+            <View key={weekIndex} style={styles.gridRow}>
+              {week.map((cell) => {
+                const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
+                const isToday = cell.dateKey === todayDateKey();
+                const isSelected = cell.dateKey === selectedDateKey;
+                const dayOfWeek = new Date(`${cell.dateKey}T00:00:00.000Z`).getUTCDay();
+                const isSaturday = dayOfWeek === 6;
+                const isSundayOrHoliday = dayOfWeek === 0 || isJapaneseHoliday(cell.dateKey);
+                return (
+                  <TouchableOpacity
+                    key={cell.dateKey}
+                    testID={`calendar-grid-cell-${cell.dateKey}`}
+                    style={[
+                      styles.gridCell,
+                      isSelected && styles.gridCellSelected,
+                      !cell.isCurrentMonth && styles.gridCellMuted,
+                    ]}
+                    onPress={() => handleSelectDateCell(cell.dateKey)}
+                  >
+                    <View style={[styles.gridDayBadge, isToday && styles.gridDayBadgeToday]}>
+                      <Text
+                        style={[
+                          styles.gridDayText,
+                          isSaturday && styles.gridDaySaturday,
+                          isSundayOrHoliday && styles.gridDaySunday,
+                          isToday && styles.gridDayTextToday,
+                        ]}
                       >
-                        <Text style={styles.gridEventBarText} numberOfLines={1}>
-                          {event.title}
-                        </Text>
-                      </View>
-                    ))}
-                    {cellEvents.length > MAX_DOTS_PER_CELL ? (
-                      <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
-                    ) : null}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ))}
+                        {cell.day}
+                      </Text>
+                    </View>
+                    <View style={styles.gridEventList}>
+                      {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => (
+                        <View
+                          key={event.id}
+                          testID={`calendar-grid-dot-${event.id}`}
+                          style={[styles.gridEventBar, { backgroundColor: resolveEventColor(event) }]}
+                        >
+                          <Text style={styles.gridEventBarText} numberOfLines={1}>
+                            {event.title}
+                          </Text>
+                        </View>
+                      ))}
+                      {cellEvents.length > MAX_DOTS_PER_CELL ? (
+                        <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+        </View>
       </View>
 
-      <FlatList
-        data={eventsForSelectedDate}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.eventRow}
-            testID={`calendar-event-${item.id}`}
-            onPress={() => router.push(`/event/${item.id}`)}
-          >
-            <View style={[styles.categoryDot, { backgroundColor: resolveEventColor(item) }]} />
-            <Text style={styles.eventTime}>
-              {item.isAllDay ? "終日" : `${formatTime(item.startAt)}〜${formatTime(item.endAt)}`}
-            </Text>
-            <Text style={styles.eventTitle}>{item.title}</Text>
+      <Modal
+        visible={isDayEventsModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsDayEventsModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.dayModalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsDayEventsModalVisible(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.dayModalCard}>
+            <View style={styles.dayModalHeader}>
+              <Text style={styles.dayModalTitle}>{formatDayHeaderLabel(selectedDateKey)}</Text>
+              <View style={styles.dayModalHeaderActions}>
+                <TouchableOpacity
+                  testID="calendar-day-modal-add"
+                  onPress={() => {
+                    setIsDayEventsModalVisible(false);
+                    openCreateModal();
+                  }}
+                >
+                  <Text style={styles.dayModalAddText}>＋</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  testID="calendar-day-modal-close"
+                  onPress={() => setIsDayEventsModalVisible(false)}
+                >
+                  <Text style={styles.dayModalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {eventsForSelectedDate.length === 0 ? (
+              <Text style={styles.dayModalEmptyText}>予定はありません</Text>
+            ) : (
+              <FlatList
+                data={eventsForSelectedDate}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.eventRow}
+                    testID={`calendar-event-${item.id}`}
+                    onPress={() => {
+                      setIsDayEventsModalVisible(false);
+                      router.push(`/event/${item.id}`);
+                    }}
+                  >
+                    <View style={[styles.categoryDot, { backgroundColor: resolveEventColor(item) }]} />
+                    <Text style={styles.eventTime}>
+                      {item.isAllDay ? "終日" : `${formatTime(item.startAt)}〜${formatTime(item.endAt)}`}
+                    </Text>
+                    <Text style={styles.eventTitle}>{item.title}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </TouchableOpacity>
-        )}
-      />
+        </TouchableOpacity>
+      </Modal>
 
       <FlatList
         data={members}
@@ -703,11 +755,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   gridContainer: {
+    flex: 1,
     paddingHorizontal: 8,
     paddingBottom: 8,
   },
   weekdayRow: {
     flexDirection: "row",
+  },
+  weeksArea: {
+    flex: 1,
   },
   weekdayLabel: {
     flex: 1,
@@ -723,15 +779,16 @@ const styles = StyleSheet.create({
     color: "#e53935",
   },
   gridRow: {
+    flex: 1,
     flexDirection: "row",
   },
   gridCell: {
     flex: 1,
-    minHeight: 96,
     alignItems: "center",
     paddingTop: 4,
     gap: 2,
     borderRadius: 8,
+    overflow: "hidden",
   },
   gridCellSelected: {
     backgroundColor: "#e8f0fe",
@@ -769,17 +826,17 @@ const styles = StyleSheet.create({
   },
   gridEventBar: {
     borderRadius: 3,
-    paddingHorizontal: 3,
+    paddingHorizontal: 2,
     paddingVertical: 1,
   },
   gridEventBarText: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 9,
+    lineHeight: 11,
     color: "#fff",
     fontWeight: "600",
   },
   gridDotOverflow: {
-    fontSize: 10,
+    fontSize: 9,
     color: "#888",
     textAlign: "center",
   },
@@ -833,6 +890,49 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 28,
     lineHeight: 30,
+  },
+  dayModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  dayModalCard: {
+    maxHeight: "70%",
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  dayModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  dayModalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  dayModalHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+  },
+  dayModalAddText: {
+    fontSize: 22,
+    color: "#2f6fed",
+    fontWeight: "700",
+  },
+  dayModalCloseText: {
+    fontSize: 18,
+    color: "#666",
+  },
+  dayModalEmptyText: {
+    color: "#999",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   modalOverlay: {
     flex: 1,
