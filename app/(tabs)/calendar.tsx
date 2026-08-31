@@ -98,8 +98,16 @@ export default function CalendarScreen() {
     const parsed = new Date(`${dateParam}T00:00:00.000Z`);
     if (Number.isNaN(parsed.getTime())) return;
     setFocusedDate(parsed);
-    setSelectedDateKey(dateParam);
   }, [dateParam]);
+
+  // Keeps the selected day in sync with whichever month is focused, whenever
+  // focusedDate itself changes (month nav, "today", or the ?date= jump
+  // above) - selecting a specific day within the CURRENT month (grid cell
+  // taps) goes through setSelectedDateKey directly and doesn't touch
+  // focusedDate, so it isn't affected by this.
+  useEffect(() => {
+    setSelectedDateKey(toDateKey(focusedDate.toISOString()));
+  }, [focusedDate]);
 
   const range = useMemo(() => computeDateRange("month", focusedDate), [focusedDate]);
   const { events, refetch: refetchEvents } = useEventsInRange(activeCalendarId, range);
@@ -173,9 +181,7 @@ export default function CalendarScreen() {
   };
 
   const handleToday = () => {
-    const now = new Date();
-    setFocusedDate(now);
-    setSelectedDateKey(toDateKey(now.toISOString()));
+    setFocusedDate(new Date());
   };
 
   const handleSelectDateCell = (dateKey: string) => {
@@ -184,19 +190,19 @@ export default function CalendarScreen() {
   };
 
   // The swipe gesture's PanResponder is created once (see monthSwipeResponder
-  // below) and keeps calling whatever shiftFocusedDate closure existed at that
-  // first render, so shiftFocusedDate must read the CURRENT focusedDate via a
-  // ref instead of closing over the (stale, first-render) `focusedDate`
-  // variable directly - otherwise every swipe recomputes from that original
-  // month instead of the month actually on screen.
-  const focusedDateRef = useRef(focusedDate);
-  focusedDateRef.current = focusedDate;
-
+  // below) and keeps calling whatever shiftFocusedDate closure existed at
+  // that first render. That's fine as long as shiftFocusedDate never reads
+  // `focusedDate` directly from its own render's closure (which would be
+  // stale) - so it computes the next month from React's functional setState
+  // form instead, which always receives the truly-current state no matter
+  // which render's closure ends up calling it or how many updates are
+  // already queued.
   const shiftFocusedDate = (direction: 1 | -1) => {
-    const next = new Date(focusedDateRef.current);
-    next.setUTCMonth(next.getUTCMonth() + direction);
-    setFocusedDate(next);
-    setSelectedDateKey(toDateKey(next.toISOString()));
+    setFocusedDate((previousFocusedDate) => {
+      const next = new Date(previousFocusedDate);
+      next.setUTCMonth(next.getUTCMonth() + direction);
+      return next;
+    });
   };
 
   const monthSwipeResponder = useRef(
@@ -296,31 +302,38 @@ export default function CalendarScreen() {
     }
   };
 
+  // Memoized so <Tabs.Screen> only calls navigation.setOptions when the
+  // header actually needs to change (i.e. activeCalendarId), instead of on
+  // every render - a fresh options object every render was extra render
+  // churn happening right around mount for no reason.
+  const headerOptions = useMemo(
+    () => ({
+      headerLeft: () => (
+        <TouchableOpacity
+          testID="calendar-today-button"
+          onPress={handleToday}
+          style={styles.headerTodayButton}
+        >
+          <Text style={styles.headerTodayText}>今日</Text>
+        </TouchableOpacity>
+      ),
+      headerRight: () =>
+        activeCalendarId ? (
+          <TouchableOpacity
+            testID="calendar-manage-tags-button"
+            onPress={() => setIsTagModalVisible(true)}
+            style={styles.headerTagButton}
+          >
+            <Text style={styles.headerTagButtonText}>タグ管理</Text>
+          </TouchableOpacity>
+        ) : null,
+    }),
+    [activeCalendarId]
+  );
+
   return (
     <>
-      <Tabs.Screen
-        options={{
-          headerLeft: () => (
-            <TouchableOpacity
-              testID="calendar-today-button"
-              onPress={handleToday}
-              style={styles.headerTodayButton}
-            >
-              <Text style={styles.headerTodayText}>今日</Text>
-            </TouchableOpacity>
-          ),
-          headerRight: () =>
-            activeCalendarId ? (
-              <TouchableOpacity
-                testID="calendar-manage-tags-button"
-                onPress={() => setIsTagModalVisible(true)}
-                style={styles.headerTagButton}
-              >
-                <Text style={styles.headerTagButtonText}>タグ管理</Text>
-              </TouchableOpacity>
-            ) : null,
-        }}
-      />
+      <Tabs.Screen options={headerOptions} />
       <View
         testID="calendar-container"
         style={styles.container}

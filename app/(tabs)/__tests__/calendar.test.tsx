@@ -591,6 +591,24 @@ describe("CalendarScreen", () => {
     expect(queryByTestId("calendar-event-event-2")).toBeNull();
   });
 
+  it("advances by exactly one month on the very first press, even after the grid's onLayout measurements have already fired", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+    // Simulate the grid-sizing onLayout measurements that fire shortly after
+    // mount, before the user gets a chance to tap anything.
+    const layout = (height: number) => ({ nativeEvent: { layout: { height, width: 375, x: 0, y: 0 } } });
+    await fireEvent(getByTestId("calendar-container"), "layout", layout(800));
+    await fireEvent(getByTestId("calendar-above-grid"), "layout", layout(150));
+    await fireEvent(getByTestId("calendar-below-grid"), "layout", layout(50));
+
+    await fireEvent.press(getByTestId("calendar-month-next"));
+
+    expect(getByText("2026年9月")).toBeTruthy();
+  });
+
   it("moves to the next/previous month and updates the label and query range", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
