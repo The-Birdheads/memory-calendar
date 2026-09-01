@@ -1,6 +1,18 @@
 import { useState } from "react";
-import { FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  FlatList,
+  Keyboard,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { Tabs, router } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
 import {
@@ -89,47 +101,51 @@ function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
         animationType="fade"
         onRequestClose={() => setIsDetailModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>献立の詳細</Text>
-            <Text style={styles.modalMeta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
-            <TextInput
-              testID={`meal-edit-title-input-${mealRecord.id}`}
-              style={styles.input}
-              placeholder="料理名"
-              value={title}
-              onChangeText={setTitle}
-            />
-            <TextInput
-              testID={`meal-edit-url-input-${mealRecord.id}`}
-              style={styles.input}
-              placeholder="URL"
-              autoCapitalize="none"
-              keyboardType="url"
-              value={url}
-              onChangeText={setUrl}
-            />
-            <TextInput
-              testID={`meal-edit-memo-input-${mealRecord.id}`}
-              style={styles.input}
-              placeholder="メモ"
-              multiline
-              value={memo}
-              onChangeText={setMemo}
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                testID={`meal-edit-cancel-${mealRecord.id}`}
-                onPress={() => setIsDetailModalVisible(false)}
-              >
-                <Text>キャンセル</Text>
-              </TouchableOpacity>
-              <TouchableOpacity testID={`meal-edit-save-${mealRecord.id}`} onPress={handleSave}>
-                <Text style={styles.saveLink}>保存</Text>
-              </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>献立の詳細</Text>
+              <Text style={styles.modalMeta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
+              <TextInput
+                testID={`meal-edit-title-input-${mealRecord.id}`}
+                style={styles.input}
+                placeholder="料理名"
+                returnKeyType="done"
+                value={title}
+                onChangeText={setTitle}
+              />
+              <TextInput
+                testID={`meal-edit-url-input-${mealRecord.id}`}
+                style={styles.input}
+                placeholder="URL"
+                autoCapitalize="none"
+                keyboardType="url"
+                returnKeyType="done"
+                value={url}
+                onChangeText={setUrl}
+              />
+              <TextInput
+                testID={`meal-edit-memo-input-${mealRecord.id}`}
+                style={styles.input}
+                placeholder="メモ"
+                multiline
+                value={memo}
+                onChangeText={setMemo}
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  testID={`meal-edit-cancel-${mealRecord.id}`}
+                  onPress={() => setIsDetailModalVisible(false)}
+                >
+                  <Text>キャンセル</Text>
+                </TouchableOpacity>
+                <TouchableOpacity testID={`meal-edit-save-${mealRecord.id}`} onPress={handleSave}>
+                  <Text style={styles.saveLink}>保存</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -193,7 +209,21 @@ export default function MealsScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <>
+      <Tabs.Screen
+        options={{
+          headerRight: () => (
+            <TouchableOpacity
+              testID="meals-search-button"
+              onPress={() => router.push({ pathname: "/meal-search", params: { calendarId: activeCalendarId } })}
+            >
+              <Text style={styles.headerSearchText}>🔍</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
       <View style={styles.switcher}>
         {calendars.map((calendar) => (
           <TouchableOpacity
@@ -216,6 +246,7 @@ export default function MealsScreen() {
           testID="meal-create-title-input"
           style={styles.input}
           placeholder="料理名"
+          returnKeyType="done"
           value={newTitle}
           onChangeText={setNewTitle}
         />
@@ -225,6 +256,7 @@ export default function MealsScreen() {
           placeholder="URL"
           autoCapitalize="none"
           keyboardType="url"
+          returnKeyType="done"
           value={newUrl}
           onChangeText={setNewUrl}
         />
@@ -300,13 +332,18 @@ export default function MealsScreen() {
 
       <Text style={styles.sectionTitle}>食べる予定</Text>
       <FlatList data={futureRecords} keyExtractor={(item) => item.id} renderItem={renderItem} />
-    </View>
+      </View>
+      </TouchableWithoutFeedback>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerSearchText: {
+    fontSize: 18,
   },
   switcher: {
     flexDirection: "row",

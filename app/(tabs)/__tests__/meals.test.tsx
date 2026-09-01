@@ -1,4 +1,6 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { Keyboard } from "react-native";
+import { router } from "expo-router";
 
 import MealsScreen from "../meals";
 import { useMyCalendars } from "../../../src/features/calendars/hooks";
@@ -8,6 +10,17 @@ import {
   useMealRecords,
   useUpdateMealRecord,
 } from "../../../src/features/meals/hooks";
+
+jest.mock("expo-router", () => {
+  const React = require("react");
+  return {
+    router: { push: jest.fn() },
+    Tabs: {
+      Screen: ({ options }: any) =>
+        React.createElement(React.Fragment, null, options?.headerLeft?.(), options?.headerRight?.()),
+    },
+  };
+});
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
@@ -69,6 +82,30 @@ describe("MealsScreen", () => {
     expect(getByText("食べる予定")).toBeTruthy();
     expect(getByTestId("meal-item-meal-1")).toBeTruthy();
     expect(getByTestId("meal-item-meal-2")).toBeTruthy();
+  });
+
+  it("navigates to the search screen for the active calendar from the header search button", async () => {
+    mockCommonHooks(RECORDS);
+
+    const { getByTestId } = await render(<MealsScreen />);
+
+    await fireEvent.press(getByTestId("meals-search-button"));
+
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/meal-search",
+      params: { calendarId: "cal-1" },
+    });
+  });
+
+  it("dismisses the keyboard when tapping outside an input", async () => {
+    mockCommonHooks(RECORDS);
+    const dismissSpy = jest.spyOn(Keyboard, "dismiss");
+
+    const { getByText } = await render(<MealsScreen />);
+
+    await fireEvent.press(getByText("食べたもの"));
+
+    expect(dismissSpy).toHaveBeenCalled();
   });
 
   it("shows the date and meal slot together", async () => {

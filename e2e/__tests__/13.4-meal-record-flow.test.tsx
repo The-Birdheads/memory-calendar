@@ -5,6 +5,17 @@ import { useMyCalendars } from "../../src/features/calendars/hooks";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
+jest.mock("expo-router", () => {
+  const React = require("react");
+  return {
+    router: { push: jest.fn() },
+    Tabs: {
+      Screen: ({ options }: any) =>
+        React.createElement(React.Fragment, null, options?.headerLeft?.(), options?.headerRight?.()),
+    },
+  };
+});
+
 jest.mock("../../src/shared/api/supabaseClient", () => ({
   getSupabaseClient: jest.fn(),
 }));
