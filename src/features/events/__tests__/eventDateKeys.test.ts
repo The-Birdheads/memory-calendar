@@ -23,6 +23,14 @@ describe("expandEventDateKeys", () => {
     ]);
   });
 
+  it("keys by the JST calendar day, not the raw UTC date", () => {
+    // 2026-09-01T20:00:00.000Z is 2026-09-02 05:00 JST - a late-night event
+    // stored in UTC should appear on its JST day, not the UTC one.
+    expect(expandEventDateKeys("2026-09-01T20:00:00.000Z", "2026-09-01T21:00:00.000Z")).toEqual([
+      "2026-09-02",
+    ]);
+  });
+
   it("falls back to just the start date when end is before start (malformed data)", () => {
     expect(expandEventDateKeys("2026-09-05T09:00:00.000Z", "2026-09-01T10:00:00.000Z")).toEqual([
       "2026-09-05",

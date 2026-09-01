@@ -73,8 +73,8 @@ describe("EventFormFields", () => {
       <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />
     );
 
-    expect(getByText("2026/09/01 09:00")).toBeTruthy();
-    expect(getByText("2026/09/01 10:00")).toBeTruthy();
+    expect(getByText("2026/09/01 18:00")).toBeTruthy();
+    expect(getByText("2026/09/01 19:00")).toBeTruthy();
   });
 
   it("shows the start/end labels without a time when all-day, and uses a date-only picker", async () => {

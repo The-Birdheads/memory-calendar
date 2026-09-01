@@ -80,7 +80,7 @@ const TODOS_MULTI_DAY_EVENT = [
     reminderAt: null,
     eventTitle: "旅行",
     eventStartAt: "2026-09-10T10:00:00.000Z",
-    eventEndAt: "2026-09-12T18:00:00.000Z",
+    eventEndAt: "2026-09-12T10:00:00.000Z",
   },
 ];
 

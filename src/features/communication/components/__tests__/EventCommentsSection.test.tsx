@@ -14,7 +14,7 @@ describe("EventCommentsSection", () => {
 
     expect(getByText("楽しみですね")).toBeTruthy();
     expect(getByText("user-1")).toBeTruthy();
-    expect(getByText("2026/08/18 00:00")).toBeTruthy();
+    expect(getByText("2026/08/18 09:00")).toBeTruthy();
   });
 
   it("submits the entered text and clears the input", async () => {

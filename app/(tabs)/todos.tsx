@@ -12,10 +12,7 @@ import {
   useUpdateTodo,
 } from "../../src/features/todos/hooks";
 import type { TodoWithEventTitle } from "../../src/features/todos/types";
-
-function toDateKey(iso: string): string {
-  return iso.slice(0, 10);
-}
+import { toJstDateKey } from "../../src/shared/utils/formatDateTime";
 
 interface TodoItemRowProps {
   todo: TodoWithEventTitle;
@@ -106,7 +103,7 @@ function TodoItemRow({ todo, onToggle, onDelete, onSetReminder }: TodoItemRowPro
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>ToDoを削除しますか?</Text>
+            <Text style={styles.modalTitle}>{todo.title}を削除しますか?</Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
                 testID={`todo-delete-cancel-${todo.id}`}
@@ -148,7 +145,7 @@ function EventSection({
     router.push({
       pathname: "/(tabs)/calendar",
       params: {
-        date: toDateKey(group.eventStartAt),
+        date: toJstDateKey(group.eventStartAt),
         calendarId: activeCalendarId,
         // Forces the params object to change even when navigating to the same
         // date twice in a row, so the calendar screen's effect always re-fires.
@@ -166,16 +163,16 @@ function EventSection({
           onPress={() => onToggleCollapse(group.eventId)}
         >
           <Text style={styles.sectionChevron}>{isCollapsed ? "▶" : "▼"}</Text>
-          <Text style={styles.sectionTitle}>{group.eventTitle}</Text>
-        </TouchableOpacity>
-        <View style={styles.sectionHeaderRight}>
+          <Text style={styles.sectionTitle} numberOfLines={1}>
+            {group.eventTitle}
+          </Text>
           <Text style={styles.sectionDateLabel}>
             {formatEventDateRangeLabel(group.eventStartAt, group.eventEndAt)}
           </Text>
-          <TouchableOpacity testID={`todo-section-calendar-${group.eventId}`} onPress={handleGoToCalendar}>
-            <Text style={styles.calendarLink}>カレンダーへ</Text>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
+        <TouchableOpacity testID={`todo-section-calendar-${group.eventId}`} onPress={handleGoToCalendar}>
+          <Text style={styles.calendarLink}>カレンダーへ</Text>
+        </TouchableOpacity>
       </View>
 
       {!isCollapsed
@@ -327,10 +324,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
-  },
-  sectionHeaderRight: {
-    alignItems: "flex-end",
-    gap: 2,
+    flexShrink: 1,
   },
   sectionDateLabel: {
     color: "#999",

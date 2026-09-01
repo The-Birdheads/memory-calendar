@@ -39,18 +39,24 @@ import { CalendarSettingsModal } from "../../src/features/calendars/components/C
 import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useTagTree } from "../../src/features/tags/hooks";
 import { useCreateTodo } from "../../src/features/todos/hooks";
-import { formatTime } from "../../src/shared/utils/formatDateTime";
+import { formatTime, jstNow } from "../../src/shared/utils/formatDateTime";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
 const MAX_DOTS_PER_CELL = 3;
 
+// focusedDate/"today" represent a CALENDAR DAY, not an absolute instant - by
+// convention here their UTC-* accessors are read as if they were the
+// intended (JST) day's own components, so "now" must be JST-shifted before
+// seeding them (see jstNow) to keep "today" correct right around UTC
+// midnight (9am JST). expandEventDateKeys handles the separate job of
+// mapping a real event timestamp to its JST day.
 function toDateKey(iso: string): string {
   return iso.slice(0, 10);
 }
 
 function todayDateKey(): string {
-  return toDateKey(new Date().toISOString());
+  return toDateKey(jstNow().toISOString());
 }
 
 function formatMonthLabel(date: Date): string {
@@ -84,7 +90,7 @@ export default function CalendarScreen() {
   const [joinInviteCode, setJoinInviteCode] = useState("");
   const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
 
-  const [focusedDate, setFocusedDate] = useState(() => new Date());
+  const [focusedDate, setFocusedDate] = useState(() => jstNow());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayDateKey());
 
   // Jumps the calendar to a specific date/calendar when navigated here with
@@ -187,7 +193,7 @@ export default function CalendarScreen() {
   };
 
   const handleToday = () => {
-    setFocusedDate(new Date());
+    setFocusedDate(jstNow());
   };
 
   const handleSelectDateCell = (dateKey: string) => {
@@ -558,7 +564,7 @@ export default function CalendarScreen() {
                           testID={`calendar-grid-dot-${event.id}`}
                           style={[styles.gridEventBar, { backgroundColor: resolveEventColor(event) }]}
                         >
-                          <Text style={styles.gridEventBarText} numberOfLines={1}>
+                          <Text style={styles.gridEventBarText} numberOfLines={1} ellipsizeMode="clip">
                             {event.title}
                           </Text>
                         </View>

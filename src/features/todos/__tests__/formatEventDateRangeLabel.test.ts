@@ -8,7 +8,7 @@ describe("formatEventDateRangeLabel", () => {
   });
 
   it("shows a date range, with no time, when the event spans multiple days", () => {
-    expect(formatEventDateRangeLabel("2026-09-10T10:00:00.000Z", "2026-09-12T18:00:00.000Z")).toBe(
+    expect(formatEventDateRangeLabel("2026-09-10T10:00:00.000Z", "2026-09-12T10:00:00.000Z")).toBe(
       "2026/09/10〜2026/09/12"
     );
   });

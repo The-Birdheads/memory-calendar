@@ -88,7 +88,7 @@ describe("MemoriesScreen", () => {
 
     await fireEvent.press(getByTestId("memory-item-event-1"));
 
-    expect(getByText("2026/08/10 10:00")).toBeTruthy();
+    expect(getByText("2026/08/10 19:00")).toBeTruthy();
     expect(useEventPhotos).toHaveBeenLastCalledWith("event-1");
     expect(useComments).toHaveBeenLastCalledWith("event-1");
     expect(useReactions).toHaveBeenLastCalledWith("event-1");
