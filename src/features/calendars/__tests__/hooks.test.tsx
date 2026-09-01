@@ -31,34 +31,34 @@ describe("useCreateCalendar", () => {
     jest.clearAllMocks();
   });
 
-  it("returns true and clears the error when creation succeeds", async () => {
+  it("returns the created calendar and clears the error when creation succeeds", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
     (createCalendar as jest.Mock).mockResolvedValue({ ok: true, value: { id: "cal-1" } });
 
     const { result } = await renderHook(() => useCreateCalendar());
 
-    let success = false;
+    let created: { id: string } | null = null;
     await act(async () => {
-      success = await result.current.createCalendar({ name: "我が家" });
+      created = await result.current.createCalendar({ name: "我が家" });
     });
 
-    expect(success).toBe(true);
+    expect(created).toEqual({ id: "cal-1" });
     expect(result.current.error).toBeNull();
     expect(createCalendar).toHaveBeenCalledWith({}, { name: "我が家" });
   });
 
-  it("returns false and sets the error when creation fails", async () => {
+  it("returns null and sets the error when creation fails", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
     (createCalendar as jest.Mock).mockResolvedValue({ ok: false, error: { type: "ValidationError", field: "name" } });
 
     const { result } = await renderHook(() => useCreateCalendar());
 
-    let success = true;
+    let created: { id: string } | null = { id: "should-be-cleared" };
     await act(async () => {
-      success = await result.current.createCalendar({ name: "" });
+      created = await result.current.createCalendar({ name: "" });
     });
 
-    expect(success).toBe(false);
+    expect(created).toBeNull();
     expect(result.current.error).toEqual({ type: "ValidationError", field: "name" });
   });
 });

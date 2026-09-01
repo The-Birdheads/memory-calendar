@@ -20,7 +20,7 @@ import type {
 } from "./types";
 
 export interface UseCreateCalendarResult {
-  createCalendar: (input: CreateCalendarInput) => Promise<boolean>;
+  createCalendar: (input: CreateCalendarInput) => Promise<Calendar | null>;
   isSubmitting: boolean;
   error: CalendarError | null;
 }
@@ -36,9 +36,9 @@ export function useCreateCalendar(): UseCreateCalendarResult {
     setIsSubmitting(false);
     if (!result.ok) {
       setError(result.error);
-      return false;
+      return null;
     }
-    return true;
+    return result.value;
   }, []);
 
   return { createCalendar: runCreateCalendar, isSubmitting, error };

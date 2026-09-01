@@ -35,7 +35,7 @@ import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
 import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
-import { TagManagementModal } from "../../src/features/tags/components/TagManagementModal";
+import { CalendarSettingsModal } from "../../src/features/calendars/components/CalendarSettingsModal";
 import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useTagTree } from "../../src/features/tags/hooks";
 import { useCreateTodo } from "../../src/features/todos/hooks";
@@ -116,7 +116,7 @@ export default function CalendarScreen() {
   const { createEvent, error: createEventError } = useCreateEvent();
   const { createTodo } = useCreateTodo();
 
-  const [isTagModalVisible, setIsTagModalVisible] = useState(false);
+  const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   const [isDayEventsModalVisible, setIsDayEventsModalVisible] = useState(false);
@@ -335,11 +335,11 @@ export default function CalendarScreen() {
       headerRight: () =>
         activeCalendarId ? (
           <TouchableOpacity
-            testID="calendar-manage-tags-button"
-            onPress={() => setIsTagModalVisible(true)}
+            testID="calendar-settings-button"
+            onPress={() => setIsSettingsModalVisible(true)}
             style={styles.headerTagButton}
           >
-            <Text style={styles.headerTagButtonText}>タグ管理</Text>
+            <Text style={styles.headerTagButtonText}>設定</Text>
           </TouchableOpacity>
         ) : null,
     }),
@@ -484,12 +484,15 @@ export default function CalendarScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {isTagModalVisible ? (
-        <TagManagementModal
+      {isSettingsModalVisible ? (
+        <CalendarSettingsModal
           calendars={calendars}
-          initialCalendarId={activeCalendarId}
-          onClose={() => setIsTagModalVisible(false)}
-          onChange={refetchTagTree}
+          currentUserId={session?.user.id}
+          onClose={() => setIsSettingsModalVisible(false)}
+          onChange={() => {
+            refetchCalendars();
+            refetchTagTree();
+          }}
         />
       ) : null}
 

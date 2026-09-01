@@ -10,6 +10,7 @@ import {
   useJoinByInvite,
   useMyCalendars,
   useRemoveMember,
+  useUpdateCalendar,
 } from "../../../src/features/calendars/hooks";
 import { computeDateRange } from "../../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../../src/features/events/hooks";
@@ -45,6 +46,7 @@ jest.mock("../../../src/features/calendars/hooks", () => ({
   useCalendarMembers: jest.fn(),
   useRemoveMember: jest.fn(),
   useCreateCalendar: jest.fn(),
+  useUpdateCalendar: jest.fn(),
   useCreateInvite: jest.fn(),
   useJoinByInvite: jest.fn(),
 }));
@@ -140,6 +142,11 @@ function mockCommonHooks() {
   });
   (useCreateCalendar as jest.Mock).mockReturnValue({
     createCalendar: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useUpdateCalendar as jest.Mock).mockReturnValue({
+    updateCalendar: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -810,7 +817,9 @@ describe("CalendarScreen", () => {
 
     const { getByTestId } = await render(<CalendarScreen />);
 
-    await fireEvent.press(getByTestId("calendar-manage-tags-button"));
+    await fireEvent.press(getByTestId("calendar-settings-button"));
+    await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+    await fireEvent.press(getByTestId("calendar-settings-manage-tags"));
     await fireEvent.press(getByTestId("tag-management-new-button"));
     await fireEvent.changeText(getByTestId("edit-tag-name-input"), "旅行");
     await fireEvent.press(getByTestId("edit-tag-save-button"));
