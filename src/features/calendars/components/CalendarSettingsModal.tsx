@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { TagManagementModal } from "../../tags/components/TagManagementModal";
+import { Icon } from "../../../shared/components/Icon";
 import { useCalendarMembers, useCreateCalendar, useCreateInvite, useRemoveMember, useUpdateCalendar } from "../hooks";
 import { getCalendarErrorMessageJa } from "../service";
 import type { Calendar, CalendarKind } from "../types";
@@ -123,7 +124,8 @@ export function CalendarSettingsModal({ calendars, currentUserId, onClose, onCha
                   style={styles.newButton}
                   onPress={handleStartCreate}
                 >
-                  <Text style={styles.newButtonText}>＋ 新規追加</Text>
+                  <Icon name="plus" size={14} color="#fff" />
+                  <Text style={styles.newButtonText}>新規追加</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -296,6 +298,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   newButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     alignSelf: "flex-start",
     marginTop: 8,
     paddingHorizontal: 14,

@@ -10,9 +10,19 @@ import {
   useUpdateTodo,
 } from "../../../src/features/todos/hooks";
 
-jest.mock("expo-router", () => ({
-  router: { push: jest.fn() },
-}));
+jest.mock("expo-router", () => {
+  const React = require("react");
+  return {
+    router: { push: jest.fn() },
+    // Treats "focus" as "mount" for testing purposes, since there's no real
+    // navigation container here to fire actual focus events.
+    useFocusEffect: (callback: () => void) => {
+      React.useEffect(() => {
+        callback();
+      }, [callback]);
+    },
+  };
+});
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
@@ -143,6 +153,20 @@ describe("TodosScreen", () => {
     await waitFor(() => expect(useTodosByCalendar).toHaveBeenLastCalledWith("cal-2"));
   });
 
+  it("refetches when the tab regains focus, so ToDos added elsewhere (e.g. from the calendar) show up", async () => {
+    const refetch = jest.fn();
+    mockCommonHooks(TODOS, refetch);
+
+    await render(<TodosScreen />);
+
+    // The screen mounting counts as "gaining focus" here (see the
+    // useFocusEffect mock) - the important thing is it's driven by focus,
+    // not just the hook's own mount-time fetch, so switching back to this
+    // tab later (an already-mounted screen regaining focus, not a fresh
+    // mount) would also trigger it in the real app.
+    await waitFor(() => expect(refetch).toHaveBeenCalled());
+  });
+
   it("collapses and expands a section when its header is pressed", async () => {
     mockCommonHooks(TODOS);
 
@@ -235,24 +259,22 @@ describe("TodosScreen", () => {
     expect(queryByTestId("todo-delete-confirm-todo-1")).toBeNull();
   });
 
-  it("shows the reminder status icon active when a reminder is set, on the same row as the title", async () => {
+  it("shows the reminder status icon active (bell, blue) when a reminder is set, on the same row as the title", async () => {
     mockCommonHooks(TODOS);
 
     const { getByTestId } = await render(<TodosScreen />);
 
     const flattened = flattenStyle(getByTestId("todo-reminder-icon-todo-2").props.style);
-    expect(flattened.opacity).toBeUndefined();
-    expect(flattened.textDecorationLine).toBeUndefined();
+    expect(flattened.tintColor).toBe("#2f6fed");
   });
 
-  it("shows the reminder status icon inactive (dimmed + struck through) when no reminder is set", async () => {
+  it("shows the reminder status icon inactive (bell-off, gray) when no reminder is set", async () => {
     mockCommonHooks(TODOS);
 
     const { getByTestId } = await render(<TodosScreen />);
 
     const flattened = flattenStyle(getByTestId("todo-reminder-icon-todo-1").props.style);
-    expect(flattened.opacity).toBeLessThan(1);
-    expect(flattened.textDecorationLine).toBe("line-through");
+    expect(flattened.tintColor).toBe("#999");
   });
 
   it("opens the reminder modal from the settings icon and saves a reminder date", async () => {

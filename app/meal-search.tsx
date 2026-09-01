@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 
 import { useMealRecords } from "../src/features/meals/hooks";
 import type { MealSlot } from "../src/features/meals/types";
+import { Icon } from "../src/shared/components/Icon";
 
 const MEAL_SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
@@ -117,14 +118,10 @@ export default function MealSearchScreen() {
                 <View style={styles.resultMetaRow}>
                   <Text style={styles.meta}>{formatMealDateSlotLabel(item.mealDate, item.slot)}</Text>
                   {item.url ? (
-                    <Text testID={`meal-search-result-url-icon-${item.id}`} style={styles.resultIcon}>
-                      🔗
-                    </Text>
+                    <Icon testID={`meal-search-result-url-icon-${item.id}`} name="link" size={12} color="#2f6fed" />
                   ) : null}
                   {item.memo ? (
-                    <Text testID={`meal-search-result-memo-icon-${item.id}`} style={styles.resultIcon}>
-                      📝
-                    </Text>
+                    <Icon testID={`meal-search-result-memo-icon-${item.id}`} name="note" size={12} color="#666" />
                   ) : null}
                 </View>
               </View>
@@ -200,9 +197,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-  resultIcon: {
-    fontSize: 12,
   },
   meta: {
     color: "#666",

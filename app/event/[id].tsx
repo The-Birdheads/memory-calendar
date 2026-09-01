@@ -54,6 +54,7 @@ import {
   useTodosByEvent,
 } from "../../src/features/todos/hooks";
 import type { Todo } from "../../src/features/todos/types";
+import { Icon } from "../../src/shared/components/Icon";
 import { formatDateTimeRange } from "../../src/shared/utils/formatDateTime";
 
 export default function EventDetailScreen() {
@@ -261,18 +262,27 @@ export default function EventDetailScreen() {
         </View>
 
         <View style={styles.detailInfo}>
-          <Text testID="event-detail-datetime" style={styles.detailText}>
-            🕐 {formatDateTimeRange(event.startAt, event.endAt, event.isAllDay)}
-          </Text>
-          {event.location ? (
-            <Text testID="event-detail-location" style={styles.detailText}>
-              📍 {event.location}
+          <View style={styles.detailRow}>
+            <Icon name="clock" size={14} color="#444" />
+            <Text testID="event-detail-datetime" style={styles.detailText}>
+              {formatDateTimeRange(event.startAt, event.endAt, event.isAllDay)}
             </Text>
+          </View>
+          {event.location ? (
+            <View style={styles.detailRow}>
+              <Icon name="location" size={14} color="#444" />
+              <Text testID="event-detail-location" style={styles.detailText}>
+                {event.location}
+              </Text>
+            </View>
           ) : null}
           {event.url ? (
-            <Text testID="event-detail-url" style={styles.detailLink}>
-              🔗 {event.url}
-            </Text>
+            <View style={styles.detailRow}>
+              <Icon name="link" size={14} color="#2f6fed" />
+              <Text testID="event-detail-url" style={styles.detailLink}>
+                {event.url}
+              </Text>
+            </View>
           ) : null}
         </View>
       </View>
@@ -461,6 +471,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 16,
+    gap: 6,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   detailText: {

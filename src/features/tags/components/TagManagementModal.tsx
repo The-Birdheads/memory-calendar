@@ -5,6 +5,7 @@ import { useCreateTag, useDeleteTag, useTagTree, useUpdateTag } from "../hooks";
 import { EditTagForm } from "./EditTagForm";
 import { DeleteTagConfirmModal } from "./DeleteTagConfirmModal";
 import { TagLevelIcon } from "./TagLevelIcon";
+import { Icon } from "../../../shared/components/Icon";
 import type { Tag, TagTreeNode, UpdateTagInput } from "../types";
 
 function flattenTagTree(nodes: TagTreeNode[]): TagTreeNode[] {
@@ -154,7 +155,8 @@ export function TagManagementModal({ calendars, initialCalendarId, onClose, onCh
                   style={styles.newButton}
                   onPress={() => setMode("create")}
                 >
-                  <Text style={styles.newButtonText}>＋ 新規</Text>
+                  <Icon name="plus" size={14} color="#fff" />
+                  <Text style={styles.newButtonText}>新規</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -256,6 +258,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   newButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     alignSelf: "flex-start",
     marginTop: 8,
     paddingHorizontal: 14,

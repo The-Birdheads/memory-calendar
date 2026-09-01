@@ -39,6 +39,7 @@ import { CalendarSettingsModal } from "../../src/features/calendars/components/C
 import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useTagTree } from "../../src/features/tags/hooks";
 import { useCreateTodo } from "../../src/features/todos/hooks";
+import { Icon } from "../../src/shared/components/Icon";
 import { formatTime, jstNow } from "../../src/shared/utils/formatDateTime";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -383,7 +384,7 @@ export default function CalendarScreen() {
           style={styles.switchAddButton}
           onPress={() => setIsOnboardingModalVisible(true)}
         >
-          <Text style={styles.switchAddButtonText}>＋</Text>
+          <Icon name="plus" size={16} color="#2f6fed" />
         </TouchableOpacity>
         {activeCalendarId ? (
           <TouchableOpacity testID="calendar-invite-button" style={styles.inviteButton} onPress={handleGenerateInvite}>
@@ -608,13 +609,13 @@ export default function CalendarScreen() {
                     openCreateModal();
                   }}
                 >
-                  <Text style={styles.dayModalAddText}>＋</Text>
+                  <Icon name="plus" size={20} color="#2f6fed" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   testID="calendar-day-modal-close"
                   onPress={() => setIsDayEventsModalVisible(false)}
                 >
-                  <Text style={styles.dayModalCloseText}>✕</Text>
+                  <Icon name="close" size={18} color="#666" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -817,10 +818,6 @@ const styles = StyleSheet.create({
     borderColor: "#ccc",
     alignItems: "center",
     justifyContent: "center",
-  },
-  switchAddButtonText: {
-    color: "#2f6fed",
-    fontWeight: "700",
   },
   inviteButton: {
     marginLeft: "auto",
@@ -1060,15 +1057,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 20,
-  },
-  dayModalAddText: {
-    fontSize: 22,
-    color: "#2f6fed",
-    fontWeight: "700",
-  },
-  dayModalCloseText: {
-    fontSize: 18,
-    color: "#666",
   },
   dayModalEmptyText: {
     color: "#999",

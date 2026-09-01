@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
-  FlatList,
   Keyboard,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,6 +15,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Tabs, router } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
+import { Icon } from "../../src/shared/components/Icon";
 import {
   useCreateMealRecord,
   useDeleteMealRecord,
@@ -76,14 +77,10 @@ function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
           <View style={styles.mealMetaRow}>
             <Text style={styles.meta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
             {mealRecord.url ? (
-              <Text testID={`meal-url-icon-${mealRecord.id}`} style={styles.mealIcon}>
-                🔗
-              </Text>
+              <Icon testID={`meal-url-icon-${mealRecord.id}`} name="link" size={12} color="#2f6fed" />
             ) : null}
             {mealRecord.memo ? (
-              <Text testID={`meal-memo-icon-${mealRecord.id}`} style={styles.mealIcon}>
-                📝
-              </Text>
+              <Icon testID={`meal-memo-icon-${mealRecord.id}`} name="note" size={12} color="#666" />
             ) : null}
           </View>
         </View>
@@ -167,6 +164,8 @@ export default function MealsScreen() {
   const [newMealDate, setNewMealDate] = useState(() => new Date());
   const [newSlot, setNewSlot] = useState<MealSlot>("breakfast");
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isPastCollapsed, setIsPastCollapsed] = useState(true);
+  const [isFutureCollapsed, setIsFutureCollapsed] = useState(false);
 
   const today = todayDateString();
   const pastRecords = mealRecords.filter((record) => record.mealDate < today);
@@ -204,10 +203,6 @@ export default function MealsScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: MealRecord }) => (
-    <MealRecordRow mealRecord={item} onSave={handleSave} onDelete={handleDelete} />
-  );
-
   return (
     <>
       <Tabs.Screen
@@ -215,15 +210,16 @@ export default function MealsScreen() {
           headerRight: () => (
             <TouchableOpacity
               testID="meals-search-button"
+              style={styles.headerSearchButton}
               onPress={() => router.push({ pathname: "/meal-search", params: { calendarId: activeCalendarId } })}
             >
-              <Text style={styles.headerSearchText}>🔍</Text>
+              <Icon name="search" size={20} color="#2f6fed" />
             </TouchableOpacity>
           ),
         }}
       />
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
       <View style={styles.switcher}>
         {calendars.map((calendar) => (
           <TouchableOpacity
@@ -327,12 +323,42 @@ export default function MealsScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>食べたもの</Text>
-      <FlatList data={pastRecords} keyExtractor={(item) => item.id} renderItem={renderItem} />
+      <TouchableOpacity
+        testID="meals-past-toggle"
+        style={styles.sectionHeader}
+        onPress={() => setIsPastCollapsed((prev) => !prev)}
+      >
+        <Icon name={isPastCollapsed ? "chevron-right" : "chevron-down"} size={13} color="#666" />
+        <Text style={styles.sectionTitle}>食べたもの ({pastRecords.length})</Text>
+      </TouchableOpacity>
+      {!isPastCollapsed ? (
+        pastRecords.length === 0 ? (
+          <Text style={styles.sectionEmptyText}>記録がありません</Text>
+        ) : (
+          pastRecords.map((record) => (
+            <MealRecordRow key={record.id} mealRecord={record} onSave={handleSave} onDelete={handleDelete} />
+          ))
+        )
+      ) : null}
 
-      <Text style={styles.sectionTitle}>食べる予定</Text>
-      <FlatList data={futureRecords} keyExtractor={(item) => item.id} renderItem={renderItem} />
-      </View>
+      <TouchableOpacity
+        testID="meals-future-toggle"
+        style={styles.sectionHeader}
+        onPress={() => setIsFutureCollapsed((prev) => !prev)}
+      >
+        <Icon name={isFutureCollapsed ? "chevron-right" : "chevron-down"} size={13} color="#666" />
+        <Text style={styles.sectionTitle}>食べる予定 ({futureRecords.length})</Text>
+      </TouchableOpacity>
+      {!isFutureCollapsed ? (
+        futureRecords.length === 0 ? (
+          <Text style={styles.sectionEmptyText}>予定がありません</Text>
+        ) : (
+          futureRecords.map((record) => (
+            <MealRecordRow key={record.id} mealRecord={record} onSave={handleSave} onDelete={handleDelete} />
+          ))
+        )
+      ) : null}
+      </ScrollView>
       </TouchableWithoutFeedback>
     </>
   );
@@ -342,8 +368,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerSearchText: {
-    fontSize: 18,
+  contentContainer: {
+    paddingBottom: 24,
+  },
+  headerSearchButton: {
+    marginRight: 12,
   },
   switcher: {
     flexDirection: "row",
@@ -361,11 +390,23 @@ const styles = StyleSheet.create({
     borderColor: "#2f6fed",
     backgroundColor: "#e8f0fe",
   },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
+  },
+  sectionEmptyText: {
+    color: "#999",
+    fontSize: 13,
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingVertical: 6,
   },
   mealRow: {
     paddingHorizontal: 16,
@@ -389,9 +430,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-  mealIcon: {
-    fontSize: 12,
   },
   editText: {
     color: "#2f6fed",

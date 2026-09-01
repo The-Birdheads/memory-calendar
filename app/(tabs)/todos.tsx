@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
+import { Icon } from "../../src/shared/components/Icon";
 import { formatEventDateRangeLabel } from "../../src/features/todos/formatEventDateRangeLabel";
 import { groupTodosByEvent, type EventTodoGroup } from "../../src/features/todos/groupByEvent";
 import {
@@ -58,17 +59,17 @@ function TodoItemRow({ todo, onToggle, onDelete, onSetReminder }: TodoItemRowPro
           <Text>{todo.isDone ? "☑" : "☐"}</Text>
         </TouchableOpacity>
         <Text style={[styles.todoTitle, todo.isDone && styles.doneText]}>{todo.title}</Text>
-        <Text
+        <Icon
           testID={`todo-reminder-icon-${todo.id}`}
-          style={[styles.reminderIcon, !hasReminder && styles.reminderIconInactive]}
-        >
-          ⏰
-        </Text>
+          name={hasReminder ? "bell" : "bell-off"}
+          size={15}
+          color={hasReminder ? "#2f6fed" : "#999"}
+        />
         <TouchableOpacity testID={`todo-settings-${todo.id}`} onPress={openReminderModal}>
-          <Text style={styles.rowIcon}>⚙️</Text>
+          <Icon name="gear" size={15} color="#666" />
         </TouchableOpacity>
         <TouchableOpacity testID={`todo-delete-${todo.id}`} onPress={() => setIsDeleteConfirmVisible(true)}>
-          <Text style={styles.rowIcon}>🗑️</Text>
+          <Icon name="trash" size={15} color="#d32f2f" />
         </TouchableOpacity>
       </View>
 
@@ -170,7 +171,7 @@ function EventSection({
           style={styles.sectionHeaderToggle}
           onPress={() => onToggleCollapse(group.eventId)}
         >
-          <Text style={styles.sectionChevron}>{isCollapsed ? "▶" : "▼"}</Text>
+          <Icon name={isCollapsed ? "chevron-right" : "chevron-down"} size={13} color="#666" />
           <Text style={styles.sectionTitle} numberOfLines={1}>
             {group.eventTitle}
           </Text>
@@ -204,6 +205,16 @@ export default function TodosScreen() {
   const activeCalendarId = selectedCalendarId ?? calendars[0]?.id ?? "";
 
   const { todos, refetch } = useTodosByCalendar(activeCalendarId);
+
+  // Realtime alone isn't reliable for "created elsewhere" cases (e.g. adding
+  // a ToDo from the calendar's event-creation form), so also refetch every
+  // time this tab actually comes into view - tabs stay mounted in the
+  // background, so switching to this tab wouldn't otherwise re-run anything.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
   const { toggleDone } = useToggleDone();
   const { deleteTodo } = useDeleteTodo();
   const { updateTodo } = useUpdateTodo();
@@ -383,10 +394,6 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
   },
-  sectionChevron: {
-    color: "#666",
-    fontSize: 12,
-  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
@@ -417,16 +424,6 @@ const styles = StyleSheet.create({
   doneText: {
     color: "#999",
     textDecorationLine: "line-through",
-  },
-  reminderIcon: {
-    fontSize: 14,
-  },
-  reminderIconInactive: {
-    opacity: 0.35,
-    textDecorationLine: "line-through",
-  },
-  rowIcon: {
-    fontSize: 15,
   },
   settingsLink: {
     color: "#2f6fed",

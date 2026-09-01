@@ -73,15 +73,19 @@ describe("MealsScreen", () => {
     jest.clearAllMocks();
   });
 
-  it("shows records separated into 食べる予定 (future) and 食べたもの (past) sections", async () => {
+  it("shows records separated into 食べる予定 (future, expanded by default) and 食べたもの (past, collapsed by default) sections", async () => {
     mockCommonHooks(RECORDS);
 
-    const { getByText, getByTestId } = await render(<MealsScreen />);
+    const { getByText, getByTestId, queryByTestId } = await render(<MealsScreen />);
 
-    expect(getByText("食べたもの")).toBeTruthy();
-    expect(getByText("食べる予定")).toBeTruthy();
-    expect(getByTestId("meal-item-meal-1")).toBeTruthy();
+    expect(getByText("食べたもの (1)")).toBeTruthy();
+    expect(getByText("食べる予定 (1)")).toBeTruthy();
+    expect(queryByTestId("meal-item-meal-1")).toBeNull();
     expect(getByTestId("meal-item-meal-2")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("meals-past-toggle"));
+
+    expect(getByTestId("meal-item-meal-1")).toBeTruthy();
   });
 
   it("navigates to the search screen for the active calendar from the header search button", async () => {
@@ -103,7 +107,11 @@ describe("MealsScreen", () => {
 
     const { getByText } = await render(<MealsScreen />);
 
-    await fireEvent.press(getByText("食べたもの"));
+    // "献立を記録" is plain (non-touchable) text, so pressing it is a genuine
+    // "outside any input" tap that should bubble up to the outer
+    // TouchableWithoutFeedback - unlike the section toggles, which consume
+    // their own presses.
+    await fireEvent.press(getByText("献立を記録"));
 
     expect(dismissSpy).toHaveBeenCalled();
   });
@@ -111,7 +119,9 @@ describe("MealsScreen", () => {
   it("shows the date and meal slot together", async () => {
     mockCommonHooks(RECORDS);
 
-    const { getByText } = await render(<MealsScreen />);
+    const { getByText, getByTestId } = await render(<MealsScreen />);
+
+    await fireEvent.press(getByTestId("meals-past-toggle"));
 
     expect(getByText("2026/08/10 朝食")).toBeTruthy();
     expect(getByText("2026/08/25 夕食")).toBeTruthy();
@@ -153,6 +163,7 @@ describe("MealsScreen", () => {
 
     expect(queryByTestId("meal-edit-title-input-meal-1")).toBeNull();
 
+    await fireEvent.press(getByTestId("meals-past-toggle"));
     await fireEvent.press(getByTestId("meal-details-meal-1"));
 
     expect(getByTestId("meal-edit-title-input-meal-1")).toBeTruthy();
@@ -166,6 +177,7 @@ describe("MealsScreen", () => {
 
     const { getByTestId, getAllByText } = await render(<MealsScreen />);
 
+    await fireEvent.press(getByTestId("meals-past-toggle"));
     await fireEvent.press(getByTestId("meal-details-meal-1"));
 
     expect(getAllByText("2026/08/10 朝食").length).toBeGreaterThan(0);
@@ -192,6 +204,7 @@ describe("MealsScreen", () => {
 
     const { getByTestId, queryByTestId } = await render(<MealsScreen />);
 
+    await fireEvent.press(getByTestId("meals-past-toggle"));
     await fireEvent.press(getByTestId("meal-details-meal-1"));
     await fireEvent.press(getByTestId("meal-edit-cancel-meal-1"));
 
@@ -207,6 +220,7 @@ describe("MealsScreen", () => {
 
     const { getByTestId } = await render(<MealsScreen />);
 
+    await fireEvent.press(getByTestId("meals-past-toggle"));
     await fireEvent.press(getByTestId("meal-delete-meal-1"));
 
     await waitFor(() => expect(deleteMealRecordMock).toHaveBeenCalledWith("meal-1"));
