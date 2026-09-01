@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { useAuthSession } from "../../src/features/auth/hooks";
 import { useMyCalendars } from "../../src/features/calendars/hooks";
 import {
-  useAddReaction,
   useComments,
   usePostComment,
   useReactions,
+  useToggleReaction,
 } from "../../src/features/communication/hooks";
 import { EventCommentsSection } from "../../src/features/communication/components/EventCommentsSection";
 import { EventReactionsBar } from "../../src/features/communication/components/EventReactionsBar";
@@ -15,6 +16,7 @@ import { EventPhotosGallery } from "../../src/features/memories/components/Event
 import { formatDateTime } from "../../src/shared/utils/formatDateTime";
 
 export default function MemoriesScreen() {
+  const { session } = useAuthSession();
   const { calendars } = useMyCalendars();
   const activeCalendarId = calendars[0]?.id ?? "";
 
@@ -27,7 +29,9 @@ export default function MemoriesScreen() {
   const { comments, refetch: refetchComments } = useComments(selectedId ?? "");
   const { postComment } = usePostComment();
   const { reactions, refetch: refetchReactions } = useReactions(selectedId ?? "");
-  const { addReaction } = useAddReaction();
+  const { toggleReaction } = useToggleReaction();
+
+  const myReaction = reactions.find((reaction) => reaction.userId === session?.user.id) ?? null;
 
   const handleSubmitComment = async (body: string) => {
     if (!selectedId) return;
@@ -35,9 +39,9 @@ export default function MemoriesScreen() {
     if (success) await refetchComments();
   };
 
-  const handleAddReaction = async (stampType: string) => {
+  const handleToggleReaction = async (stampType: string) => {
     if (!selectedId) return;
-    const success = await addReaction(selectedId, stampType);
+    const success = await toggleReaction(selectedId, stampType, myReaction);
     if (success) await refetchReactions();
   };
 
@@ -50,7 +54,11 @@ export default function MemoriesScreen() {
         <Text style={styles.title}>{selectedEntry.title}</Text>
         <Text style={styles.meta}>{formatDateTime(selectedEntry.startAt)}</Text>
         <EventPhotosGallery photos={photos} />
-        <EventReactionsBar reactions={reactions} onAddReaction={handleAddReaction} />
+        <EventReactionsBar
+          reactions={reactions}
+          currentUserId={session?.user.id}
+          onToggleReaction={handleToggleReaction}
+        />
         <EventCommentsSection comments={comments} onSubmit={handleSubmitComment} />
       </View>
     );

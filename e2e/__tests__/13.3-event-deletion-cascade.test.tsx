@@ -5,11 +5,11 @@ import EventDetailScreen from "../../app/event/[id]";
 import { useAuthSession } from "../../src/features/auth/hooks";
 import { useCalendarMembers } from "../../src/features/calendars/hooks";
 import {
-  useAddReaction,
   useComments,
   useDeleteComment,
   usePostComment,
   useReactions,
+  useToggleReaction,
 } from "../../src/features/communication/hooks";
 import { useAddReflection, useEventPhotos } from "../../src/features/memories/hooks";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
@@ -45,7 +45,7 @@ jest.mock("../../src/features/communication/hooks", () => ({
   usePostComment: jest.fn(),
   useDeleteComment: jest.fn(),
   useReactions: jest.fn(),
-  useAddReaction: jest.fn(),
+  useToggleReaction: jest.fn(),
 }));
 
 jest.mock("../../src/features/memories/hooks", () => ({
@@ -99,7 +99,7 @@ describe("13.3 予定削除フローの検証", () => {
     (usePostComment as jest.Mock).mockReturnValue({ postComment: jest.fn(), isSubmitting: false, error: null });
     (useDeleteComment as jest.Mock).mockReturnValue({ deleteComment: jest.fn(), isSubmitting: false, error: null });
     (useReactions as jest.Mock).mockReturnValue({ reactions: [], isLoading: false, error: null, refetch: jest.fn() });
-    (useAddReaction as jest.Mock).mockReturnValue({ addReaction: jest.fn(), isSubmitting: false, error: null });
+    (useToggleReaction as jest.Mock).mockReturnValue({ toggleReaction: jest.fn(), isSubmitting: false, error: null });
     (useEventPhotos as jest.Mock).mockReturnValue({ photos: [], isLoading: false, error: null, refetch: jest.fn() });
     (useAddReflection as jest.Mock).mockReturnValue({ addReflection: jest.fn(), isSubmitting: false, error: null });
     (useEventTags as jest.Mock).mockReturnValue({ tags: [], isLoading: false, error: null, refetch: jest.fn() });

@@ -17,11 +17,11 @@ import { useCalendarMembers } from "../../src/features/calendars/hooks";
 import { EventCommentsSection } from "../../src/features/communication/components/EventCommentsSection";
 import { EventReactionsBar } from "../../src/features/communication/components/EventReactionsBar";
 import {
-  useAddReaction,
   useComments,
   useDeleteComment,
   usePostComment,
   useReactions,
+  useToggleReaction,
 } from "../../src/features/communication/hooks";
 import { DeleteEventConfirmModal } from "../../src/features/events/components/DeleteEventConfirmModal";
 import {
@@ -69,7 +69,7 @@ export default function EventDetailScreen() {
   const { deleteComment } = useDeleteComment();
 
   const { reactions, refetch: refetchReactions } = useReactions(eventId);
-  const { addReaction } = useAddReaction();
+  const { toggleReaction } = useToggleReaction();
 
   const { tags, refetch: refetchTags } = useEventTags(eventId);
   const { tagTree } = useTagTree(calendarId);
@@ -125,8 +125,10 @@ export default function EventDetailScreen() {
     if (success) await refetchComments();
   };
 
-  const handleAddReaction = async (stampType: string) => {
-    const success = await addReaction(eventId, stampType);
+  const myReaction = reactions.find((reaction) => reaction.userId === session?.user.id) ?? null;
+
+  const handleToggleReaction = async (stampType: string) => {
+    const success = await toggleReaction(eventId, stampType, myReaction);
     if (success) await refetchReactions();
   };
 
@@ -237,7 +239,15 @@ export default function EventDetailScreen() {
       <Stack.Screen
         options={{ headerShown: true, title: event.title, headerBackButtonDisplayMode: "minimal" }}
       />
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
+      >
       <View style={styles.headerCard}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>{event.title}</Text>
@@ -274,7 +284,11 @@ export default function EventDetailScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>スタンプ</Text>
-        <EventReactionsBar reactions={reactions} onAddReaction={handleAddReaction} />
+        <EventReactionsBar
+          reactions={reactions}
+          currentUserId={session?.user.id}
+          onToggleReaction={handleToggleReaction}
+        />
       </View>
 
       <View style={styles.section}>
@@ -400,6 +414,7 @@ export default function EventDetailScreen() {
         </KeyboardAvoidingView>
       </Modal>
       </ScrollView>
+      </KeyboardAvoidingView>
     </>
   );
 }

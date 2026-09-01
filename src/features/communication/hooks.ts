@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
-import { addReaction, deleteComment, listComments, listReactions, postComment } from "./service";
+import { deleteComment, listComments, listReactions, postComment, toggleReaction } from "./service";
 import type { CommunicationError, EventComment, EventReaction } from "./types";
 
 export interface UseCommentsResult {
@@ -118,27 +118,30 @@ export function useReactions(eventId: string): UseReactionsResult {
   return { reactions, isLoading, error, refetch };
 }
 
-export interface UseAddReactionResult {
-  addReaction: (eventId: string, stampType: string) => Promise<boolean>;
+export interface UseToggleReactionResult {
+  toggleReaction: (eventId: string, stampType: string, currentReaction: EventReaction | null) => Promise<boolean>;
   isSubmitting: boolean;
   error: CommunicationError | null;
 }
 
-export function useAddReaction(): UseAddReactionResult {
+export function useToggleReaction(): UseToggleReactionResult {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<CommunicationError | null>(null);
 
-  const runAddReaction = useCallback(async (eventId: string, stampType: string) => {
-    setIsSubmitting(true);
-    setError(null);
-    const result = await addReaction(getSupabaseClient(), eventId, stampType);
-    setIsSubmitting(false);
-    if (!result.ok) {
-      setError(result.error);
-      return false;
-    }
-    return true;
-  }, []);
+  const runToggleReaction = useCallback(
+    async (eventId: string, stampType: string, currentReaction: EventReaction | null) => {
+      setIsSubmitting(true);
+      setError(null);
+      const result = await toggleReaction(getSupabaseClient(), eventId, stampType, currentReaction);
+      setIsSubmitting(false);
+      if (!result.ok) {
+        setError(result.error);
+        return false;
+      }
+      return true;
+    },
+    []
+  );
 
-  return { addReaction: runAddReaction, isSubmitting, error };
+  return { toggleReaction: runToggleReaction, isSubmitting, error };
 }

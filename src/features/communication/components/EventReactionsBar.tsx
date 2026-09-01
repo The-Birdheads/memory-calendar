@@ -6,14 +6,23 @@ const STAMP_OPTIONS = ["👍", "❤️", "😂", "😮", "😢"];
 
 export interface EventReactionsBarProps {
   reactions: EventReaction[];
-  onAddReaction: (stampType: string) => void;
+  /** The signed-in user's id, used to highlight their own current reaction (if any). */
+  currentUserId?: string;
+  /**
+   * Called with the pressed stamp type. A user has at most one active
+   * reaction: pressing their current stamp again removes it, pressing a
+   * different one switches to it.
+   */
+  onToggleReaction: (stampType: string) => void;
 }
 
-export function EventReactionsBar({ reactions, onAddReaction }: EventReactionsBarProps) {
+export function EventReactionsBar({ reactions, currentUserId, onToggleReaction }: EventReactionsBarProps) {
   const counts = reactions.reduce<Record<string, number>>((acc, reaction) => {
     acc[reaction.stampType] = (acc[reaction.stampType] ?? 0) + 1;
     return acc;
   }, {});
+
+  const myStampType = reactions.find((reaction) => reaction.userId === currentUserId)?.stampType ?? null;
 
   return (
     <View style={styles.container}>
@@ -31,8 +40,8 @@ export function EventReactionsBar({ reactions, onAddReaction }: EventReactionsBa
           <TouchableOpacity
             key={stampType}
             testID={`event-reaction-add-${stampType}`}
-            style={styles.optionButton}
-            onPress={() => onAddReaction(stampType)}
+            style={[styles.optionButton, stampType === myStampType && styles.optionButtonSelected]}
+            onPress={() => onToggleReaction(stampType)}
           >
             <Text>{stampType}</Text>
           </TouchableOpacity>
@@ -65,5 +74,12 @@ const styles = StyleSheet.create({
   optionButton: {
     paddingHorizontal: 6,
     paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  optionButtonSelected: {
+    borderColor: "#2f6fed",
+    backgroundColor: "#e8f0fe",
   },
 });

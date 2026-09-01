@@ -1,13 +1,13 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
-import { addReaction, deleteComment, listComments, listReactions, postComment } from "../service";
+import { deleteComment, listComments, listReactions, postComment, toggleReaction } from "../service";
 import {
-  useAddReaction,
   useComments,
   useDeleteComment,
   usePostComment,
   useReactions,
+  useToggleReaction,
 } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
@@ -18,7 +18,7 @@ jest.mock("../service", () => ({
   postComment: jest.fn(),
   listComments: jest.fn(),
   deleteComment: jest.fn(),
-  addReaction: jest.fn(),
+  toggleReaction: jest.fn(),
   listReactions: jest.fn(),
 }));
 
@@ -161,36 +161,36 @@ describe("useReactions", () => {
   });
 });
 
-describe("useAddReaction", () => {
+describe("useToggleReaction", () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
   it("returns true and clears the error when it succeeds", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (addReaction as jest.Mock).mockResolvedValue({ ok: true, value: { id: "reaction-1" } });
+    (toggleReaction as jest.Mock).mockResolvedValue({ ok: true, value: { id: "reaction-1" } });
 
-    const { result } = await renderHook(() => useAddReaction());
+    const { result } = await renderHook(() => useToggleReaction());
 
     let success = false;
     await act(async () => {
-      success = await result.current.addReaction("event-1", "👍");
+      success = await result.current.toggleReaction("event-1", "👍", null);
     });
 
     expect(success).toBe(true);
     expect(result.current.error).toBeNull();
-    expect(addReaction).toHaveBeenCalledWith({}, "event-1", "👍");
+    expect(toggleReaction).toHaveBeenCalledWith({}, "event-1", "👍", null);
   });
 
   it("returns false and sets the error when it fails", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (addReaction as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+    (toggleReaction as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
 
-    const { result } = await renderHook(() => useAddReaction());
+    const { result } = await renderHook(() => useToggleReaction());
 
     let success = true;
     await act(async () => {
-      success = await result.current.addReaction("event-1", "👍");
+      success = await result.current.toggleReaction("event-1", "👍", null);
     });
 
     expect(success).toBe(false);

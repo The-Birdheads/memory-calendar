@@ -5,11 +5,11 @@ import EventDetailScreen from "../[id]";
 import { useAuthSession } from "../../../src/features/auth/hooks";
 import { useCalendarMembers } from "../../../src/features/calendars/hooks";
 import {
-  useAddReaction,
   useComments,
   useDeleteComment,
   usePostComment,
   useReactions,
+  useToggleReaction,
 } from "../../../src/features/communication/hooks";
 import {
   useDeleteEvent,
@@ -51,7 +51,7 @@ jest.mock("../../../src/features/communication/hooks", () => ({
   usePostComment: jest.fn(),
   useDeleteComment: jest.fn(),
   useReactions: jest.fn(),
-  useAddReaction: jest.fn(),
+  useToggleReaction: jest.fn(),
 }));
 
 jest.mock("../../../src/features/events/hooks", () => ({
@@ -168,8 +168,8 @@ function mockCommonHooks(
     error: null,
     refetch: refetchReactions,
   });
-  (useAddReaction as jest.Mock).mockReturnValue({
-    addReaction: jest.fn().mockResolvedValue(true),
+  (useToggleReaction as jest.Mock).mockReturnValue({
+    toggleReaction: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -309,16 +309,44 @@ describe("EventDetailScreen", () => {
     await waitFor(() => expect(refetchComments).toHaveBeenCalled());
   });
 
-  it("adds a reaction and refetches", async () => {
+  it("adds a reaction (no existing reaction) and refetches", async () => {
     const { refetchReactions } = mockCommonHooks();
-    const addReactionMock = jest.fn().mockResolvedValue(true);
-    (useAddReaction as jest.Mock).mockReturnValue({ addReaction: addReactionMock, isSubmitting: false, error: null });
+    const toggleReactionMock = jest.fn().mockResolvedValue(true);
+    (useToggleReaction as jest.Mock).mockReturnValue({
+      toggleReaction: toggleReactionMock,
+      isSubmitting: false,
+      error: null,
+    });
 
     const { getByTestId } = await render(<EventDetailScreen />);
 
     await fireEvent.press(getByTestId("event-reaction-add-👍"));
 
-    await waitFor(() => expect(addReactionMock).toHaveBeenCalledWith("event-1", "👍"));
+    await waitFor(() => expect(toggleReactionMock).toHaveBeenCalledWith("event-1", "👍", null));
+    await waitFor(() => expect(refetchReactions).toHaveBeenCalled());
+  });
+
+  it("passes the caller's own existing reaction so pressing it again toggles it off", async () => {
+    const myReaction = {
+      id: "reaction-1",
+      eventId: "event-1",
+      userId: "user-1",
+      stampType: "👍",
+      createdAt: "2026-08-18T00:00:00.000Z",
+    };
+    const { refetchReactions } = mockCommonHooks({ reactions: [myReaction] });
+    const toggleReactionMock = jest.fn().mockResolvedValue(true);
+    (useToggleReaction as jest.Mock).mockReturnValue({
+      toggleReaction: toggleReactionMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-reaction-add-👍"));
+
+    await waitFor(() => expect(toggleReactionMock).toHaveBeenCalledWith("event-1", "👍", myReaction));
     await waitFor(() => expect(refetchReactions).toHaveBeenCalled());
   });
 

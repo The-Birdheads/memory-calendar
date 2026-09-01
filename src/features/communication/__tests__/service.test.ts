@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { addReaction, deleteComment, listComments, listReactions, postComment } from "../service";
+import { deleteComment, listComments, listReactions, postComment, toggleReaction } from "../service";
 
 describe("postComment", () => {
   it("posts a comment and returns it with the author and posted time on success", async () => {
@@ -158,8 +158,8 @@ describe("deleteComment", () => {
   });
 });
 
-describe("addReaction", () => {
-  it("adds a reaction and returns it with the author and posted time on success", async () => {
+describe("toggleReaction", () => {
+  it("adds a reaction when the user has none yet", async () => {
     const row = {
       id: "reaction-1",
       event_id: "event-1",
@@ -174,7 +174,7 @@ describe("addReaction", () => {
       from: jest.fn().mockReturnValue({ insert, select, single }),
     } as unknown as SupabaseClient;
 
-    const result = await addReaction(client, "event-1", "👍");
+    const result = await toggleReaction(client, "event-1", "👍", null);
 
     expect(result).toEqual({
       ok: true,
@@ -190,7 +190,68 @@ describe("addReaction", () => {
     expect(insert).toHaveBeenCalledWith({ event_id: "event-1", stamp_type: "👍" });
   });
 
-  it("maps an RLS/permission error to Forbidden", async () => {
+  it("removes the reaction when pressing the same stamp the user already reacted with", async () => {
+    const currentReaction = {
+      id: "reaction-1",
+      eventId: "event-1",
+      userId: "user-1",
+      stampType: "👍",
+      createdAt: "2026-08-18T00:00:00.000Z",
+    };
+    const eq = jest.fn().mockResolvedValue({ error: null });
+    const del = jest.fn().mockReturnValue({ eq });
+    const client = {
+      from: jest.fn().mockReturnValue({ delete: del }),
+    } as unknown as SupabaseClient;
+
+    const result = await toggleReaction(client, "event-1", "👍", currentReaction);
+
+    expect(result).toEqual({ ok: true, value: null });
+    expect(client.from).toHaveBeenCalledWith("event_reactions");
+    expect(del).toHaveBeenCalled();
+    expect(eq).toHaveBeenCalledWith("id", "reaction-1");
+  });
+
+  it("switches to the new stamp when the user already reacted with a different one", async () => {
+    const currentReaction = {
+      id: "reaction-1",
+      eventId: "event-1",
+      userId: "user-1",
+      stampType: "👍",
+      createdAt: "2026-08-18T00:00:00.000Z",
+    };
+    const row = {
+      id: "reaction-1",
+      event_id: "event-1",
+      user_id: "user-1",
+      stamp_type: "❤️",
+      created_at: "2026-08-18T00:00:00.000Z",
+    };
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await toggleReaction(client, "event-1", "❤️", currentReaction);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: "reaction-1",
+        eventId: "event-1",
+        userId: "user-1",
+        stampType: "❤️",
+        createdAt: "2026-08-18T00:00:00.000Z",
+      },
+    });
+    expect(update).toHaveBeenCalledWith({ stamp_type: "❤️" });
+    expect(eq).toHaveBeenCalledWith("id", "reaction-1");
+  });
+
+  it("maps an RLS/permission error to Forbidden when adding", async () => {
     const insert = jest.fn().mockReturnThis();
     const select = jest.fn().mockReturnThis();
     const single = jest.fn().mockResolvedValue({
@@ -201,7 +262,7 @@ describe("addReaction", () => {
       from: jest.fn().mockReturnValue({ insert, select, single }),
     } as unknown as SupabaseClient;
 
-    const result = await addReaction(client, "event-1", "👍");
+    const result = await toggleReaction(client, "event-1", "👍", null);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

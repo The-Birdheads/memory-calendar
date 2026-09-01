@@ -95,11 +95,45 @@ export async function deleteComment(
   return ok(undefined);
 }
 
-export async function addReaction(
+/**
+ * A user may have at most one active reaction per event. Pressing a stamp:
+ * - with no existing reaction: adds it.
+ * - with an existing reaction of the SAME stamp: removes it (toggle off).
+ * - with an existing reaction of a DIFFERENT stamp: switches to the new one.
+ * The caller passes in the current user's existing reaction (if any, already
+ * available from the fetched reactions list) so this stays a single request.
+ */
+export async function toggleReaction(
   client: SupabaseClient,
   eventId: string,
-  stampType: string
-): Promise<Result<EventReaction, CommunicationError>> {
+  stampType: string,
+  currentReaction: EventReaction | null
+): Promise<Result<EventReaction | null, CommunicationError>> {
+  if (currentReaction && currentReaction.stampType === stampType) {
+    const { error } = await client.from("event_reactions").delete().eq("id", currentReaction.id);
+
+    if (error) {
+      return err(mapCommunicationError(error));
+    }
+
+    return ok(null);
+  }
+
+  if (currentReaction) {
+    const { data, error } = await client
+      .from("event_reactions")
+      .update({ stamp_type: stampType })
+      .eq("id", currentReaction.id)
+      .select()
+      .single();
+
+    if (error || !data) {
+      return err(mapCommunicationError(error as PostgrestError));
+    }
+
+    return ok(mapEventReactionRow(data as EventReactionRow));
+  }
+
   const { data, error } = await client
     .from("event_reactions")
     .insert({ event_id: eventId, stamp_type: stampType })

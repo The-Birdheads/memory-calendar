@@ -1,9 +1,14 @@
 import { fireEvent, render } from "@testing-library/react-native";
 
 import MemoriesScreen from "../memories";
+import { useAuthSession } from "../../../src/features/auth/hooks";
 import { useMyCalendars } from "../../../src/features/calendars/hooks";
-import { useComments, usePostComment, useReactions, useAddReaction } from "../../../src/features/communication/hooks";
+import { useComments, usePostComment, useReactions, useToggleReaction } from "../../../src/features/communication/hooks";
 import { useAddReflection, useAttachPhoto, useEventPhotos, useMemoriesTimeline } from "../../../src/features/memories/hooks";
+
+jest.mock("../../../src/features/auth/hooks", () => ({
+  useAuthSession: jest.fn(),
+}));
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
@@ -20,7 +25,7 @@ jest.mock("../../../src/features/communication/hooks", () => ({
   useComments: jest.fn(),
   usePostComment: jest.fn(),
   useReactions: jest.fn(),
-  useAddReaction: jest.fn(),
+  useToggleReaction: jest.fn(),
 }));
 
 const CALENDARS = [{ id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" }];
@@ -38,6 +43,7 @@ const ENTRIES = [
 ];
 
 function mockCommonHooks(entries: typeof ENTRIES) {
+  (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } } });
   (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
   (useMemoriesTimeline as jest.Mock).mockReturnValue({ entries, isLoading: false, error: null, refetch: jest.fn() });
   (useEventPhotos as jest.Mock).mockReturnValue({ photos: [], isLoading: false, error: null, refetch: jest.fn() });
@@ -46,7 +52,7 @@ function mockCommonHooks(entries: typeof ENTRIES) {
   (useComments as jest.Mock).mockReturnValue({ comments: [], isLoading: false, error: null, refetch: jest.fn() });
   (usePostComment as jest.Mock).mockReturnValue({ postComment: jest.fn(), isSubmitting: false, error: null });
   (useReactions as jest.Mock).mockReturnValue({ reactions: [], isLoading: false, error: null, refetch: jest.fn() });
-  (useAddReaction as jest.Mock).mockReturnValue({ addReaction: jest.fn(), isSubmitting: false, error: null });
+  (useToggleReaction as jest.Mock).mockReturnValue({ toggleReaction: jest.fn(), isSubmitting: false, error: null });
 }
 
 describe("MemoriesScreen", () => {
