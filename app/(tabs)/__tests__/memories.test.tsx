@@ -28,7 +28,9 @@ jest.mock("../../../src/features/communication/hooks", () => ({
   useToggleReaction: jest.fn(),
 }));
 
-const CALENDARS = [{ id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" }];
+const CALENDARS: { id: string; name: string; kind: "personal" | "group"; createdBy: string; createdAt: string }[] = [
+  { id: "cal-1", name: "我が家", kind: "group", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
+];
 
 const ENTRIES = [
   {
@@ -42,9 +44,9 @@ const ENTRIES = [
   },
 ];
 
-function mockCommonHooks(entries: typeof ENTRIES) {
+function mockCommonHooks(entries: typeof ENTRIES, calendars: typeof CALENDARS = CALENDARS) {
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } } });
-  (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+  (useMyCalendars as jest.Mock).mockReturnValue({ calendars, isLoading: false, error: null });
   (useMemoriesTimeline as jest.Mock).mockReturnValue({ entries, isLoading: false, error: null, refetch: jest.fn() });
   (useEventPhotos as jest.Mock).mockReturnValue({ photos: [], isLoading: false, error: null, refetch: jest.fn() });
   (useAttachPhoto as jest.Mock).mockReturnValue({ attachPhoto: jest.fn(), isSubmitting: false, error: null });
@@ -90,5 +92,25 @@ describe("MemoriesScreen", () => {
     expect(useEventPhotos).toHaveBeenLastCalledWith("event-1");
     expect(useComments).toHaveBeenLastCalledWith("event-1");
     expect(useReactions).toHaveBeenLastCalledWith("event-1");
+  });
+
+  it("shows the stamp bar for a group calendar's memory", async () => {
+    mockCommonHooks(ENTRIES);
+
+    const { getByTestId } = await render(<MemoriesScreen />);
+
+    await fireEvent.press(getByTestId("memory-item-event-1"));
+
+    expect(getByTestId("event-reaction-add-👍")).toBeTruthy();
+  });
+
+  it("hides the stamp bar for a personal calendar's memory", async () => {
+    mockCommonHooks(ENTRIES, [{ ...CALENDARS[0], kind: "personal" }]);
+
+    const { getByTestId, queryByTestId } = await render(<MemoriesScreen />);
+
+    await fireEvent.press(getByTestId("memory-item-event-1"));
+
+    expect(queryByTestId("event-reaction-add-👍")).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
-import { createCalendar, createInvite, joinByInvite, listMembers, listMyCalendars, removeMember } from "../service";
+import { createCalendar, createInvite, joinByInvite, listMembers, listMyCalendars, removeMember, updateCalendar } from "../service";
 import {
   useCalendarMembers,
   useCreateCalendar,
@@ -9,6 +9,7 @@ import {
   useJoinByInvite,
   useMyCalendars,
   useRemoveMember,
+  useUpdateCalendar,
 } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
@@ -20,6 +21,7 @@ jest.mock("../service", () => ({
   listMembers: jest.fn(),
   removeMember: jest.fn(),
   createCalendar: jest.fn(),
+  updateCalendar: jest.fn(),
   createInvite: jest.fn(),
   joinByInvite: jest.fn(),
 }));
@@ -58,6 +60,43 @@ describe("useCreateCalendar", () => {
 
     expect(success).toBe(false);
     expect(result.current.error).toEqual({ type: "ValidationError", field: "name" });
+  });
+});
+
+describe("useUpdateCalendar", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when the update succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (updateCalendar as jest.Mock).mockResolvedValue({ ok: true, value: { id: "cal-1" } });
+
+    const { result } = await renderHook(() => useUpdateCalendar());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.updateCalendar("cal-1", { name: "改名後" });
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(updateCalendar).toHaveBeenCalledWith({}, "cal-1", { name: "改名後" });
+  });
+
+  it("returns false and sets the error when the update fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (updateCalendar as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useUpdateCalendar());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.updateCalendar("cal-1", { name: "改名後" });
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
   });
 });
 

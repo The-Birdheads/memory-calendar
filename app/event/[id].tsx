@@ -13,7 +13,7 @@ import {
 import { Stack, router, useLocalSearchParams } from "expo-router";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
-import { useCalendarMembers } from "../../src/features/calendars/hooks";
+import { useCalendarMembers, useMyCalendars } from "../../src/features/calendars/hooks";
 import { EventCommentsSection } from "../../src/features/communication/components/EventCommentsSection";
 import { EventReactionsBar } from "../../src/features/communication/components/EventReactionsBar";
 import {
@@ -63,6 +63,10 @@ export default function EventDetailScreen() {
   const { session } = useAuthSession();
   const { event, isLoading: isEventLoading, refetch: refetchEvent } = useEvent(eventId);
   const calendarId = event?.calendarId ?? "";
+
+  const { calendars } = useMyCalendars();
+  // 個人用カレンダーの予定にはスタンプ機能を出さない。
+  const isPersonalCalendar = calendars.find((calendar) => calendar.id === calendarId)?.kind === "personal";
 
   const { comments, refetch: refetchComments } = useComments(eventId);
   const { postComment } = usePostComment();
@@ -282,14 +286,16 @@ export default function EventDetailScreen() {
         )}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>スタンプ</Text>
-        <EventReactionsBar
-          reactions={reactions}
-          currentUserId={session?.user.id}
-          onToggleReaction={handleToggleReaction}
-        />
-      </View>
+      {isPersonalCalendar ? null : (
+        <View style={styles.section} testID="event-reactions-section">
+          <Text style={styles.sectionTitle}>スタンプ</Text>
+          <EventReactionsBar
+            reactions={reactions}
+            currentUserId={session?.user.id}
+            onToggleReaction={handleToggleReaction}
+          />
+        </View>
+      )}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>コメント</Text>

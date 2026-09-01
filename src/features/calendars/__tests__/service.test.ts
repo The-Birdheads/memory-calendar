@@ -8,6 +8,7 @@ import {
   listMembers,
   listMyCalendars,
   removeMember,
+  updateCalendar,
 } from "../service";
 
 function createMockClient(fromOverrides: Record<string, jest.Mock> = {}): SupabaseClient {
@@ -22,10 +23,11 @@ function createMockClient(fromOverrides: Record<string, jest.Mock> = {}): Supaba
 }
 
 describe("createCalendar", () => {
-  it("creates a calendar and returns it on success", async () => {
+  it("creates a group calendar by default and returns it on success", async () => {
     const row = {
       id: "cal-1",
       name: "我が家",
+      kind: "group",
       created_by: "user-1",
       created_at: "2026-08-17T00:00:00.000Z",
     };
@@ -40,10 +42,46 @@ describe("createCalendar", () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
+      value: {
+        id: "cal-1",
+        name: "我が家",
+        kind: "group",
+        createdBy: "user-1",
+        createdAt: "2026-08-17T00:00:00.000Z",
+      },
     });
     expect(client.from).toHaveBeenCalledWith("calendars");
-    expect(insert).toHaveBeenCalledWith({ name: "我が家" });
+    expect(insert).toHaveBeenCalledWith({ name: "我が家", kind: "group" });
+  });
+
+  it("creates a personal calendar when kind is specified", async () => {
+    const row = {
+      id: "cal-2",
+      name: "自分用カレンダー",
+      kind: "personal",
+      created_by: "user-1",
+      created_at: "2026-08-17T00:00:00.000Z",
+    };
+    const insert = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ insert, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await createCalendar(client, { name: "自分用カレンダー", kind: "personal" });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: "cal-2",
+        name: "自分用カレンダー",
+        kind: "personal",
+        createdBy: "user-1",
+        createdAt: "2026-08-17T00:00:00.000Z",
+      },
+    });
+    expect(insert).toHaveBeenCalledWith({ name: "自分用カレンダー", kind: "personal" });
   });
 
   it("returns a ValidationError without calling Supabase when the name is empty", async () => {
@@ -193,8 +231,8 @@ describe("joinByInvite", () => {
 describe("listMyCalendars", () => {
   it("returns the calendars the caller belongs to", async () => {
     const rows = [
-      { id: "cal-1", name: "我が家", created_by: "user-1", created_at: "2026-08-17T00:00:00.000Z" },
-      { id: "cal-2", name: "友人グループ", created_by: "user-2", created_at: "2026-08-17T01:00:00.000Z" },
+      { id: "cal-1", name: "我が家", kind: "group", created_by: "user-1", created_at: "2026-08-17T00:00:00.000Z" },
+      { id: "cal-2", name: "自分用", kind: "personal", created_by: "user-2", created_at: "2026-08-17T01:00:00.000Z" },
     ];
     const select = jest.fn().mockResolvedValue({ data: rows, error: null });
     const client = {
@@ -206,8 +244,8 @@ describe("listMyCalendars", () => {
     expect(result).toEqual({
       ok: true,
       value: [
-        { id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
-        { id: "cal-2", name: "友人グループ", createdBy: "user-2", createdAt: "2026-08-17T01:00:00.000Z" },
+        { id: "cal-1", name: "我が家", kind: "group", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
+        { id: "cal-2", name: "自分用", kind: "personal", createdBy: "user-2", createdAt: "2026-08-17T01:00:00.000Z" },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("calendars");
@@ -310,6 +348,67 @@ describe("removeMember", () => {
     } as unknown as SupabaseClient;
 
     const result = await removeMember(client, "cal-1", "user-2");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("updateCalendar", () => {
+  it("updates the calendar name and returns it on success", async () => {
+    const row = {
+      id: "cal-1",
+      name: "改名後",
+      kind: "group",
+      created_by: "user-1",
+      created_at: "2026-08-17T00:00:00.000Z",
+    };
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await updateCalendar(client, "cal-1", { name: "改名後" });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: "cal-1",
+        name: "改名後",
+        kind: "group",
+        createdBy: "user-1",
+        createdAt: "2026-08-17T00:00:00.000Z",
+      },
+    });
+    expect(client.from).toHaveBeenCalledWith("calendars");
+    expect(update).toHaveBeenCalledWith({ name: "改名後" });
+    expect(eq).toHaveBeenCalledWith("id", "cal-1");
+  });
+
+  it("returns a ValidationError without calling Supabase when the new name is empty", async () => {
+    const client = { from: jest.fn() } as unknown as SupabaseClient;
+
+    const result = await updateCalendar(client, "cal-1", { name: "   " });
+
+    expect(result).toEqual({ ok: false, error: { type: "ValidationError", field: "name" } });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("maps a permission error to Forbidden when the caller is not the owner", async () => {
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: "permission denied", code: "42501" },
+    });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await updateCalendar(client, "cal-1", { name: "改名後" });
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

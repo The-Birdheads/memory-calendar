@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import EventDetailScreen from "../[id]";
 import { useAuthSession } from "../../../src/features/auth/hooks";
-import { useCalendarMembers } from "../../../src/features/calendars/hooks";
+import { useCalendarMembers, useMyCalendars } from "../../../src/features/calendars/hooks";
 import {
   useComments,
   useDeleteComment,
@@ -44,6 +44,7 @@ jest.mock("../../../src/features/auth/hooks", () => ({
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
   useCalendarMembers: jest.fn(),
+  useMyCalendars: jest.fn(),
 }));
 
 jest.mock("../../../src/features/communication/hooks", () => ({
@@ -131,10 +132,17 @@ function mockCommonHooks(
     refetchTags?: jest.Mock;
     refetchTodos?: jest.Mock;
     refetchEvent?: jest.Mock;
+    calendarKind?: "personal" | "group";
   } = {}
 ) {
   (useLocalSearchParams as jest.Mock).mockReturnValue({ id: "event-1" });
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } }, isLoading: false });
+  (useMyCalendars as jest.Mock).mockReturnValue({
+    calendars: [{ id: "cal-1", name: "我が家", kind: overrides.calendarKind ?? "group", createdBy: "user-1", createdAt: "2026-08-01T00:00:00.000Z" }],
+    isLoading: false,
+    error: null,
+    refetch: jest.fn(),
+  });
   const refetchEvent = overrides.refetchEvent ?? jest.fn();
   (useEvent as jest.Mock).mockReturnValue({
     event: overrides.event === undefined ? FUTURE_EVENT : overrides.event,
@@ -348,6 +356,22 @@ describe("EventDetailScreen", () => {
 
     await waitFor(() => expect(toggleReactionMock).toHaveBeenCalledWith("event-1", "👍", myReaction));
     await waitFor(() => expect(refetchReactions).toHaveBeenCalled());
+  });
+
+  it("shows the stamps section for a group calendar's event", async () => {
+    mockCommonHooks({ calendarKind: "group" });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    expect(getByTestId("event-reactions-section")).toBeTruthy();
+  });
+
+  it("hides the stamps section for a personal calendar's event", async () => {
+    mockCommonHooks({ calendarKind: "personal" });
+
+    const { queryByTestId } = await render(<EventDetailScreen />);
+
+    expect(queryByTestId("event-reactions-section")).toBeNull();
   });
 
   it("shows attached tag badges", async () => {

@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
-import { createCalendar, createInvite, joinByInvite, listMembers, listMyCalendars, removeMember } from "./service";
-import type { Calendar, CalendarError, CalendarInvite, CalendarMember, CreateCalendarInput } from "./types";
+import {
+  createCalendar,
+  createInvite,
+  joinByInvite,
+  listMembers,
+  listMyCalendars,
+  removeMember,
+  updateCalendar,
+} from "./service";
+import type {
+  Calendar,
+  CalendarError,
+  CalendarInvite,
+  CalendarMember,
+  CreateCalendarInput,
+  UpdateCalendarInput,
+} from "./types";
 
 export interface UseCreateCalendarResult {
   createCalendar: (input: CreateCalendarInput) => Promise<boolean>;
@@ -27,6 +42,31 @@ export function useCreateCalendar(): UseCreateCalendarResult {
   }, []);
 
   return { createCalendar: runCreateCalendar, isSubmitting, error };
+}
+
+export interface UseUpdateCalendarResult {
+  updateCalendar: (calendarId: string, input: UpdateCalendarInput) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: CalendarError | null;
+}
+
+export function useUpdateCalendar(): UseUpdateCalendarResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<CalendarError | null>(null);
+
+  const runUpdateCalendar = useCallback(async (calendarId: string, input: UpdateCalendarInput) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await updateCalendar(getSupabaseClient(), calendarId, input);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { updateCalendar: runUpdateCalendar, isSubmitting, error };
 }
 
 export interface UseCreateInviteResult {

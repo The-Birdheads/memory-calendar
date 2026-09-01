@@ -8,11 +8,13 @@ import type {
   CalendarMember,
   CalendarMembership,
   CreateCalendarInput,
+  UpdateCalendarInput,
 } from "./types";
 
 interface CalendarRow {
   id: string;
   name: string;
+  kind: string;
   created_by: string;
   created_at: string;
 }
@@ -21,6 +23,7 @@ function mapCalendarRow(row: CalendarRow): Calendar {
   return {
     id: row.id,
     name: row.name,
+    kind: row.kind === "personal" ? "personal" : "group",
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
@@ -87,7 +90,33 @@ export async function createCalendar(
 
   const { data, error } = await client
     .from("calendars")
-    .insert({ name: input.name })
+    .insert({ name: input.name, kind: input.kind ?? "group" })
+    .select()
+    .single();
+
+  if (error || !data) {
+    return err(mapCalendarError(error as PostgrestError));
+  }
+
+  return ok(mapCalendarRow(data as CalendarRow));
+}
+
+export async function updateCalendar(
+  client: SupabaseClient,
+  calendarId: string,
+  input: UpdateCalendarInput
+): Promise<Result<Calendar, CalendarError>> {
+  if (input.name !== undefined && !input.name.trim()) {
+    return err({ type: "ValidationError", field: "name" });
+  }
+
+  const payload: Record<string, unknown> = {};
+  if (input.name !== undefined) payload.name = input.name;
+
+  const { data, error } = await client
+    .from("calendars")
+    .update(payload)
+    .eq("id", calendarId)
     .select()
     .single();
 

@@ -24,6 +24,7 @@ import {
   useRemoveMember,
 } from "../../src/features/calendars/hooks";
 import { getCalendarErrorMessageJa } from "../../src/features/calendars/service";
+import type { CalendarKind } from "../../src/features/calendars/types";
 import { CATEGORY_COLORS, EventFormFields, type EventFormValue } from "../../src/features/events/components/EventFormFields";
 import { computeDateRange } from "../../src/features/events/dateRange";
 import { expandEventDateKeys } from "../../src/features/events/eventDateKeys";
@@ -79,6 +80,7 @@ export default function CalendarScreen() {
 
   const [isOnboardingModalVisible, setIsOnboardingModalVisible] = useState(false);
   const [newCalendarName, setNewCalendarName] = useState("");
+  const [newCalendarKind, setNewCalendarKind] = useState<CalendarKind>("group");
   const [joinInviteCode, setJoinInviteCode] = useState("");
   const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
 
@@ -114,13 +116,17 @@ export default function CalendarScreen() {
   const { createEvent, error: createEventError } = useCreateEvent();
   const { createTodo } = useCreateTodo();
 
-  const { tagTree, refetch: refetchTagTree } = useTagTree(activeCalendarId);
-  const { attachTagsToEvent } = useAttachTagsToEvent();
   const [isTagModalVisible, setIsTagModalVisible] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   const [isDayEventsModalVisible, setIsDayEventsModalVisible] = useState(false);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
+  // Which calendar the event-being-created will belong to - defaults to the
+  // active tab (see openCreateModal) but is independently selectable, since
+  // an event's calendar no longer has to match whichever tab is focused.
+  const [newEventCalendarId, setNewEventCalendarId] = useState("");
+  const { tagTree, refetch: refetchTagTree } = useTagTree(newEventCalendarId || activeCalendarId);
+  const { attachTagsToEvent } = useAttachTagsToEvent();
   const [newEventForm, setNewEventForm] = useState<EventFormValue>(() => ({
     title: "",
     isAllDay: true,
@@ -233,7 +239,15 @@ export default function CalendarScreen() {
     setTodoItems([]);
     setNewTodoItemText("");
     setSelectedTagIds([]);
+    setNewEventCalendarId(activeCalendarId);
     setIsCreateModalVisible(true);
+  };
+
+  const handleSelectEventCalendar = (calendarId: string) => {
+    setNewEventCalendarId(calendarId);
+    // The previously selected tags belong to the OLD calendar and won't
+    // exist in the new one's tag tree, so clear them.
+    setSelectedTagIds([]);
   };
 
   const handleToggleTagSelection = (tagId: string) => {
@@ -253,9 +267,10 @@ export default function CalendarScreen() {
   };
 
   const handleCreateCalendar = async () => {
-    const success = await createCalendar({ name: newCalendarName });
+    const success = await createCalendar({ name: newCalendarName, kind: newCalendarKind });
     if (success) {
       setNewCalendarName("");
+      setNewCalendarKind("group");
       setIsOnboardingModalVisible(false);
       await refetchCalendars();
     }
@@ -279,7 +294,7 @@ export default function CalendarScreen() {
 
   const handleCreateEvent = async () => {
     const createdEvent = await createEvent({
-      calendarId: activeCalendarId,
+      calendarId: newEventCalendarId || activeCalendarId,
       title: newEventForm.title,
       startAt: newEventForm.start.toISOString(),
       endAt: newEventForm.end.toISOString(),
@@ -416,6 +431,26 @@ export default function CalendarScreen() {
                 value={newCalendarName}
                 onChangeText={setNewCalendarName}
               />
+              <View style={styles.kindRow}>
+                <TouchableOpacity
+                  testID="calendar-create-kind-personal"
+                  style={[styles.kindButton, newCalendarKind === "personal" && styles.kindButtonSelected]}
+                  onPress={() => setNewCalendarKind("personal")}
+                >
+                  <Text style={newCalendarKind === "personal" ? styles.kindButtonTextSelected : styles.kindButtonText}>
+                    個人用
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  testID="calendar-create-kind-group"
+                  style={[styles.kindButton, newCalendarKind === "group" && styles.kindButtonSelected]}
+                  onPress={() => setNewCalendarKind("group")}
+                >
+                  <Text style={newCalendarKind === "group" ? styles.kindButtonTextSelected : styles.kindButtonText}>
+                    グループ
+                  </Text>
+                </TouchableOpacity>
+              </View>
               {createCalendarError ? (
                 <Text style={styles.errorText}>{getCalendarErrorMessageJa(createCalendarError)}</Text>
               ) : null}
@@ -639,6 +674,30 @@ export default function CalendarScreen() {
           >
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>予定を作成</Text>
+
+            <View style={styles.eventCalendarPickerRow}>
+              {calendars.map((calendar) => (
+                <TouchableOpacity
+                  key={calendar.id}
+                  testID={`event-create-calendar-${calendar.id}`}
+                  style={[
+                    styles.eventCalendarChip,
+                    calendar.id === newEventCalendarId && styles.eventCalendarChipSelected,
+                  ]}
+                  onPress={() => handleSelectEventCalendar(calendar.id)}
+                >
+                  <Text
+                    style={
+                      calendar.id === newEventCalendarId
+                        ? styles.eventCalendarChipTextSelected
+                        : styles.eventCalendarChipText
+                    }
+                  >
+                    {calendar.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <EventFormFields
               testIDPrefix="event-create"
@@ -1023,6 +1082,51 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#d32f2f",
+  },
+  kindRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  kindButton: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  kindButtonSelected: {
+    borderColor: "#2f6fed",
+    backgroundColor: "#e8f0fe",
+  },
+  kindButtonText: {
+    color: "#444",
+  },
+  kindButtonTextSelected: {
+    color: "#2f6fed",
+    fontWeight: "700",
+  },
+  eventCalendarPickerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  eventCalendarChip: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  eventCalendarChipSelected: {
+    borderColor: "#2f6fed",
+    backgroundColor: "#e8f0fe",
+  },
+  eventCalendarChipText: {
+    color: "#444",
+  },
+  eventCalendarChipTextSelected: {
+    color: "#2f6fed",
+    fontWeight: "700",
   },
   input: {
     borderWidth: 1,

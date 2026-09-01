@@ -702,6 +702,33 @@ describe("CalendarScreen", () => {
     await waitFor(() => expect(queryByTestId("event-create-title-input")).toBeNull());
   });
 
+  it("creates the event in a different calendar when picked from the create modal's calendar picker", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "飲み会");
+    await fireEvent.press(getByTestId("event-create-calendar-cal-2"));
+
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-09-01T10:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-09-01T12:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() =>
+      expect(createEventMock).toHaveBeenCalledWith(expect.objectContaining({ calendarId: "cal-2" }))
+    );
+  });
+
   it("includes location and url when provided", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
@@ -928,7 +955,7 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-add-button")).toBeTruthy();
   });
 
-  it("creates a new calendar from the onboarding modal and refetches the calendar list", async () => {
+  it("creates a new group calendar (the default) from the onboarding modal and refetches the calendar list", async () => {
     mockCommonHooks();
     const refetchCalendars = jest.fn();
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: refetchCalendars });
@@ -943,8 +970,26 @@ describe("CalendarScreen", () => {
     await fireEvent.changeText(getByTestId("calendar-create-name-input"), "我が家");
     await fireEvent.press(getByTestId("calendar-create-submit"));
 
-    await waitFor(() => expect(createCalendarMock).toHaveBeenCalledWith({ name: "我が家" }));
+    await waitFor(() => expect(createCalendarMock).toHaveBeenCalledWith({ name: "我が家", kind: "group" }));
     await waitFor(() => expect(refetchCalendars).toHaveBeenCalled());
+  });
+
+  it("creates a personal calendar when 個人用 is selected in the onboarding modal", async () => {
+    mockCommonHooks();
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+    const createCalendarMock = jest.fn().mockResolvedValue(true);
+    (useCreateCalendar as jest.Mock).mockReturnValue({ createCalendar: createCalendarMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-button"));
+    await fireEvent.changeText(getByTestId("calendar-create-name-input"), "自分用");
+    await fireEvent.press(getByTestId("calendar-create-kind-personal"));
+    await fireEvent.press(getByTestId("calendar-create-submit"));
+
+    await waitFor(() => expect(createCalendarMock).toHaveBeenCalledWith({ name: "自分用", kind: "personal" }));
   });
 
   it("joins a calendar via invite code from the onboarding modal", async () => {

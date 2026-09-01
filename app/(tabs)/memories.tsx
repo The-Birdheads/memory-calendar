@@ -19,6 +19,8 @@ export default function MemoriesScreen() {
   const { session } = useAuthSession();
   const { calendars } = useMyCalendars();
   const activeCalendarId = calendars[0]?.id ?? "";
+  // 個人用カレンダーの予定にはスタンプ機能を出さない。
+  const isPersonalCalendar = calendars[0]?.kind === "personal";
 
   const { entries } = useMemoriesTimeline(activeCalendarId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -54,11 +56,13 @@ export default function MemoriesScreen() {
         <Text style={styles.title}>{selectedEntry.title}</Text>
         <Text style={styles.meta}>{formatDateTime(selectedEntry.startAt)}</Text>
         <EventPhotosGallery photos={photos} />
-        <EventReactionsBar
-          reactions={reactions}
-          currentUserId={session?.user.id}
-          onToggleReaction={handleToggleReaction}
-        />
+        {isPersonalCalendar ? null : (
+          <EventReactionsBar
+            reactions={reactions}
+            currentUserId={session?.user.id}
+            onToggleReaction={handleToggleReaction}
+          />
+        )}
         <EventCommentsSection comments={comments} onSubmit={handleSubmitComment} />
       </View>
     );

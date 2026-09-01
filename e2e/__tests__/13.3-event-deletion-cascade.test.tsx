@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import EventDetailScreen from "../../app/event/[id]";
 import { useAuthSession } from "../../src/features/auth/hooks";
-import { useCalendarMembers } from "../../src/features/calendars/hooks";
+import { useCalendarMembers, useMyCalendars } from "../../src/features/calendars/hooks";
 import {
   useComments,
   useDeleteComment,
@@ -38,6 +38,7 @@ jest.mock("../../src/features/auth/hooks", () => ({
 
 jest.mock("../../src/features/calendars/hooks", () => ({
   useCalendarMembers: jest.fn(),
+  useMyCalendars: jest.fn(),
 }));
 
 jest.mock("../../src/features/communication/hooks", () => ({
@@ -95,6 +96,12 @@ describe("13.3 予定削除フローの検証", () => {
     (useLocalSearchParams as jest.Mock).mockReturnValue({ id: "event-1" });
     (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } }, isLoading: false });
     (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
+    (useMyCalendars as jest.Mock).mockReturnValue({
+      calendars: [{ id: "cal-1", name: "我が家", kind: "group", createdBy: "user-1", createdAt: "2026-08-01T00:00:00.000Z" }],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
     (useComments as jest.Mock).mockReturnValue({ comments: [], isLoading: false, error: null, refetch: jest.fn() });
     (usePostComment as jest.Mock).mockReturnValue({ postComment: jest.fn(), isSubmitting: false, error: null });
     (useDeleteComment as jest.Mock).mockReturnValue({ deleteComment: jest.fn(), isSubmitting: false, error: null });

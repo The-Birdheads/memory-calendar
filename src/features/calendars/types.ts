@@ -1,8 +1,12 @@
 export type CalendarRole = "owner" | "editor" | "viewer";
 
+/** "personal": no reactions/stamps feature. "group": full shared-calendar features. */
+export type CalendarKind = "personal" | "group";
+
 export interface Calendar {
   id: string;
   name: string;
+  kind: CalendarKind;
   createdBy: string;
   createdAt: string;
 }
@@ -17,6 +21,11 @@ export interface CalendarMember {
 
 export interface CreateCalendarInput {
   name: string;
+  kind?: CalendarKind;
+}
+
+export interface UpdateCalendarInput {
+  name?: string;
 }
 
 export interface CalendarInvite {
