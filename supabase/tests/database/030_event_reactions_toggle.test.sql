@@ -39,9 +39,11 @@ insert into public.event_reactions (event_id, stamp_type)
   returning id \gset reaction10_
 
 -- 同じ予定に2件目のスタンプを挿入しようとすると一意制約違反になる
+-- (event_id はサブクエリで既存行から取得する - psqlの変数展開 :'var' は $$ ... $$ の中では
+-- 効かない場合があるため、throws_ok に渡すSQL文字列の中では変数を使わない)
 select throws_ok(
   $$ insert into public.event_reactions (event_id, stamp_type)
-     values (:'event10_id', '❤️') $$,
+     select event_id, '❤️' from public.event_reactions where stamp_type = '👍' $$,
   '23505',
   null,
   '同じユーザーが同じ予定に2件目のスタンプを挿入しようとすると一意制約違反になること'

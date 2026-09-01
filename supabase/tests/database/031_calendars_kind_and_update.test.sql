@@ -11,16 +11,8 @@ select policies_are(
   'calendars に更新ポリシーを含む想定通りのRLSポリシーが定義されていること'
 );
 
--- CHECK制約: kind は personal/group 以外を許可しない
-set local role postgres;
-select throws_ok(
-  $$ insert into public.calendars (name, kind) values ('不正な種別', 'shared') $$,
-  '23514',
-  null,
-  'calendars.kind に personal/group 以外の値は挿入できないこと'
-);
-
 -- セットアップ: owner + viewerが所属するカレンダー
+set local role postgres;
 insert into auth.users (id) values
   ('aaaaaaaa-1111-1111-1111-111111111111'), -- owner
   ('aaaaaaaa-2222-2222-2222-222222222222'); -- viewer
@@ -28,6 +20,17 @@ insert into auth.users (id) values
 set local role authenticated;
 set local request.jwt.claim.sub = 'aaaaaaaa-1111-1111-1111-111111111111';
 insert into public.calendars (name, kind) values ('個人用カレンダー', 'personal') returning id \gset cal11_
+
+-- CHECK制約: kind は personal/group 以外を許可しない
+-- (created_by は auth.uid() 由来のデフォルトに任せるため authenticated ロールのまま実行する - postgres
+-- ロールで実行すると auth.uid() が解決できず、CHECK制約より先に created_by の NOT NULL 制約に
+-- 引っかかってしまう)
+select throws_ok(
+  $$ insert into public.calendars (name, kind) values ('不正な種別', 'shared') $$,
+  '23514',
+  null,
+  'calendars.kind に personal/group 以外の値は挿入できないこと'
+);
 
 set local role postgres;
 insert into public.calendar_members (calendar_id, user_id, role)
