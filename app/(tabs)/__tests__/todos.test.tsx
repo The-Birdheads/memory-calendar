@@ -97,7 +97,16 @@ function flattenStyle(style: unknown): Record<string, unknown> {
 }
 
 describe("TodosScreen", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    // Before every fixture event date used in this file (2026-08-01,
+    // 2026-08-19, 2026-09-10, 2026-09-12), so they're all "future" by
+    // default unless a test explicitly moves "now" past one of them.
+    jest.setSystemTime(new Date("2026-07-01T00:00:00.000Z"));
+  });
+
   afterEach(() => {
+    jest.useRealTimers();
     jest.clearAllMocks();
   });
 
@@ -276,5 +285,50 @@ describe("TodosScreen", () => {
 
     expect(updateTodoMock).not.toHaveBeenCalled();
     expect(queryByTestId("todo-reminder-input-todo-1")).toBeNull();
+  });
+
+  it("shows only future event sections by default, hiding past ones", async () => {
+    mockCommonHooks(TODOS_TWO_EVENTS);
+    // event-2 (夏祭り, 2026-08-01) is now in the past; event-1 (発表会, 2026-09-10) is future.
+    jest.setSystemTime(new Date("2026-08-15T00:00:00.000Z"));
+
+    const { getByTestId, queryByTestId } = await render(<TodosScreen />);
+
+    const container = getByTestId("todos-section-list");
+    const sectionIds = container.props.data.map((group: { eventId: string }) => group.eventId);
+    expect(sectionIds).toEqual(["event-1"]);
+    expect(queryByTestId("todo-section-container-event-2")).toBeNull();
+  });
+
+  it("reveals past event sections via the past-todos toggle, and can hide them again", async () => {
+    mockCommonHooks(TODOS_TWO_EVENTS);
+    jest.setSystemTime(new Date("2026-08-15T00:00:00.000Z"));
+
+    const { getByTestId, getByText, queryByTestId } = await render(<TodosScreen />);
+
+    expect(getByText("過去のToDoを表示 (1)")).toBeTruthy();
+    expect(queryByTestId("todos-past-section-list")).toBeNull();
+
+    await fireEvent.press(getByTestId("todos-past-toggle"));
+
+    const pastContainer = getByTestId("todos-past-section-list");
+    expect(pastContainer.props.data.map((group: { eventId: string }) => group.eventId)).toEqual(["event-2"]);
+    expect(getByText("過去のToDoを隠す")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("todos-past-toggle"));
+
+    expect(queryByTestId("todos-past-section-list")).toBeNull();
+  });
+
+  it("shows a 今後のToDoはありません message when every event has already passed", async () => {
+    mockCommonHooks(TODOS_TWO_EVENTS);
+    // Past both event-1 (2026-09-10) and event-2 (2026-08-01).
+    jest.setSystemTime(new Date("2026-09-20T00:00:00.000Z"));
+
+    const { getByText, queryByTestId } = await render(<TodosScreen />);
+
+    expect(getByText("今後のToDoはありません")).toBeTruthy();
+    expect(queryByTestId("todos-section-list")).toBeNull();
+    expect(getByText("過去のToDoを表示 (2)")).toBeTruthy();
   });
 });

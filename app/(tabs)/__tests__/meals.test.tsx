@@ -71,15 +71,29 @@ describe("MealsScreen", () => {
     expect(getByTestId("meal-item-meal-2")).toBeTruthy();
   });
 
-  it("shows the date and meal slot together, and the url/memo when present", async () => {
+  it("shows the date and meal slot together", async () => {
     mockCommonHooks(RECORDS);
 
     const { getByText } = await render(<MealsScreen />);
 
     expect(getByText("2026/08/10 朝食")).toBeTruthy();
     expect(getByText("2026/08/25 夕食")).toBeTruthy();
-    expect(getByText("https://example.com/curry")).toBeTruthy();
-    expect(getByText("スパイスから作る")).toBeTruthy();
+  });
+
+  it("shows a 🔗/📝 icon (not the raw text) when a url/memo is set, and neither when absent", async () => {
+    mockCommonHooks(RECORDS);
+
+    const { getByTestId, queryByTestId, queryByText } = await render(<MealsScreen />);
+
+    // meal-2 has both a url and a memo.
+    expect(getByTestId("meal-url-icon-meal-2")).toBeTruthy();
+    expect(getByTestId("meal-memo-icon-meal-2")).toBeTruthy();
+    expect(queryByText("https://example.com/curry")).toBeNull();
+    expect(queryByText("スパイスから作る")).toBeNull();
+
+    // meal-1 has neither.
+    expect(queryByTestId("meal-url-icon-meal-1")).toBeNull();
+    expect(queryByTestId("meal-memo-icon-meal-1")).toBeNull();
   });
 
   it("shows a calendar switcher and updates the list when switched", async () => {
@@ -95,27 +109,30 @@ describe("MealsScreen", () => {
     await waitFor(() => expect(useMealRecords).toHaveBeenLastCalledWith("cal-2"));
   });
 
-  it("opens an edit modal from the 編集 button, not an always-visible save button", async () => {
+  it("opens a detail modal from the 詳細 button, not an always-visible save button", async () => {
     mockCommonHooks(RECORDS);
 
     const { getByTestId, queryByTestId } = await render(<MealsScreen />);
 
     expect(queryByTestId("meal-edit-title-input-meal-1")).toBeNull();
 
-    await fireEvent.press(getByTestId("meal-edit-meal-1"));
+    await fireEvent.press(getByTestId("meal-details-meal-1"));
 
     expect(getByTestId("meal-edit-title-input-meal-1")).toBeTruthy();
   });
 
-  it("edits a meal record's title/url/memo from the edit modal and refetches", async () => {
+  it("shows the meal's date+slot and lets the caller edit title/url/memo from the detail modal, then refetches", async () => {
     const refetch = jest.fn();
     mockCommonHooks(RECORDS, refetch);
     const updateMealRecordMock = jest.fn().mockResolvedValue(true);
     (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
 
-    const { getByTestId } = await render(<MealsScreen />);
+    const { getByTestId, getAllByText } = await render(<MealsScreen />);
 
-    await fireEvent.press(getByTestId("meal-edit-meal-1"));
+    await fireEvent.press(getByTestId("meal-details-meal-1"));
+
+    expect(getAllByText("2026/08/10 朝食").length).toBeGreaterThan(0);
+
     await fireEvent.changeText(getByTestId("meal-edit-title-input-meal-1"), "トーストとコーヒー");
     await fireEvent.changeText(getByTestId("meal-edit-url-input-meal-1"), "https://example.com/toast");
     await fireEvent.changeText(getByTestId("meal-edit-memo-input-meal-1"), "バターたっぷり");
@@ -131,14 +148,14 @@ describe("MealsScreen", () => {
     await waitFor(() => expect(refetch).toHaveBeenCalled());
   });
 
-  it("closes the edit modal without saving when cancelled", async () => {
+  it("closes the detail modal without saving when cancelled", async () => {
     mockCommonHooks(RECORDS);
     const updateMealRecordMock = jest.fn().mockResolvedValue(true);
     (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
 
     const { getByTestId, queryByTestId } = await render(<MealsScreen />);
 
-    await fireEvent.press(getByTestId("meal-edit-meal-1"));
+    await fireEvent.press(getByTestId("meal-details-meal-1"));
     await fireEvent.press(getByTestId("meal-edit-cancel-meal-1"));
 
     expect(updateMealRecordMock).not.toHaveBeenCalled();

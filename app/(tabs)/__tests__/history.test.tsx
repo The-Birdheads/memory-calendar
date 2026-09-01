@@ -60,6 +60,22 @@ describe("HistoryScreen", () => {
     const { getByText } = await render(<HistoryScreen />);
 
     expect(getByText("先週の集まり")).toBeTruthy();
+    expect(getByText("2026/08/10 19:00")).toBeTruthy();
+  });
+
+  it("omits the time for an all-day past event", async () => {
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+    (useTagTree as jest.Mock).mockReturnValue({ tagTree: TAG_TREE, isLoading: false, error: null });
+    (usePastEventsByTag as jest.Mock).mockReturnValue({
+      events: [{ ...PAST_EVENTS[0], isAllDay: true }],
+      isLoading: false,
+      error: null,
+    });
+
+    const { getByText, queryByText } = await render(<HistoryScreen />);
+
+    expect(getByText("2026/08/10")).toBeTruthy();
+    expect(queryByText("2026/08/10 19:00")).toBeNull();
   });
 
   it("shows only top-level tag filters at first, revealing children once their parent is selected", async () => {

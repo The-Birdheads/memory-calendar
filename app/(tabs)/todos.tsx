@@ -12,7 +12,15 @@ import {
   useUpdateTodo,
 } from "../../src/features/todos/hooks";
 import type { TodoWithEventTitle } from "../../src/features/todos/types";
-import { toJstDateKey } from "../../src/shared/utils/formatDateTime";
+import { jstNow, toJstDateKey } from "../../src/shared/utils/formatDateTime";
+
+// jstNow()'s own UTC-* accessors already read as JST wall-clock components
+// (see its doc comment), so today's JST date key is a plain slice of its
+// ISO string - passing it through toJstDateKey (which itself shifts a RAW
+// UTC instant by +9h) would double-shift it.
+function todayJstDateKey(): string {
+  return jstNow().toISOString().slice(0, 10);
+}
 
 interface TodoItemRowProps {
   todo: TodoWithEventTitle;
@@ -201,8 +209,18 @@ export default function TodosScreen() {
   const { updateTodo } = useUpdateTodo();
 
   const [collapsedEventIds, setCollapsedEventIds] = useState<Set<string>>(new Set());
+  const [isPastVisible, setIsPastVisible] = useState(false);
 
   const groups = useMemo(() => groupTodosByEvent(todos), [todos]);
+  const today = todayJstDateKey();
+  const futureGroups = useMemo(
+    () => groups.filter((group) => toJstDateKey(group.eventStartAt) >= today),
+    [groups, today]
+  );
+  const pastGroups = useMemo(
+    () => groups.filter((group) => toJstDateKey(group.eventStartAt) < today),
+    [groups, today]
+  );
 
   const handleToggleSection = (eventId: string) => {
     setCollapsedEventIds((prev) => {
@@ -254,22 +272,59 @@ export default function TodosScreen() {
           <Text>ToDoがありません</Text>
         </View>
       ) : (
-        <FlatList
-          testID="todos-section-list"
-          data={groups}
-          keyExtractor={(group) => group.eventId}
-          renderItem={({ item: group }) => (
-            <EventSection
-              group={group}
-              activeCalendarId={activeCalendarId}
-              isCollapsed={collapsedEventIds.has(group.eventId)}
-              onToggleCollapse={handleToggleSection}
-              onToggleTodo={handleToggle}
-              onDeleteTodo={handleDelete}
-              onSetReminder={handleSetReminder}
+        <>
+          {futureGroups.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text>今後のToDoはありません</Text>
+            </View>
+          ) : (
+            <FlatList
+              testID="todos-section-list"
+              data={futureGroups}
+              keyExtractor={(group) => group.eventId}
+              renderItem={({ item: group }) => (
+                <EventSection
+                  group={group}
+                  activeCalendarId={activeCalendarId}
+                  isCollapsed={collapsedEventIds.has(group.eventId)}
+                  onToggleCollapse={handleToggleSection}
+                  onToggleTodo={handleToggle}
+                  onDeleteTodo={handleDelete}
+                  onSetReminder={handleSetReminder}
+                />
+              )}
             />
           )}
-        />
+
+          {pastGroups.length > 0 ? (
+            <View style={styles.pastToggleRow}>
+              <TouchableOpacity testID="todos-past-toggle" onPress={() => setIsPastVisible((prev) => !prev)}>
+                <Text style={styles.pastToggleText}>
+                  {isPastVisible ? "過去のToDoを隠す" : `過去のToDoを表示 (${pastGroups.length})`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {isPastVisible ? (
+            <FlatList
+              testID="todos-past-section-list"
+              data={pastGroups}
+              keyExtractor={(group) => group.eventId}
+              renderItem={({ item: group }) => (
+                <EventSection
+                  group={group}
+                  activeCalendarId={activeCalendarId}
+                  isCollapsed={collapsedEventIds.has(group.eventId)}
+                  onToggleCollapse={handleToggleSection}
+                  onToggleTodo={handleToggle}
+                  onDeleteTodo={handleDelete}
+                  onSetReminder={handleSetReminder}
+                />
+              )}
+            />
+          ) : null}
+        </>
       )}
     </View>
   );
@@ -299,6 +354,17 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  pastToggleRow: {
+    alignItems: "center",
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  pastToggleText: {
+    color: "#2f6fed",
+    fontWeight: "700",
+    fontSize: 13,
   },
   section: {
     marginBottom: 8,

@@ -39,21 +39,21 @@ interface MealRecordRowProps {
 }
 
 function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
-  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [title, setTitle] = useState(mealRecord.title);
   const [url, setUrl] = useState(mealRecord.url ?? "");
   const [memo, setMemo] = useState(mealRecord.memo ?? "");
 
-  const openEditModal = () => {
+  const openDetailModal = () => {
     setTitle(mealRecord.title);
     setUrl(mealRecord.url ?? "");
     setMemo(mealRecord.memo ?? "");
-    setIsEditModalVisible(true);
+    setIsDetailModalVisible(true);
   };
 
   const handleSave = () => {
     onSave(mealRecord.id, title, url, memo);
-    setIsEditModalVisible(false);
+    setIsDetailModalVisible(false);
   };
 
   return (
@@ -61,16 +61,22 @@ function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
       <View style={styles.mealMainRow}>
         <View style={styles.mealInfo}>
           <Text style={styles.mealTitle}>{mealRecord.title}</Text>
-          <Text style={styles.meta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
-          {mealRecord.url ? (
-            <Text style={styles.mealUrl} numberOfLines={1}>
-              {mealRecord.url}
-            </Text>
-          ) : null}
-          {mealRecord.memo ? <Text style={styles.mealMemo}>{mealRecord.memo}</Text> : null}
+          <View style={styles.mealMetaRow}>
+            <Text style={styles.meta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
+            {mealRecord.url ? (
+              <Text testID={`meal-url-icon-${mealRecord.id}`} style={styles.mealIcon}>
+                🔗
+              </Text>
+            ) : null}
+            {mealRecord.memo ? (
+              <Text testID={`meal-memo-icon-${mealRecord.id}`} style={styles.mealIcon}>
+                📝
+              </Text>
+            ) : null}
+          </View>
         </View>
-        <TouchableOpacity testID={`meal-edit-${mealRecord.id}`} onPress={openEditModal}>
-          <Text style={styles.editText}>編集</Text>
+        <TouchableOpacity testID={`meal-details-${mealRecord.id}`} onPress={openDetailModal}>
+          <Text style={styles.editText}>詳細</Text>
         </TouchableOpacity>
         <TouchableOpacity testID={`meal-delete-${mealRecord.id}`} onPress={() => onDelete(mealRecord.id)}>
           <Text style={styles.deleteText}>削除</Text>
@@ -78,14 +84,15 @@ function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
       </View>
 
       <Modal
-        visible={isEditModalVisible}
+        visible={isDetailModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setIsEditModalVisible(false)}
+        onRequestClose={() => setIsDetailModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>献立を編集</Text>
+            <Text style={styles.modalTitle}>献立の詳細</Text>
+            <Text style={styles.modalMeta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
             <TextInput
               testID={`meal-edit-title-input-${mealRecord.id}`}
               style={styles.input}
@@ -113,7 +120,7 @@ function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 testID={`meal-edit-cancel-${mealRecord.id}`}
-                onPress={() => setIsEditModalVisible(false)}
+                onPress={() => setIsDetailModalVisible(false)}
               >
                 <Text>キャンセル</Text>
               </TouchableOpacity>
@@ -341,12 +348,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  mealUrl: {
-    color: "#2f6fed",
-    fontSize: 12,
+  mealMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  mealMemo: {
-    color: "#666",
+  mealIcon: {
     fontSize: 12,
   },
   editText: {
@@ -451,6 +458,10 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 16,
     fontWeight: "700",
+  },
+  modalMeta: {
+    color: "#666",
+    fontSize: 12,
   },
   modalActions: {
     flexDirection: "row",
