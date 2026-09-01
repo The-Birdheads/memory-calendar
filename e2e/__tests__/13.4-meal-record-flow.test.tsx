@@ -45,9 +45,9 @@ describe("13.4 献立記録フローの検証", () => {
     const fakeClient = createFakeSupabaseClient();
     (getSupabaseClient as jest.Mock).mockReturnValue(fakeClient);
 
-    const { getByTestId, queryByDisplayValue } = await render(<MealsScreen />);
+    const { getByTestId, queryByText } = await render(<MealsScreen />);
 
-    expect(queryByDisplayValue("から揚げ")).toBeNull();
+    expect(queryByText("から揚げ")).toBeNull();
 
     await fireEvent.changeText(getByTestId("meal-create-title-input"), "から揚げ");
     await fireEvent.press(getByTestId("meal-create-date-button"));
@@ -65,6 +65,6 @@ describe("13.4 献立記録フローの検証", () => {
       title: "から揚げ",
     });
     await waitFor(() => expect(getByTestId(`meal-item-${created.id}`)).toBeTruthy());
-    expect(queryByDisplayValue("から揚げ")).toBeTruthy();
+    expect(queryByText("から揚げ")).toBeTruthy();
   });
 });

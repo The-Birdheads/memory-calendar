@@ -38,7 +38,7 @@ const CALENDARS = [
 
 const RECORDS = [
   { id: "meal-1", calendarId: "cal-1", mealDate: "2026-08-10", slot: "breakfast", title: "トースト", rating: 4, url: null, memo: null, createdBy: "user-1" },
-  { id: "meal-2", calendarId: "cal-1", mealDate: "2026-08-25", slot: "dinner", title: "カレー", rating: null, url: null, memo: null, createdBy: "user-2" },
+  { id: "meal-2", calendarId: "cal-1", mealDate: "2026-08-25", slot: "dinner", title: "カレー", rating: null, url: "https://example.com/curry", memo: "スパイスから作る", createdBy: "user-2" },
 ];
 
 function mockCommonHooks(mealRecords: typeof RECORDS, refetch = jest.fn()) {
@@ -71,6 +71,17 @@ describe("MealsScreen", () => {
     expect(getByTestId("meal-item-meal-2")).toBeTruthy();
   });
 
+  it("shows the date and meal slot together, and the url/memo when present", async () => {
+    mockCommonHooks(RECORDS);
+
+    const { getByText } = await render(<MealsScreen />);
+
+    expect(getByText("2026/08/10 朝食")).toBeTruthy();
+    expect(getByText("2026/08/25 夕食")).toBeTruthy();
+    expect(getByText("https://example.com/curry")).toBeTruthy();
+    expect(getByText("スパイスから作る")).toBeTruthy();
+  });
+
   it("shows a calendar switcher and updates the list when switched", async () => {
     mockCommonHooks([]);
 
@@ -84,7 +95,19 @@ describe("MealsScreen", () => {
     await waitFor(() => expect(useMealRecords).toHaveBeenLastCalledWith("cal-2"));
   });
 
-  it("edits a meal record's title and refetches so the list reflects the change", async () => {
+  it("opens an edit modal from the 編集 button, not an always-visible save button", async () => {
+    mockCommonHooks(RECORDS);
+
+    const { getByTestId, queryByTestId } = await render(<MealsScreen />);
+
+    expect(queryByTestId("meal-edit-title-input-meal-1")).toBeNull();
+
+    await fireEvent.press(getByTestId("meal-edit-meal-1"));
+
+    expect(getByTestId("meal-edit-title-input-meal-1")).toBeTruthy();
+  });
+
+  it("edits a meal record's title/url/memo from the edit modal and refetches", async () => {
     const refetch = jest.fn();
     mockCommonHooks(RECORDS, refetch);
     const updateMealRecordMock = jest.fn().mockResolvedValue(true);
@@ -92,13 +115,34 @@ describe("MealsScreen", () => {
 
     const { getByTestId } = await render(<MealsScreen />);
 
-    await fireEvent.changeText(getByTestId("meal-title-input-meal-1"), "トーストとコーヒー");
-    await fireEvent.press(getByTestId("meal-save-meal-1"));
+    await fireEvent.press(getByTestId("meal-edit-meal-1"));
+    await fireEvent.changeText(getByTestId("meal-edit-title-input-meal-1"), "トーストとコーヒー");
+    await fireEvent.changeText(getByTestId("meal-edit-url-input-meal-1"), "https://example.com/toast");
+    await fireEvent.changeText(getByTestId("meal-edit-memo-input-meal-1"), "バターたっぷり");
+    await fireEvent.press(getByTestId("meal-edit-save-meal-1"));
 
     await waitFor(() =>
-      expect(updateMealRecordMock).toHaveBeenCalledWith("meal-1", { title: "トーストとコーヒー" })
+      expect(updateMealRecordMock).toHaveBeenCalledWith("meal-1", {
+        title: "トーストとコーヒー",
+        url: "https://example.com/toast",
+        memo: "バターたっぷり",
+      })
     );
     await waitFor(() => expect(refetch).toHaveBeenCalled());
+  });
+
+  it("closes the edit modal without saving when cancelled", async () => {
+    mockCommonHooks(RECORDS);
+    const updateMealRecordMock = jest.fn().mockResolvedValue(true);
+    (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<MealsScreen />);
+
+    await fireEvent.press(getByTestId("meal-edit-meal-1"));
+    await fireEvent.press(getByTestId("meal-edit-cancel-meal-1"));
+
+    expect(updateMealRecordMock).not.toHaveBeenCalled();
+    expect(queryByTestId("meal-edit-title-input-meal-1")).toBeNull();
   });
 
   it("deletes a meal record and refetches so it disappears from the list", async () => {
@@ -115,7 +159,7 @@ describe("MealsScreen", () => {
     await waitFor(() => expect(refetch).toHaveBeenCalled());
   });
 
-  it("creates a meal record and refetches so the list reflects it", async () => {
+  it("creates a meal record with a title only", async () => {
     const refetch = jest.fn();
     mockCommonHooks(RECORDS, refetch);
     const createMealRecordMock = jest.fn().mockResolvedValue(true);
@@ -143,5 +187,32 @@ describe("MealsScreen", () => {
       })
     );
     await waitFor(() => expect(refetch).toHaveBeenCalled());
+  });
+
+  it("creates a meal record with a url and memo when provided", async () => {
+    mockCommonHooks(RECORDS);
+    const createMealRecordMock = jest.fn().mockResolvedValue(true);
+    (useCreateMealRecord as jest.Mock).mockReturnValue({
+      createMealRecord: createMealRecordMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<MealsScreen />);
+
+    await fireEvent.changeText(getByTestId("meal-create-title-input"), "から揚げ");
+    await fireEvent.changeText(getByTestId("meal-create-url-input"), "https://example.com/karaage");
+    await fireEvent.changeText(getByTestId("meal-create-memo-input"), "二度揚げする");
+    await fireEvent.press(getByTestId("meal-create-submit"));
+
+    await waitFor(() =>
+      expect(createMealRecordMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "から揚げ",
+          url: "https://example.com/karaage",
+          memo: "二度揚げする",
+        })
+      )
+    );
   });
 });

@@ -541,6 +541,20 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-event-event-1")).toBeTruthy();
   });
 
+  it("expands the day-events modal to fill the full screen height, not just a partial bottom sheet", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const cardStyle = flattenStyle(getByTestId("calendar-day-modal-card").props.style);
+    expect(cardStyle.height).toBe("100%");
+  });
+
   it("shows an empty message in the day-events modal when the selected day has no events", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });

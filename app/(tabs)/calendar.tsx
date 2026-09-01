@@ -592,7 +592,12 @@ export default function CalendarScreen() {
           activeOpacity={1}
           onPress={() => setIsDayEventsModalVisible(false)}
         >
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.dayModalCard}>
+          <TouchableOpacity
+            testID="calendar-day-modal-card"
+            activeOpacity={1}
+            onPress={() => {}}
+            style={styles.dayModalCard}
+          >
             <View style={styles.dayModalHeader}>
               <Text style={styles.dayModalTitle}>{formatDayHeaderLabel(selectedDateKey)}</Text>
               <View style={styles.dayModalHeaderActions}>
@@ -618,6 +623,7 @@ export default function CalendarScreen() {
               <Text style={styles.dayModalEmptyText}>予定はありません</Text>
             ) : (
               <FlatList
+                style={styles.dayModalEventList}
                 data={eventsForSelectedDate}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
@@ -1032,11 +1038,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
   dayModalCard: {
-    maxHeight: "70%",
+    height: "100%",
     backgroundColor: "#fff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 16,
+    paddingTop: 56,
     paddingBottom: 24,
   },
   dayModalHeader: {
@@ -1068,6 +1074,9 @@ const styles = StyleSheet.create({
     color: "#999",
     paddingHorizontal: 20,
     paddingVertical: 12,
+  },
+  dayModalEventList: {
+    flex: 1,
   },
   modalOverlay: {
     flex: 1,

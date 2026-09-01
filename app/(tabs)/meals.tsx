@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FlatList, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
@@ -27,35 +27,103 @@ function formatMealDateLabel(date: Date): string {
   return `${date.getUTCFullYear()}/${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
 }
 
+/** "YYYY-MM-DD" (already a plain date, no time) + the slot label, e.g. "2026/9/1 昼食". */
+function formatMealDateSlotLabel(mealDate: string, slot: MealSlot): string {
+  return `${mealDate.replace(/-/g, "/")} ${MEAL_SLOT_LABELS[slot]}`;
+}
+
 interface MealRecordRowProps {
   mealRecord: MealRecord;
-  onSave: (mealRecordId: string, title: string) => void;
+  onSave: (mealRecordId: string, title: string, url: string, memo: string) => void;
   onDelete: (mealRecordId: string) => void;
 }
 
 function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [title, setTitle] = useState(mealRecord.title);
+  const [url, setUrl] = useState(mealRecord.url ?? "");
+  const [memo, setMemo] = useState(mealRecord.memo ?? "");
+
+  const openEditModal = () => {
+    setTitle(mealRecord.title);
+    setUrl(mealRecord.url ?? "");
+    setMemo(mealRecord.memo ?? "");
+    setIsEditModalVisible(true);
+  };
+
+  const handleSave = () => {
+    onSave(mealRecord.id, title, url, memo);
+    setIsEditModalVisible(false);
+  };
 
   return (
     <View style={styles.mealRow} testID={`meal-item-${mealRecord.id}`}>
       <View style={styles.mealMainRow}>
-        <TextInput
-          testID={`meal-title-input-${mealRecord.id}`}
-          style={styles.titleInput}
-          value={title}
-          onChangeText={setTitle}
-        />
-        <TouchableOpacity
-          testID={`meal-save-${mealRecord.id}`}
-          onPress={() => onSave(mealRecord.id, title)}
-        >
-          <Text>保存</Text>
+        <View style={styles.mealInfo}>
+          <Text style={styles.mealTitle}>{mealRecord.title}</Text>
+          <Text style={styles.meta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
+          {mealRecord.url ? (
+            <Text style={styles.mealUrl} numberOfLines={1}>
+              {mealRecord.url}
+            </Text>
+          ) : null}
+          {mealRecord.memo ? <Text style={styles.mealMemo}>{mealRecord.memo}</Text> : null}
+        </View>
+        <TouchableOpacity testID={`meal-edit-${mealRecord.id}`} onPress={openEditModal}>
+          <Text style={styles.editText}>編集</Text>
         </TouchableOpacity>
         <TouchableOpacity testID={`meal-delete-${mealRecord.id}`} onPress={() => onDelete(mealRecord.id)}>
           <Text style={styles.deleteText}>削除</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.meta}>{mealRecord.mealDate}</Text>
+
+      <Modal
+        visible={isEditModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>献立を編集</Text>
+            <TextInput
+              testID={`meal-edit-title-input-${mealRecord.id}`}
+              style={styles.input}
+              placeholder="料理名"
+              value={title}
+              onChangeText={setTitle}
+            />
+            <TextInput
+              testID={`meal-edit-url-input-${mealRecord.id}`}
+              style={styles.input}
+              placeholder="URL"
+              autoCapitalize="none"
+              keyboardType="url"
+              value={url}
+              onChangeText={setUrl}
+            />
+            <TextInput
+              testID={`meal-edit-memo-input-${mealRecord.id}`}
+              style={styles.input}
+              placeholder="メモ"
+              multiline
+              value={memo}
+              onChangeText={setMemo}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                testID={`meal-edit-cancel-${mealRecord.id}`}
+                onPress={() => setIsEditModalVisible(false)}
+              >
+                <Text>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity testID={`meal-edit-save-${mealRecord.id}`} onPress={handleSave}>
+                <Text style={styles.saveLink}>保存</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -71,6 +139,8 @@ export default function MealsScreen() {
   const { deleteMealRecord } = useDeleteMealRecord();
 
   const [newTitle, setNewTitle] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [newMemo, setNewMemo] = useState("");
   const [newMealDate, setNewMealDate] = useState(() => new Date());
   const [newSlot, setNewSlot] = useState<MealSlot>("breakfast");
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -79,8 +149,12 @@ export default function MealsScreen() {
   const pastRecords = mealRecords.filter((record) => record.mealDate < today);
   const futureRecords = mealRecords.filter((record) => record.mealDate >= today);
 
-  const handleSave = async (mealRecordId: string, title: string) => {
-    const success = await updateMealRecord(mealRecordId, { title });
+  const handleSave = async (mealRecordId: string, title: string, url: string, memo: string) => {
+    const success = await updateMealRecord(mealRecordId, {
+      title,
+      url: url || null,
+      memo: memo || null,
+    });
     if (success) await refetch();
   };
 
@@ -95,9 +169,13 @@ export default function MealsScreen() {
       mealDate: newMealDate.toISOString().slice(0, 10),
       slot: newSlot,
       title: newTitle,
+      url: newUrl || undefined,
+      memo: newMemo || undefined,
     });
     if (success) {
       setNewTitle("");
+      setNewUrl("");
+      setNewMemo("");
       setNewMealDate(new Date());
       await refetch();
     }
@@ -133,6 +211,23 @@ export default function MealsScreen() {
           placeholder="料理名"
           value={newTitle}
           onChangeText={setNewTitle}
+        />
+        <TextInput
+          testID="meal-create-url-input"
+          style={styles.input}
+          placeholder="URL"
+          autoCapitalize="none"
+          keyboardType="url"
+          value={newUrl}
+          onChangeText={setNewUrl}
+        />
+        <TextInput
+          testID="meal-create-memo-input"
+          style={styles.input}
+          placeholder="メモ"
+          multiline
+          value={newMemo}
+          onChangeText={setNewMemo}
         />
 
         <TouchableOpacity
@@ -238,13 +333,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  titleInput: {
+  mealInfo: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 2,
+  },
+  mealTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  mealUrl: {
+    color: "#2f6fed",
+    fontSize: 12,
+  },
+  mealMemo: {
+    color: "#666",
+    fontSize: 12,
+  },
+  editText: {
+    color: "#2f6fed",
+    fontWeight: "700",
   },
   deleteText: {
     color: "#d32f2f",
@@ -327,5 +434,31 @@ const styles = StyleSheet.create({
   createButtonText: {
     color: "#fff",
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  modalCard: {
+    width: "85%",
+    borderRadius: 12,
+    padding: 20,
+    gap: 12,
+    backgroundColor: "#fff",
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 20,
+  },
+  saveLink: {
+    color: "#2f6fed",
+    fontWeight: "700",
   },
 });
