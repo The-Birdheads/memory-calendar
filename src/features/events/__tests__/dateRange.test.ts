@@ -1,4 +1,4 @@
-import { computeDateRange } from "../dateRange";
+import { computeDateKeyRange, computeDateRange } from "../dateRange";
 
 describe("computeDateRange", () => {
   it("returns the first and last instant of the month (JST) for month view", () => {
@@ -28,6 +28,19 @@ describe("computeDateRange", () => {
     expect(range).toEqual({
       start: "2026-08-17T15:00:00.000Z",
       end: "2026-08-18T14:59:59.999Z",
+    });
+  });
+
+  it("returns the first and last instant (JST) spanned by an inclusive dateKey range", () => {
+    // Used for the calendar screen's padded month grid, which shows a few
+    // leading/trailing days from the adjacent months - the query range must
+    // cover those too, or events on those visible-but-not-current-month days
+    // silently fail to show up.
+    const range = computeDateKeyRange("2026-07-26", "2026-09-05");
+
+    expect(range).toEqual({
+      start: "2026-07-25T15:00:00.000Z",
+      end: "2026-09-05T14:59:59.999Z",
     });
   });
 });

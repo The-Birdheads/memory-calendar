@@ -16,17 +16,15 @@ import { Tabs, router, useLocalSearchParams } from "expo-router";
 
 import { useAuthSession } from "../../src/features/auth/hooks";
 import {
-  useCalendarMembers,
   useCreateCalendar,
   useCreateInvite,
   useJoinByInvite,
   useMyCalendars,
-  useRemoveMember,
 } from "../../src/features/calendars/hooks";
 import { getCalendarErrorMessageJa } from "../../src/features/calendars/service";
 import type { CalendarKind } from "../../src/features/calendars/types";
 import { CATEGORY_COLORS, EventFormFields, type EventFormValue } from "../../src/features/events/components/EventFormFields";
-import { computeDateRange } from "../../src/features/events/dateRange";
+import { computeDateKeyRange } from "../../src/features/events/dateRange";
 import { expandEventDateKeys } from "../../src/features/events/eventDateKeys";
 import { formatDayHeaderLabel } from "../../src/features/events/formatDayHeaderLabel";
 import { useCreateEvent, useEventsInRange } from "../../src/features/events/hooks";
@@ -79,8 +77,6 @@ export default function CalendarScreen() {
   const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(null);
 
   const activeCalendarId = selectedCalendarId ?? calendars[0]?.id ?? "";
-  const { members, refetch } = useCalendarMembers(activeCalendarId);
-  const { removeMember } = useRemoveMember();
   const { createCalendar, error: createCalendarError } = useCreateCalendar();
   const { createInvite } = useCreateInvite();
   const { joinByInvite, error: joinByInviteError } = useJoinByInvite();
@@ -118,7 +114,16 @@ export default function CalendarScreen() {
     setSelectedDateKey(toDateKey(focusedDate.toISOString()));
   }, [focusedDate]);
 
-  const range = useMemo(() => computeDateRange("month", focusedDate), [focusedDate]);
+  const monthGrid = useMemo(() => buildMonthGrid(focusedDate), [focusedDate]);
+  // The grid shows a few leading/trailing days from the adjacent months to
+  // pad out full weeks, so the query range must span the whole padded grid
+  // (not just the focused calendar month) or events on those visible days
+  // silently fail to show up.
+  const range = useMemo(() => {
+    const firstWeek = monthGrid[0];
+    const lastWeek = monthGrid[monthGrid.length - 1];
+    return computeDateKeyRange(firstWeek[0].dateKey, lastWeek[lastWeek.length - 1].dateKey);
+  }, [monthGrid]);
   const { events, refetch: refetchEvents } = useEventsInRange(activeCalendarId, range);
   const { createEvent, error: createEventError } = useCreateEvent();
   const { createTodo } = useCreateTodo();
@@ -165,7 +170,6 @@ export default function CalendarScreen() {
       ? Math.max(200, containerHeight - aboveGridHeight - belowGridHeight)
       : null;
 
-  const monthGrid = useMemo(() => buildMonthGrid(focusedDate), [focusedDate]);
   const eventsForSelectedDate = events.filter((event) =>
     expandEventDateKeys(event.startAt, event.endAt).includes(selectedDateKey)
   );
@@ -181,17 +185,6 @@ export default function CalendarScreen() {
     });
     return map;
   }, [events]);
-
-  const isOwner = members.some(
-    (member) => member.userId === session?.user.id && member.role === "owner"
-  );
-
-  const handleRemove = async (userId: string) => {
-    const success = await removeMember(activeCalendarId, userId);
-    if (success) {
-      await refetch();
-    }
-  };
 
   const handleToday = () => {
     setFocusedDate(jstNow());
@@ -585,10 +578,11 @@ export default function CalendarScreen() {
       <Modal
         visible={isDayEventsModalVisible}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setIsDayEventsModalVisible(false)}
       >
         <TouchableOpacity
+          testID="calendar-day-modal-backdrop"
           style={styles.dayModalOverlay}
           activeOpacity={1}
           onPress={() => setIsDayEventsModalVisible(false)}
@@ -649,31 +643,14 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Empty on purpose - calendar member management now lives entirely in
+          CalendarSettingsModal. This stays as a zero-height measurement
+          point so the grid-height calc above (which needs a real "space
+          below the grid" number) keeps working. */}
       <View
         testID="calendar-below-grid"
         onLayout={(event) => setBelowGridHeight(event.nativeEvent.layout.height)}
-      >
-        <FlatList
-          data={members}
-          keyExtractor={(item) => item.userId}
-          renderItem={({ item }) => (
-            <View style={styles.memberRow}>
-              <Text>
-                {item.displayName ??
-                  (item.userId === session?.user.id ? session?.user.email ?? "メンバー" : "メンバー")}
-              </Text>
-              {isOwner && item.role !== "owner" ? (
-                <TouchableOpacity
-                  testID={`remove-member-${item.userId}`}
-                  onPress={() => handleRemove(item.userId)}
-                >
-                  <Text style={styles.removeText}>削除</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          )}
-        />
-      </View>
+      />
 
       <TouchableOpacity testID="calendar-add-event-fab" style={styles.fab} onPress={openCreateModal}>
         <Text style={styles.fabText}>+</Text>
@@ -998,13 +975,6 @@ const styles = StyleSheet.create({
   eventTitle: {
     flex: 1,
   },
-  memberRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
   removeText: {
     color: "#d32f2f",
   },
@@ -1031,16 +1001,17 @@ const styles = StyleSheet.create({
   },
   dayModalOverlay: {
     flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   dayModalCard: {
-    height: "100%",
+    width: "85%",
+    maxHeight: "70%",
     backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 56,
-    paddingBottom: 24,
+    borderRadius: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
   },
   dayModalHeader: {
     flexDirection: "row",

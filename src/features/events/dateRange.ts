@@ -55,3 +55,15 @@ export function computeDateRange(mode: CalendarViewMode, date: Date): DateRange 
   }
   return { start: startOfMonthUTC(date).toISOString(), end: endOfMonthUTC(date).toISOString() };
 }
+
+/**
+ * Like computeDateRange, but bounded by two "YYYY-MM-DD" (JST) dateKeys
+ * instead of a view mode - e.g. for querying the calendar screen's padded
+ * month grid, whose first/last visible cells spill into the adjacent
+ * months.
+ */
+export function computeDateKeyRange(startDateKey: string, endDateKeyInclusive: string): DateRange {
+  const start = new Date(`${startDateKey}T00:00:00.000Z`);
+  const end = new Date(`${endDateKeyInclusive}T00:00:00.000Z`);
+  return { start: startOfDayUTC(start).toISOString(), end: endOfDayUTC(end).toISOString() };
+}

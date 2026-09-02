@@ -12,7 +12,7 @@ import {
   useRemoveMember,
   useUpdateCalendar,
 } from "../../../src/features/calendars/hooks";
-import { computeDateRange } from "../../../src/features/events/dateRange";
+import { computeDateKeyRange } from "../../../src/features/events/dateRange";
 import { useCreateEvent, useEventsInRange } from "../../../src/features/events/hooks";
 import {
   useAttachTagsToEvent,
@@ -84,11 +84,6 @@ const CALENDARS = [
   { id: "cal-2", name: "友人グループ", createdBy: "user-2", createdAt: "2026-08-17T01:00:00.000Z" },
 ];
 
-const MEMBERS_CAL_1 = [
-  { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう" },
-  { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T00:00:00.000Z", displayName: null },
-];
-
 const TODAY_EVENT = {
   id: "event-1",
   calendarId: "cal-1",
@@ -119,8 +114,11 @@ function mockCommonHooks() {
     error: null,
     refetch: jest.fn(),
   });
+  // Only consumed by CalendarSettingsModal (opened via the header 設定
+  // button), not by the calendar screen itself - it manages its own member
+  // list independently.
   (useCalendarMembers as jest.Mock).mockReturnValue({
-    members: MEMBERS_CAL_1,
+    members: [],
     isLoading: false,
     error: null,
     refetch: jest.fn(),
@@ -199,29 +197,14 @@ describe("CalendarScreen", () => {
     jest.clearAllMocks();
   });
 
-  it("shows a switcher for each of the caller's calendars and the active calendar's members", async () => {
+  it("shows a switcher for each of the caller's calendars", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
 
-    const { getByTestId, getByText } = await render(<CalendarScreen />);
+    const { getByTestId } = await render(<CalendarScreen />);
 
     expect(getByTestId("calendar-switch-cal-1")).toBeTruthy();
     expect(getByTestId("calendar-switch-cal-2")).toBeTruthy();
-    expect(getByText("たろう")).toBeTruthy();
-    expect(getByText("メンバー")).toBeTruthy();
-  });
-
-  it("never shows a member's raw user id, falling back to their own email when they have no display name", async () => {
-    mockCommonHooks();
-    (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-2", email: "user2@example.com" } } });
-    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
-
-    const { getByText, queryByText } = await render(<CalendarScreen />);
-
-    expect(getByText("たろう")).toBeTruthy();
-    expect(getByText("user2@example.com")).toBeTruthy();
-    expect(queryByText("user-1")).toBeNull();
-    expect(queryByText("user-2")).toBeNull();
   });
 
   it("switches the active calendar when a switcher button is pressed", async () => {
@@ -232,108 +215,24 @@ describe("CalendarScreen", () => {
 
     await fireEvent.press(getByTestId("calendar-switch-cal-2"));
 
-    await waitFor(() => expect(useCalendarMembers).toHaveBeenLastCalledWith("cal-2"));
+    await waitFor(() => expect(useEventsInRange).toHaveBeenLastCalledWith("cal-2", expect.anything()));
   });
 
-  it("shows a remove button only for the owner and removes the member from the list on success", async () => {
-    mockCommonHooks();
-    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
-    const refetch = jest.fn();
-    (useCalendarMembers as jest.Mock).mockReturnValue({
-      members: MEMBERS_CAL_1,
-      isLoading: false,
-      error: null,
-      refetch,
-    });
-    const removeMemberMock = jest.fn().mockResolvedValue(true);
-    (useRemoveMember as jest.Mock).mockReturnValue({
-      removeMember: removeMemberMock,
-      isSubmitting: false,
-      error: null,
-    });
-
-    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
-
-    expect(getByTestId("remove-member-user-2")).toBeTruthy();
-    expect(queryByTestId("remove-member-user-1")).toBeNull();
-
-    await fireEvent.press(getByTestId("remove-member-user-2"));
-
-    await waitFor(() => expect(removeMemberMock).toHaveBeenCalledWith("cal-1", "user-2"));
-    await waitFor(() => expect(refetch).toHaveBeenCalled());
-  });
-
-  it("hides remove buttons when the caller is not the owner", async () => {
-    (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-2" } } });
-    (useMyCalendars as jest.Mock).mockReturnValue({
-      calendars: CALENDARS,
-      isLoading: false,
-      error: null,
-      refetch: jest.fn(),
-    });
-    (useCalendarMembers as jest.Mock).mockReturnValue({
-      members: MEMBERS_CAL_1,
-      isLoading: false,
-      error: null,
-      refetch: jest.fn(),
-    });
-    (useRemoveMember as jest.Mock).mockReturnValue({
-      removeMember: jest.fn(),
-      isSubmitting: false,
-      error: null,
-    });
-    (useCreateEvent as jest.Mock).mockReturnValue({
-      createEvent: jest.fn().mockResolvedValue({ id: "event-created-1" }),
-      isSubmitting: false,
-      error: null,
-    });
-    (useCreateTodo as jest.Mock).mockReturnValue({
-      createTodo: jest.fn().mockResolvedValue(true),
-      isSubmitting: false,
-      error: null,
-    });
-    (useCreateCalendar as jest.Mock).mockReturnValue({
-      createCalendar: jest.fn().mockResolvedValue(true),
-      isSubmitting: false,
-      error: null,
-    });
-    (useCreateInvite as jest.Mock).mockReturnValue({
-      createInvite: jest.fn().mockResolvedValue(null),
-      isSubmitting: false,
-      error: null,
-    });
-    (useJoinByInvite as jest.Mock).mockReturnValue({
-      joinByInvite: jest.fn().mockResolvedValue(true),
-      isSubmitting: false,
-      error: null,
-    });
-    (useTagTree as jest.Mock).mockReturnValue({ tagTree: [], isLoading: false, error: null, refetch: jest.fn() });
-    (useCreateTag as jest.Mock).mockReturnValue({ createTag: jest.fn(), isSubmitting: false, error: null });
-    (useUpdateTag as jest.Mock).mockReturnValue({ updateTag: jest.fn(), isSubmitting: false, error: null });
-    (useDeleteTag as jest.Mock).mockReturnValue({ deleteTag: jest.fn(), isSubmitting: false, error: null });
-    (useAttachTagsToEvent as jest.Mock).mockReturnValue({
-      attachTagsToEvent: jest.fn(),
-      isSubmitting: false,
-      error: null,
-    });
-    (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
-
-    const { queryByTestId } = await render(<CalendarScreen />);
-
-    expect(queryByTestId("remove-member-user-1")).toBeNull();
-    expect(queryByTestId("remove-member-user-2")).toBeNull();
-  });
-
-  it("shows the month label and queries the month range", async () => {
+  it("shows the month label and queries a range padded to the grid's full leading/trailing weeks", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
 
-    const today = new Date("2026-08-18T12:00:00.000Z");
     const { getByText } = await render(<CalendarScreen />);
 
     expect(getByText("2026年8月")).toBeTruthy();
+    // August 2026's grid is padded out to full weeks: it starts Sun 2026-07-26
+    // and ends Sat 2026-09-05, so events on those adjacent-month days (shown
+    // on the grid, even though grayed out) must still be queried for.
     await waitFor(() =>
-      expect(useEventsInRange).toHaveBeenLastCalledWith("cal-1", computeDateRange("month", today))
+      expect(useEventsInRange).toHaveBeenLastCalledWith(
+        "cal-1",
+        computeDateKeyRange("2026-07-26", "2026-09-05")
+      )
     );
   });
 
@@ -472,6 +371,31 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-event-event-3")).toBeTruthy();
   });
 
+  it("shows a dot for an event on a grayed-out leading/trailing day from the adjacent month", async () => {
+    mockCommonHooks();
+    // 2026-07-26 is the grid's first (leading, grayed-out) cell for the
+    // August 2026 view - see the padded-range test above.
+    const leadingDayEvent = {
+      id: "event-4",
+      calendarId: "cal-1",
+      title: "前月末の予定",
+      categoryColor: "#2f6fed",
+      startAt: "2026-07-26T09:00:00.000Z",
+      endAt: "2026-07-26T10:00:00.000Z",
+    };
+    (useEventsInRange as jest.Mock).mockReturnValue({
+      events: [leadingDayEvent],
+      isLoading: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    expect(
+      within(getByTestId("calendar-grid-cell-2026-07-26")).getByTestId("calendar-grid-dot-event-4")
+    ).toBeTruthy();
+  });
+
   it("colors Saturday blue and Sunday/holidays red in the weekday header and grid day numbers", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
@@ -523,7 +447,7 @@ describe("CalendarScreen", () => {
     expect(queryByTestId("calendar-event-event-1")).toBeNull();
   });
 
-  it("shows the selected day's events in a slide-up modal, with its date in the header, closed by default", async () => {
+  it("shows the selected day's events in a centered modal, with its date in the header, closed by default", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({
       events: [TODAY_EVENT],
@@ -541,7 +465,7 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-event-event-1")).toBeTruthy();
   });
 
-  it("expands the day-events modal to fill the full screen height, not just a partial bottom sheet", async () => {
+  it("shows the day-events modal as a fixed-size card centered over a dimmed backdrop, not a full-screen sheet", async () => {
     mockCommonHooks();
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
 
@@ -552,7 +476,26 @@ describe("CalendarScreen", () => {
     const flattenStyle = (style: unknown): Record<string, unknown> =>
       Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
     const cardStyle = flattenStyle(getByTestId("calendar-day-modal-card").props.style);
-    expect(cardStyle.height).toBe("100%");
+    expect(cardStyle.height).not.toBe("100%");
+    expect(cardStyle.borderRadius).toBeGreaterThan(0);
+
+    const overlayStyle = flattenStyle(getByTestId("calendar-day-modal-backdrop").props.style);
+    expect(overlayStyle.justifyContent).toBe("center");
+    expect(overlayStyle.alignItems).toBe("center");
+  });
+
+  it("closes the day-events modal when tapping outside the card, on the dimmed backdrop", async () => {
+    mockCommonHooks();
+    (useEventsInRange as jest.Mock).mockReturnValue({ events: [TODAY_EVENT], isLoading: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+    expect(getByTestId("calendar-event-event-1")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("calendar-day-modal-backdrop"));
+
+    expect(queryByTestId("calendar-event-event-1")).toBeNull();
   });
 
   it("shows an empty message in the day-events modal when the selected day has no events", async () => {
@@ -638,10 +581,11 @@ describe("CalendarScreen", () => {
 
     await fireEvent.press(getByTestId("calendar-month-next"));
     expect(getByText("2026年9月")).toBeTruthy();
+    // September 2026's padded grid runs Sun 2026-08-30 through Sat 2026-10-03.
     await waitFor(() =>
       expect(useEventsInRange).toHaveBeenLastCalledWith(
         "cal-1",
-        computeDateRange("month", new Date("2026-09-18T12:00:00.000Z"))
+        computeDateKeyRange("2026-08-30", "2026-10-03")
       )
     );
 
@@ -658,10 +602,11 @@ describe("CalendarScreen", () => {
     const { getByText } = await render(<CalendarScreen />);
 
     expect(getByText("2026年9月")).toBeTruthy();
+    // Same padded grid as above (Sun 2026-08-30 through Sat 2026-10-03).
     await waitFor(() =>
       expect(useEventsInRange).toHaveBeenLastCalledWith(
         "cal-2",
-        computeDateRange("month", new Date("2026-09-10T00:00:00.000Z"))
+        computeDateKeyRange("2026-08-30", "2026-10-03")
       )
     );
 
@@ -969,7 +914,6 @@ describe("CalendarScreen", () => {
   it("shows an onboarding message and the add-calendar button when the caller has no calendars", async () => {
     mockCommonHooks();
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: jest.fn() });
-    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
 
     const { getByText, getByTestId } = await render(<CalendarScreen />);
@@ -982,7 +926,6 @@ describe("CalendarScreen", () => {
     mockCommonHooks();
     const refetchCalendars = jest.fn();
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: refetchCalendars });
-    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
     const createCalendarMock = jest.fn().mockResolvedValue(true);
     (useCreateCalendar as jest.Mock).mockReturnValue({ createCalendar: createCalendarMock, isSubmitting: false, error: null });
@@ -1000,7 +943,6 @@ describe("CalendarScreen", () => {
   it("creates a personal calendar when 個人用 is selected in the onboarding modal", async () => {
     mockCommonHooks();
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: jest.fn() });
-    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
     const createCalendarMock = jest.fn().mockResolvedValue(true);
     (useCreateCalendar as jest.Mock).mockReturnValue({ createCalendar: createCalendarMock, isSubmitting: false, error: null });
@@ -1019,7 +961,6 @@ describe("CalendarScreen", () => {
     mockCommonHooks();
     const refetchCalendars = jest.fn();
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: refetchCalendars });
-    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
     const joinByInviteMock = jest.fn().mockResolvedValue(true);
     (useJoinByInvite as jest.Mock).mockReturnValue({ joinByInvite: joinByInviteMock, isSubmitting: false, error: null });
@@ -1061,7 +1002,6 @@ describe("CalendarScreen", () => {
   it("shows an error message when calendar creation fails", async () => {
     mockCommonHooks();
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: jest.fn() });
-    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
     (useCreateCalendar as jest.Mock).mockReturnValue({
       createCalendar: jest.fn().mockResolvedValue(false),
@@ -1080,7 +1020,6 @@ describe("CalendarScreen", () => {
   it("shows an error message when joining by invite fails", async () => {
     mockCommonHooks();
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [], isLoading: false, error: null, refetch: jest.fn() });
-    (useCalendarMembers as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
     (useEventsInRange as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
     (useJoinByInvite as jest.Mock).mockReturnValue({
       joinByInvite: jest.fn().mockResolvedValue(false),
