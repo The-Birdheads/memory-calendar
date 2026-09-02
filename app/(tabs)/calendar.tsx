@@ -1006,8 +1006,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   dayModalCard: {
+    // A definite height (not maxHeight) on purpose: the FlatList inside
+    // has flex:1 to fill the remaining space below the header, and Yoga
+    // can only resolve that against a parent with an actual resolved
+    // size - maxHeight alone leaves the card "auto" (sized to content),
+    // so the flex:1 list would get 0 height and silently show nothing.
+    // A fixed height also matches the requested "固定枠" (fixed frame)
+    // look, rather than a box that grows/shrinks with the event count.
     width: "85%",
-    maxHeight: "70%",
+    height: "70%",
     backgroundColor: "#fff",
     borderRadius: 20,
     paddingTop: 20,

@@ -478,6 +478,13 @@ describe("CalendarScreen", () => {
     const cardStyle = flattenStyle(getByTestId("calendar-day-modal-card").props.style);
     expect(cardStyle.height).not.toBe("100%");
     expect(cardStyle.borderRadius).toBeGreaterThan(0);
+    // Must be a real `height`, not just `maxHeight` - the event list inside
+    // uses flex:1 to fill the space below the header, which Yoga can only
+    // resolve against a parent with an actually-resolved size. maxHeight
+    // alone leaves the card sized to its content (effectively just the
+    // header), silently collapsing the list to zero height.
+    expect(cardStyle.height).toBeTruthy();
+    expect(cardStyle.maxHeight).toBeUndefined();
 
     const overlayStyle = flattenStyle(getByTestId("calendar-day-modal-backdrop").props.style);
     expect(overlayStyle.justifyContent).toBe("center");
