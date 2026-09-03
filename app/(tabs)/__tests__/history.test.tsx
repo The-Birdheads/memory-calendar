@@ -1,9 +1,14 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { router } from "expo-router";
 
 import HistoryScreen from "../history";
 import { useMyCalendars } from "../../../src/features/calendars/hooks";
 import { usePastEventsByTag } from "../../../src/features/history/hooks";
 import { useTagTree } from "../../../src/features/tags/hooks";
+
+jest.mock("expo-router", () => ({
+  router: { push: jest.fn() },
+}));
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
@@ -17,7 +22,10 @@ jest.mock("../../../src/features/history/hooks", () => ({
   usePastEventsByTag: jest.fn(),
 }));
 
-const CALENDARS = [{ id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" }];
+const CALENDARS = [
+  { id: "cal-1", name: "我が家", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
+  { id: "cal-2", name: "友人グループ", createdBy: "user-2", createdAt: "2026-08-17T01:00:00.000Z" },
+];
 
 const TAG_TREE = [
   {
@@ -115,5 +123,32 @@ describe("HistoryScreen", () => {
     const { getByText } = await render(<HistoryScreen />);
 
     expect(getByText("該当する予定がありません")).toBeTruthy();
+  });
+
+  it("shows a calendar switcher and updates the list when switched", async () => {
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+    (useTagTree as jest.Mock).mockReturnValue({ tagTree: TAG_TREE, isLoading: false, error: null });
+    (usePastEventsByTag as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+
+    const { getByTestId } = await render(<HistoryScreen />);
+
+    expect(getByTestId("history-calendar-switch-cal-1")).toBeTruthy();
+    expect(getByTestId("history-calendar-switch-cal-2")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("history-calendar-switch-cal-2"));
+
+    await waitFor(() => expect(usePastEventsByTag).toHaveBeenLastCalledWith("cal-2", undefined));
+  });
+
+  it("navigates to the event detail screen when a past event row is pressed", async () => {
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+    (useTagTree as jest.Mock).mockReturnValue({ tagTree: TAG_TREE, isLoading: false, error: null });
+    (usePastEventsByTag as jest.Mock).mockReturnValue({ events: PAST_EVENTS, isLoading: false, error: null });
+
+    const { getByTestId } = await render(<HistoryScreen />);
+
+    await fireEvent.press(getByTestId("history-event-event-1"));
+
+    expect(router.push).toHaveBeenCalledWith("/event/event-1");
   });
 });

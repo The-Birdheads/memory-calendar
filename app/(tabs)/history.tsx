@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { router } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
 import { usePastEventsByTag } from "../../src/features/history/hooks";
@@ -14,7 +15,8 @@ function flattenTags(nodes: TagTreeNode[]): TagTreeNode[] {
 
 export default function HistoryScreen() {
   const { calendars } = useMyCalendars();
-  const activeCalendarId = calendars[0]?.id ?? "";
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(null);
+  const activeCalendarId = selectedCalendarId ?? calendars[0]?.id ?? "";
 
   const { tagTree } = useTagTree(activeCalendarId);
   const [selectedTagId, setSelectedTagId] = useState<string | undefined>(undefined);
@@ -34,6 +36,27 @@ export default function HistoryScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>振り返り</Text>
+
+      <View style={styles.switcher}>
+        {calendars.map((calendar) => (
+          <TouchableOpacity
+            key={calendar.id}
+            testID={`history-calendar-switch-${calendar.id}`}
+            onPress={() => {
+              setSelectedCalendarId(calendar.id);
+              // A tag selected under the previous calendar may not exist
+              // (or mean the same thing) under the new one.
+              setSelectedTagId(undefined);
+            }}
+            style={[
+              styles.switchButton,
+              calendar.id === activeCalendarId && styles.switchButtonActive,
+            ]}
+          >
+            <Text>{calendar.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <ScrollView horizontal style={styles.filterList}>
         <TouchableOpacity
@@ -64,12 +87,16 @@ export default function HistoryScreen() {
           data={events}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <View style={styles.eventRow} testID={`history-event-${item.id}`}>
+            <TouchableOpacity
+              style={styles.eventRow}
+              testID={`history-event-${item.id}`}
+              onPress={() => router.push(`/event/${item.id}`)}
+            >
               <Text>{item.title}</Text>
               <Text style={styles.meta}>
                 {item.isAllDay ? formatDateOnly(item.startAt) : formatDateTime(item.startAt)}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}
@@ -85,6 +112,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     padding: 12,
+  },
+  switcher: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    marginBottom: 4,
+  },
+  switchButton: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  switchButtonActive: {
+    borderColor: "#2f6fed",
+    backgroundColor: "#e8f0fe",
   },
   filterList: {
     flexGrow: 0,

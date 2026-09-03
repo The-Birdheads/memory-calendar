@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import MemoriesScreen from "../memories";
 import { useAuthSession } from "../../../src/features/auth/hooks";
@@ -30,6 +30,7 @@ jest.mock("../../../src/features/communication/hooks", () => ({
 
 const CALENDARS: { id: string; name: string; kind: "personal" | "group"; createdBy: string; createdAt: string }[] = [
   { id: "cal-1", name: "我が家", kind: "group", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
+  { id: "cal-2", name: "友人グループ", kind: "group", createdBy: "user-2", createdAt: "2026-08-17T01:00:00.000Z" },
 ];
 
 const ENTRIES = [
@@ -112,5 +113,69 @@ describe("MemoriesScreen", () => {
     await fireEvent.press(getByTestId("memory-item-event-1"));
 
     expect(queryByTestId("event-reaction-add-👍")).toBeNull();
+  });
+
+  it("shows a calendar switcher and updates the timeline when switched", async () => {
+    mockCommonHooks(ENTRIES);
+
+    const { getByTestId } = await render(<MemoriesScreen />);
+
+    expect(getByTestId("memories-calendar-switch-cal-1")).toBeTruthy();
+    expect(getByTestId("memories-calendar-switch-cal-2")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("memories-calendar-switch-cal-2"));
+
+    await waitFor(() => expect(useMemoriesTimeline).toHaveBeenLastCalledWith("cal-2", undefined));
+  });
+
+  it("shows the unfiltered timeline by default (すべて active, no year/month filter)", async () => {
+    mockCommonHooks(ENTRIES);
+
+    await render(<MemoriesScreen />);
+
+    expect(useMemoriesTimeline).toHaveBeenLastCalledWith("cal-1", undefined);
+  });
+
+  it("filters the timeline to the current year/month when the month filter is enabled, and steps month-by-month", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-08-18T12:00:00.000Z"));
+    mockCommonHooks(ENTRIES);
+
+    const { getByTestId, getByText } = await render(<MemoriesScreen />);
+
+    await fireEvent.press(getByTestId("memories-filter-month-toggle"));
+
+    expect(getByText("2026年8月")).toBeTruthy();
+    await waitFor(() =>
+      expect(useMemoriesTimeline).toHaveBeenLastCalledWith("cal-1", { year: 2026, month: 8 })
+    );
+
+    await fireEvent.press(getByTestId("memories-month-next"));
+
+    expect(getByText("2026年9月")).toBeTruthy();
+    await waitFor(() =>
+      expect(useMemoriesTimeline).toHaveBeenLastCalledWith("cal-1", { year: 2026, month: 9 })
+    );
+
+    jest.useRealTimers();
+  });
+
+  it("clears the year/month filter when すべて is pressed again", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-08-18T12:00:00.000Z"));
+    mockCommonHooks(ENTRIES);
+
+    const { getByTestId } = await render(<MemoriesScreen />);
+
+    await fireEvent.press(getByTestId("memories-filter-month-toggle"));
+    await waitFor(() =>
+      expect(useMemoriesTimeline).toHaveBeenLastCalledWith("cal-1", { year: 2026, month: 8 })
+    );
+
+    await fireEvent.press(getByTestId("memories-filter-all"));
+
+    await waitFor(() => expect(useMemoriesTimeline).toHaveBeenLastCalledWith("cal-1", undefined));
+
+    jest.useRealTimers();
   });
 });

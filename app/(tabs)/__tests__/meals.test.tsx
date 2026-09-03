@@ -192,9 +192,54 @@ describe("MealsScreen", () => {
         title: "トーストとコーヒー",
         url: "https://example.com/toast",
         memo: "バターたっぷり",
+        mealDate: "2026-08-10",
+        slot: "breakfast",
       })
     );
     await waitFor(() => expect(refetch).toHaveBeenCalled());
+  });
+
+  it("lets the caller change the date and slot from the detail modal", async () => {
+    const refetch = jest.fn();
+    mockCommonHooks(RECORDS, refetch);
+    const updateMealRecordMock = jest.fn().mockResolvedValue(true);
+    (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<MealsScreen />);
+
+    await fireEvent.press(getByTestId("meals-past-toggle"));
+    await fireEvent.press(getByTestId("meal-details-meal-1"));
+
+    await fireEvent.press(getByTestId("meal-edit-date-button-meal-1"));
+    await fireEvent.changeText(getByTestId("meal-edit-date-picker-meal-1"), "2026-08-11T00:00:00.000Z");
+    await fireEvent.press(getByTestId("meal-edit-date-picker-done-meal-1"));
+    await fireEvent.press(getByTestId("meal-edit-slot-lunch-meal-1"));
+    await fireEvent.press(getByTestId("meal-edit-save-meal-1"));
+
+    await waitFor(() =>
+      expect(updateMealRecordMock).toHaveBeenCalledWith(
+        "meal-1",
+        expect.objectContaining({ mealDate: "2026-08-11", slot: "lunch" })
+      )
+    );
+    await waitFor(() => expect(refetch).toHaveBeenCalled());
+  });
+
+  it("resets the detail modal's date/slot edits to the record's own values each time it reopens", async () => {
+    mockCommonHooks(RECORDS);
+
+    const { getByTestId, getByText } = await render(<MealsScreen />);
+
+    await fireEvent.press(getByTestId("meals-past-toggle"));
+    await fireEvent.press(getByTestId("meal-details-meal-1"));
+    await fireEvent.press(getByTestId("meal-edit-date-button-meal-1"));
+    await fireEvent.changeText(getByTestId("meal-edit-date-picker-meal-1"), "2026-08-20T00:00:00.000Z");
+    await fireEvent.press(getByTestId("meal-edit-date-picker-done-meal-1"));
+    await fireEvent.press(getByTestId("meal-edit-cancel-meal-1"));
+
+    await fireEvent.press(getByTestId("meal-details-meal-1"));
+
+    expect(getByText("2026/08/10")).toBeTruthy();
   });
 
   it("closes the detail modal without saving when cancelled", async () => {
@@ -255,6 +300,65 @@ describe("MealsScreen", () => {
       })
     );
     await waitFor(() => expect(refetch).toHaveBeenCalled());
+  });
+
+  it("uses the JST calendar day the picker shows, not a raw UTC slice (regression: date entered != date shown)", async () => {
+    mockCommonHooks(RECORDS);
+    const createMealRecordMock = jest.fn().mockResolvedValue(true);
+    (useCreateMealRecord as jest.Mock).mockReturnValue({
+      createMealRecord: createMealRecordMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<MealsScreen />);
+
+    await fireEvent.changeText(getByTestId("meal-create-title-input"), "朝ごはん");
+    await fireEvent.press(getByTestId("meal-create-date-button"));
+    // A real device picker, tapping "9/4" on a JST device, hands back this
+    // exact instant (JST midnight Sept 4 == UTC 15:00 Sept 3) - a raw
+    // `.toISOString().slice(0, 10)` would wrongly read "2026-09-03".
+    await fireEvent.changeText(getByTestId("meal-create-date-picker"), "2026-09-03T15:00:00.000Z");
+    await fireEvent.press(getByTestId("meal-create-date-picker-done"));
+    await fireEvent.press(getByTestId("meal-create-submit"));
+
+    await waitFor(() =>
+      expect(createMealRecordMock).toHaveBeenCalledWith(
+        expect.objectContaining({ mealDate: "2026-09-04" })
+      )
+    );
+  });
+
+  it("shows the picked date (JST) on the date button, matching what will be saved", async () => {
+    mockCommonHooks(RECORDS);
+
+    const { getByTestId, getByText } = await render(<MealsScreen />);
+
+    await fireEvent.press(getByTestId("meal-create-date-button"));
+    await fireEvent.changeText(getByTestId("meal-create-date-picker"), "2026-09-03T15:00:00.000Z");
+    await fireEvent.press(getByTestId("meal-create-date-picker-done"));
+
+    expect(getByText("2026/09/04")).toBeTruthy();
+  });
+
+  it("splits records into past/future using JST 'today', not a raw UTC slice", async () => {
+    // 2026-08-19T00:30:00.000Z is already 2026-08-19 09:30 JST, but the raw
+    // UTC date is still "2026-08-18" - a naive `new Date().toISOString()`
+    // slice would misclassify an 08-18 record as still-upcoming.
+    jest.setSystemTime(new Date("2026-08-19T00:30:00.000Z"));
+    const records: typeof RECORDS = [
+      { id: "meal-y", calendarId: "cal-1", mealDate: "2026-08-18", slot: "dinner", title: "昨日の夕食", rating: 4, url: null, memo: null, createdBy: "user-1" },
+    ];
+    mockCommonHooks(records);
+
+    const { getByText, getByTestId, queryByTestId } = await render(<MealsScreen />);
+
+    expect(getByText("食べたもの (1)")).toBeTruthy();
+    expect(getByText("食べる予定 (0)")).toBeTruthy();
+    expect(queryByTestId("meal-item-meal-y")).toBeNull();
+
+    await fireEvent.press(getByTestId("meals-past-toggle"));
+    expect(getByTestId("meal-item-meal-y")).toBeTruthy();
   });
 
   it("creates a meal record with a url and memo when provided", async () => {

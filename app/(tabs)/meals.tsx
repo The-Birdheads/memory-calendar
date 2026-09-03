@@ -23,6 +23,7 @@ import {
   useUpdateMealRecord,
 } from "../../src/features/meals/hooks";
 import type { MealRecord, MealSlot } from "../../src/features/meals/types";
+import { formatDateOnly, jstNow, toJstDateKey } from "../../src/shared/utils/formatDateTime";
 
 const MEAL_SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
@@ -32,12 +33,22 @@ const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
   snack: "間食",
 };
 
+// jstNow() itself already IS the JST-shifted Date, so slicing its own
+// .toISOString() directly gives the JST day - do NOT also pass it through
+// toJstDateKey (that expects a real, un-shifted absolute instant, and would
+// double-shift by another 9h). See the same pattern/comment in calendar.tsx.
 function todayDateString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return jstNow().toISOString().slice(0, 10);
 }
 
-function formatMealDateLabel(date: Date): string {
-  return `${date.getUTCFullYear()}/${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+/**
+ * A native date picker hands back a real absolute instant (e.g. tapping
+ * "9/4" on a JST device yields JST-midnight-Sept-4, i.e. 15:00 UTC on the
+ * 3rd) - reading its JST calendar day (not a raw UTC slice) is what keeps
+ * the date you pick and the date that gets saved/displayed in sync.
+ */
+function mealDateKeyFromPicked(date: Date): string {
+  return toJstDateKey(date.toISOString());
 }
 
 /** "YYYY-MM-DD" (already a plain date, no time) + the slot label, e.g. "2026/9/1 昼食". */
@@ -45,9 +56,16 @@ function formatMealDateSlotLabel(mealDate: string, slot: MealSlot): string {
   return `${mealDate.replace(/-/g, "/")} ${MEAL_SLOT_LABELS[slot]}`;
 }
 
+/** Parses a "YYYY-MM-DD" mealDate into a Date for the picker (UTC midnight -
+ * round-trips correctly through mealDateKeyFromPicked's JST-day read, same
+ * as the web date-input fallback). */
+function mealDateToPickerValue(mealDate: string): Date {
+  return new Date(`${mealDate}T00:00:00.000Z`);
+}
+
 interface MealRecordRowProps {
   mealRecord: MealRecord;
-  onSave: (mealRecordId: string, title: string, url: string, memo: string) => void;
+  onSave: (mealRecordId: string, title: string, url: string, memo: string, mealDate: string, slot: MealSlot) => void;
   onDelete: (mealRecordId: string) => void;
 }
 
@@ -56,16 +74,22 @@ function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
   const [title, setTitle] = useState(mealRecord.title);
   const [url, setUrl] = useState(mealRecord.url ?? "");
   const [memo, setMemo] = useState(mealRecord.memo ?? "");
+  const [editMealDate, setEditMealDate] = useState(() => mealDateToPickerValue(mealRecord.mealDate));
+  const [editSlot, setEditSlot] = useState(mealRecord.slot);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   const openDetailModal = () => {
     setTitle(mealRecord.title);
     setUrl(mealRecord.url ?? "");
     setMemo(mealRecord.memo ?? "");
+    setEditMealDate(mealDateToPickerValue(mealRecord.mealDate));
+    setEditSlot(mealRecord.slot);
+    setIsDatePickerOpen(false);
     setIsDetailModalVisible(true);
   };
 
   const handleSave = () => {
-    onSave(mealRecord.id, title, url, memo);
+    onSave(mealRecord.id, title, url, memo, mealDateKeyFromPicked(editMealDate), editSlot);
     setIsDetailModalVisible(false);
   };
 
@@ -102,7 +126,63 @@ function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>献立の詳細</Text>
-              <Text style={styles.modalMeta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
+
+              <TouchableOpacity
+                testID={`meal-edit-date-button-${mealRecord.id}`}
+                style={styles.dateField}
+                onPress={() => setIsDatePickerOpen(true)}
+              >
+                <Text style={styles.dateFieldLabel}>日付</Text>
+                <Text>{formatDateOnly(editMealDate.toISOString())}</Text>
+              </TouchableOpacity>
+
+              {isDatePickerOpen ? (
+                <View style={styles.pickerContainer}>
+                  {Platform.OS === "web" ? (
+                    <TextInput
+                      testID={`meal-edit-date-picker-${mealRecord.id}`}
+                      style={styles.input}
+                      placeholder="YYYY-MM-DD"
+                      onChangeText={(text) => {
+                        const parsed = new Date(`${text}T00:00:00.000Z`);
+                        if (!Number.isNaN(parsed.getTime())) setEditMealDate(parsed);
+                      }}
+                    />
+                  ) : (
+                    <DateTimePicker
+                      testID={`meal-edit-date-picker-${mealRecord.id}`}
+                      value={editMealDate}
+                      mode="date"
+                      onChange={(_event, selected) => {
+                        if (selected) setEditMealDate(selected);
+                      }}
+                    />
+                  )}
+                  <TouchableOpacity
+                    testID={`meal-edit-date-picker-done-${mealRecord.id}`}
+                    style={styles.pickerDoneButton}
+                    onPress={() => setIsDatePickerOpen(false)}
+                  >
+                    <Text>完了</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              <View style={styles.slotRow}>
+                {MEAL_SLOTS.map((slot) => (
+                  <TouchableOpacity
+                    key={slot}
+                    testID={`meal-edit-slot-${slot}-${mealRecord.id}`}
+                    style={[styles.slotButton, slot === editSlot && styles.slotButtonActive]}
+                    onPress={() => setEditSlot(slot)}
+                  >
+                    <Text style={slot === editSlot ? styles.slotButtonTextActive : undefined}>
+                      {MEAL_SLOT_LABELS[slot]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <TextInput
                 testID={`meal-edit-title-input-${mealRecord.id}`}
                 style={styles.input}
@@ -171,11 +251,20 @@ export default function MealsScreen() {
   const pastRecords = mealRecords.filter((record) => record.mealDate < today);
   const futureRecords = mealRecords.filter((record) => record.mealDate >= today);
 
-  const handleSave = async (mealRecordId: string, title: string, url: string, memo: string) => {
+  const handleSave = async (
+    mealRecordId: string,
+    title: string,
+    url: string,
+    memo: string,
+    mealDate: string,
+    slot: MealSlot
+  ) => {
     const success = await updateMealRecord(mealRecordId, {
       title,
       url: url || null,
       memo: memo || null,
+      mealDate,
+      slot,
     });
     if (success) await refetch();
   };
@@ -188,7 +277,7 @@ export default function MealsScreen() {
   const handleCreate = async () => {
     const success = await createMealRecord({
       calendarId: activeCalendarId,
-      mealDate: newMealDate.toISOString().slice(0, 10),
+      mealDate: mealDateKeyFromPicked(newMealDate),
       slot: newSlot,
       title: newTitle,
       url: newUrl || undefined,
@@ -271,7 +360,7 @@ export default function MealsScreen() {
           onPress={() => setIsDatePickerOpen(true)}
         >
           <Text style={styles.dateFieldLabel}>日付</Text>
-          <Text>{formatMealDateLabel(newMealDate)}</Text>
+          <Text>{formatDateOnly(newMealDate.toISOString())}</Text>
         </TouchableOpacity>
 
         {isDatePickerOpen ? (
@@ -533,10 +622,6 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 16,
     fontWeight: "700",
-  },
-  modalMeta: {
-    color: "#666",
-    fontSize: 12,
   },
   modalActions: {
     flexDirection: "row",
