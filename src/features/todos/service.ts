@@ -1,11 +1,18 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
 import { err, ok, type Result } from "../../shared/types/result";
-import type { CreateTodoInput, Todo, TodoError, TodoWithEventTitle, UpdateTodoInput } from "./types";
+import type {
+  CreatePersonalEventForTodoInput,
+  CreateTodoInput,
+  Todo,
+  TodoError,
+  TodoWithEventTitle,
+  UpdateTodoInput,
+} from "./types";
 
 interface TodoRow {
   id: string;
-  event_id: string;
+  event_id: string | null;
   title: string;
   is_done: boolean;
   completed_at: string | null;
@@ -16,7 +23,8 @@ interface TodoRow {
 }
 
 interface TodoRowWithEvent extends TodoRow {
-  events: { calendar_id: string; title: string; start_at: string; end_at: string };
+  event_id: string;
+  events: { calendar_id: string; title: string; start_at: string; end_at: string; is_all_day: boolean };
 }
 
 function mapTodoRow(row: TodoRow): Todo {
@@ -36,13 +44,19 @@ function mapTodoRow(row: TodoRow): Todo {
 function mapTodoRowWithEventTitle(row: TodoRowWithEvent): TodoWithEventTitle {
   return {
     ...mapTodoRow(row),
+    eventId: row.event_id,
+    eventCalendarId: row.events.calendar_id,
     eventTitle: row.events.title,
     eventStartAt: row.events.start_at,
     eventEndAt: row.events.end_at,
+    eventIsAllDay: row.events.is_all_day,
   };
 }
 
 function mapTodoError(error: PostgrestError): TodoError {
+  if (error.code === "A0001" || error.code === "A0005") {
+    return { type: "NotFound" };
+  }
   return { type: "Forbidden" };
 }
 
@@ -66,14 +80,20 @@ export async function createTodo(
   return ok(mapTodoRow(data as TodoRow));
 }
 
-export async function listTodosByCalendar(
+/** Lists todos scoped to any of the given calendars (e.g. the ToDo tab's
+ * multi-select view, which defaults to all of the caller's calendars). */
+export async function listTodosByCalendars(
   client: SupabaseClient,
-  calendarId: string
+  calendarIds: string[]
 ): Promise<Result<TodoWithEventTitle[], TodoError>> {
+  if (calendarIds.length === 0) {
+    return ok([]);
+  }
+
   const { data, error } = await client
     .from("todos")
-    .select("*, events!inner(calendar_id, title, start_at, end_at)")
-    .eq("events.calendar_id", calendarId);
+    .select("*, events!inner(calendar_id, title, start_at, end_at, is_all_day)")
+    .in("events.calendar_id", calendarIds);
 
   if (error || !data) {
     return err(mapTodoError(error as PostgrestError));
@@ -139,6 +159,55 @@ export async function deleteTodo(
   }
 
   return ok(undefined);
+}
+
+export async function listOrphanedTodos(client: SupabaseClient): Promise<Result<Todo[], TodoError>> {
+  const { data, error } = await client.from("todos").select().is("event_id", null);
+
+  if (error || !data) {
+    return err(mapTodoError(error as PostgrestError));
+  }
+
+  return ok((data as TodoRow[]).map(mapTodoRow));
+}
+
+export async function reattachTodoToExistingEvent(
+  client: SupabaseClient,
+  todoId: string,
+  eventId: string
+): Promise<Result<Todo, TodoError>> {
+  const { data, error } = await client
+    .from("todos")
+    .update({ event_id: eventId })
+    .eq("id", todoId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    return err(mapTodoError(error as PostgrestError));
+  }
+
+  return ok(mapTodoRow(data as TodoRow));
+}
+
+export async function reattachTodoToNewPersonalEvent(
+  client: SupabaseClient,
+  todoId: string,
+  input: CreatePersonalEventForTodoInput
+): Promise<Result<Todo, TodoError>> {
+  const { data, error } = await client
+    .rpc("reattach_todo_to_new_personal_event", {
+      p_todo_id: todoId,
+      p_title: input.title,
+      p_date: input.date,
+    })
+    .single();
+
+  if (error || !data) {
+    return err(mapTodoError(error as PostgrestError));
+  }
+
+  return ok(mapTodoRow(data as TodoRow));
 }
 
 export async function listTodosByEvent(

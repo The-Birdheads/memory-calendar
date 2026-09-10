@@ -1,10 +1,11 @@
-import { groupTodosByEvent } from "../groupByEvent";
+import { countIncomplete, groupTodosByEvent } from "../groupByEvent";
 import type { TodoWithEventTitle } from "../types";
 
 function makeTodo(overrides: Partial<TodoWithEventTitle>): TodoWithEventTitle {
   return {
     id: "todo-x",
     eventId: "event-x",
+    eventCalendarId: "cal-1",
     title: "todo",
     isDone: false,
     completedAt: null,
@@ -15,6 +16,7 @@ function makeTodo(overrides: Partial<TodoWithEventTitle>): TodoWithEventTitle {
     eventTitle: "event",
     eventStartAt: "2026-08-01T00:00:00.000Z",
     eventEndAt: "2026-08-01T00:00:00.000Z",
+    eventIsAllDay: false,
     ...overrides,
   };
 }
@@ -22,14 +24,15 @@ function makeTodo(overrides: Partial<TodoWithEventTitle>): TodoWithEventTitle {
 describe("groupTodosByEvent", () => {
   it("groups todos that share the same event", () => {
     const todos = [
-      makeTodo({ id: "todo-1", eventId: "event-1", title: "楽譜購入", eventTitle: "発表会", eventStartAt: "2026-09-01T10:00:00.000Z" }),
-      makeTodo({ id: "todo-2", eventId: "event-1", title: "練習", eventTitle: "発表会", eventStartAt: "2026-09-01T10:00:00.000Z" }),
+      makeTodo({ id: "todo-1", eventId: "event-1", eventCalendarId: "cal-2", title: "楽譜購入", eventTitle: "発表会", eventStartAt: "2026-09-01T10:00:00.000Z" }),
+      makeTodo({ id: "todo-2", eventId: "event-1", eventCalendarId: "cal-2", title: "練習", eventTitle: "発表会", eventStartAt: "2026-09-01T10:00:00.000Z" }),
     ];
 
     const groups = groupTodosByEvent(todos);
 
     expect(groups).toHaveLength(1);
     expect(groups[0].eventId).toBe("event-1");
+    expect(groups[0].eventCalendarId).toBe("cal-2");
     expect(groups[0].todos.map((t) => t.id)).toEqual(["todo-1", "todo-2"]);
   });
 
@@ -57,5 +60,25 @@ describe("groupTodosByEvent", () => {
 
   it("returns an empty array for no todos", () => {
     expect(groupTodosByEvent([])).toEqual([]);
+  });
+});
+
+describe("countIncomplete", () => {
+  it("counts only the todos that aren't done yet", () => {
+    const group = groupTodosByEvent([
+      makeTodo({ id: "todo-1", eventId: "event-1", isDone: false }),
+      makeTodo({ id: "todo-2", eventId: "event-1", isDone: true }),
+      makeTodo({ id: "todo-3", eventId: "event-1", isDone: false }),
+    ])[0];
+
+    expect(countIncomplete(group)).toBe(2);
+  });
+
+  it("returns 0 when every todo in the group is done", () => {
+    const group = groupTodosByEvent([
+      makeTodo({ id: "todo-1", eventId: "event-1", isDone: true }),
+    ])[0];
+
+    expect(countIncomplete(group)).toBe(0);
   });
 });

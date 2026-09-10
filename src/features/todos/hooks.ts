@@ -5,12 +5,22 @@ import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import {
   createTodo,
   deleteTodo,
-  listTodosByCalendar,
+  listOrphanedTodos,
+  listTodosByCalendars,
   listTodosByEvent,
+  reattachTodoToExistingEvent,
+  reattachTodoToNewPersonalEvent,
   toggleDone,
   updateTodo,
 } from "./service";
-import type { CreateTodoInput, Todo, TodoError, TodoWithEventTitle, UpdateTodoInput } from "./types";
+import type {
+  CreatePersonalEventForTodoInput,
+  CreateTodoInput,
+  Todo,
+  TodoError,
+  TodoWithEventTitle,
+  UpdateTodoInput,
+} from "./types";
 
 export interface UseCreateTodoResult {
   createTodo: (input: CreateTodoInput) => Promise<boolean>;
@@ -37,21 +47,24 @@ export function useCreateTodo(): UseCreateTodoResult {
   return { createTodo: runCreateTodo, isSubmitting, error };
 }
 
-export interface UseTodosByCalendarResult {
+export interface UseTodosByCalendarsResult {
   todos: TodoWithEventTitle[];
   isLoading: boolean;
   error: TodoError | null;
   refetch: () => Promise<void>;
 }
 
-export function useTodosByCalendar(calendarId: string): UseTodosByCalendarResult {
+/** Todos across the given calendars (e.g. the ToDo tab's multi-select view,
+ * which defaults to all of the caller's calendars). */
+export function useTodosByCalendars(calendarIds: string[]): UseTodosByCalendarsResult {
   const [todos, setTodos] = useState<TodoWithEventTitle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<TodoError | null>(null);
+  const calendarIdsKey = calendarIds.join(",");
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
-    const result = await listTodosByCalendar(getSupabaseClient(), calendarId);
+    const result = await listTodosByCalendars(getSupabaseClient(), calendarIds);
     if (result.ok) {
       setTodos(result.value);
       setError(null);
@@ -60,17 +73,103 @@ export function useTodosByCalendar(calendarId: string): UseTodosByCalendarResult
       setError(result.error);
     }
     setIsLoading(false);
-  }, [calendarId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarIdsKey]);
 
   useEffect(() => {
     refetch();
   }, [refetch]);
 
   useEffect(() => {
-    return subscribeToTableChanges(getSupabaseClient(), `todos-${calendarId}`, "todos", refetch);
-  }, [calendarId, refetch]);
+    // todosテーブル自体にはcalendar_id列がなく(event経由でしか分からない)、
+    // postgres_changesではevents側をキーにしたフィルタができないため、
+    // カレンダーを絞らず全件のtodos変更を購読してrefetchする。
+    return subscribeToTableChanges(getSupabaseClient(), "todos-multi", "todos", refetch);
+  }, [refetch]);
 
   return { todos, isLoading, error, refetch };
+}
+
+export interface UseOrphanedTodosResult {
+  todos: Todo[];
+  isLoading: boolean;
+  error: TodoError | null;
+  refetch: () => Promise<void>;
+}
+
+export function useOrphanedTodos(): UseOrphanedTodosResult {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<TodoError | null>(null);
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const result = await listOrphanedTodos(getSupabaseClient());
+    if (result.ok) {
+      setTodos(result.value);
+      setError(null);
+    } else {
+      setTodos([]);
+      setError(result.error);
+    }
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { todos, isLoading, error, refetch };
+}
+
+export interface UseReattachTodoToExistingEventResult {
+  reattachTodoToExistingEvent: (todoId: string, eventId: string) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TodoError | null;
+}
+
+export function useReattachTodoToExistingEvent(): UseReattachTodoToExistingEventResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TodoError | null>(null);
+
+  const run = useCallback(async (todoId: string, eventId: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await reattachTodoToExistingEvent(getSupabaseClient(), todoId, eventId);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { reattachTodoToExistingEvent: run, isSubmitting, error };
+}
+
+export interface UseReattachTodoToNewPersonalEventResult {
+  reattachTodoToNewPersonalEvent: (todoId: string, input: CreatePersonalEventForTodoInput) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TodoError | null;
+}
+
+export function useReattachTodoToNewPersonalEvent(): UseReattachTodoToNewPersonalEventResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TodoError | null>(null);
+
+  const run = useCallback(async (todoId: string, input: CreatePersonalEventForTodoInput) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await reattachTodoToNewPersonalEvent(getSupabaseClient(), todoId, input);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { reattachTodoToNewPersonalEvent: run, isSubmitting, error };
 }
 
 export interface UseTodosByEventResult {

@@ -2,6 +2,7 @@ import type { TodoWithEventTitle } from "./types";
 
 export interface EventTodoGroup {
   eventId: string;
+  eventCalendarId: string;
   eventTitle: string;
   eventStartAt: string;
   eventEndAt: string;
@@ -23,6 +24,7 @@ export function groupTodosByEvent(todos: TodoWithEventTitle[]): EventTodoGroup[]
     } else {
       groups.set(todo.eventId, {
         eventId: todo.eventId,
+        eventCalendarId: todo.eventCalendarId,
         eventTitle: todo.eventTitle,
         eventStartAt: todo.eventStartAt,
         eventEndAt: todo.eventEndAt,
@@ -34,4 +36,9 @@ export function groupTodosByEvent(todos: TodoWithEventTitle[]): EventTodoGroup[]
   return Array.from(groups.values()).sort(
     (a, b) => new Date(a.eventStartAt).getTime() - new Date(b.eventStartAt).getTime()
   );
+}
+
+/** The number of todos in a group that aren't done yet. */
+export function countIncomplete(group: EventTodoGroup): number {
+  return group.todos.filter((todo) => !todo.isDone).length;
 }

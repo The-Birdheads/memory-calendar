@@ -4,16 +4,22 @@ import { getSupabaseClient } from "../../../shared/api/supabaseClient";
 import {
   createTodo,
   deleteTodo,
-  listTodosByCalendar,
+  listOrphanedTodos,
+  listTodosByCalendars,
   listTodosByEvent,
+  reattachTodoToExistingEvent,
+  reattachTodoToNewPersonalEvent,
   toggleDone,
   updateTodo,
 } from "../service";
 import {
   useCreateTodo,
   useDeleteTodo,
+  useOrphanedTodos,
+  useReattachTodoToExistingEvent,
+  useReattachTodoToNewPersonalEvent,
   useToggleDone,
-  useTodosByCalendar,
+  useTodosByCalendars,
   useTodosByEvent,
   useUpdateTodo,
 } from "../hooks";
@@ -24,8 +30,11 @@ jest.mock("../../../shared/api/supabaseClient", () => ({
 
 jest.mock("../service", () => ({
   createTodo: jest.fn(),
-  listTodosByCalendar: jest.fn(),
+  listOrphanedTodos: jest.fn(),
+  listTodosByCalendars: jest.fn(),
   listTodosByEvent: jest.fn(),
+  reattachTodoToExistingEvent: jest.fn(),
+  reattachTodoToNewPersonalEvent: jest.fn(),
   toggleDone: jest.fn(),
   updateTodo: jest.fn(),
   deleteTodo: jest.fn(),
@@ -71,43 +80,45 @@ describe("useCreateTodo", () => {
   });
 });
 
-describe("useTodosByCalendar", () => {
+describe("useTodosByCalendars", () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it("loads todos for the given calendar on mount", async () => {
+  it("loads todos for the given calendars on mount", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    const todos = [{ id: "todo-1", eventId: "event-1", title: "飲み物を買う", isDone: false }];
-    (listTodosByCalendar as jest.Mock).mockResolvedValue({ ok: true, value: todos });
+    const todos = [{ id: "todo-1", eventId: "event-1", eventCalendarId: "cal-1", title: "飲み物を買う", isDone: false }];
+    (listTodosByCalendars as jest.Mock).mockResolvedValue({ ok: true, value: todos });
 
-    const { result } = await renderHook(() => useTodosByCalendar("cal-1"));
+    const { result } = await renderHook(() => useTodosByCalendars(["cal-1", "cal-2"]));
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.todos).toEqual(todos);
-    expect(listTodosByCalendar).toHaveBeenCalledWith({}, "cal-1");
+    expect(listTodosByCalendars).toHaveBeenCalledWith({}, ["cal-1", "cal-2"]);
   });
 
-  it("reloads when the calendar id changes", async () => {
+  it("reloads when the set of calendar ids changes", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (listTodosByCalendar as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+    (listTodosByCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
 
     const { result, rerender } = await renderHook(
-      ({ calendarId }: { calendarId: string }) => useTodosByCalendar(calendarId),
-      { initialProps: { calendarId: "cal-1" } }
+      ({ calendarIds }: { calendarIds: string[] }) => useTodosByCalendars(calendarIds),
+      { initialProps: { calendarIds: ["cal-1"] } }
     );
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    await rerender({ calendarId: "cal-2" });
+    await rerender({ calendarIds: ["cal-1", "cal-2"] });
 
-    await waitFor(() => expect(listTodosByCalendar).toHaveBeenLastCalledWith({}, "cal-2"));
+    await waitFor(() =>
+      expect(listTodosByCalendars).toHaveBeenLastCalledWith({}, ["cal-1", "cal-2"])
+    );
   });
 
   it("keeps an empty list and sets the error when loading fails", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (listTodosByCalendar as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+    (listTodosByCalendars as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
 
-    const { result } = await renderHook(() => useTodosByCalendar("cal-1"));
+    const { result } = await renderHook(() => useTodosByCalendars(["cal-1"]));
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.todos).toEqual([]);
@@ -120,11 +131,11 @@ describe("useTodosByCalendar", () => {
     channel.subscribe.mockReturnValue(channel);
     const client = { channel: jest.fn(() => channel) };
     (getSupabaseClient as jest.Mock).mockReturnValue(client);
-    (listTodosByCalendar as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+    (listTodosByCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
 
-    await renderHook(() => useTodosByCalendar("cal-1"));
+    await renderHook(() => useTodosByCalendars(["cal-1"]));
 
-    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^todos-cal-1-/)));
+    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^todos-multi-/)));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
       { event: "*", schema: "public", table: "todos" },
@@ -132,12 +143,124 @@ describe("useTodosByCalendar", () => {
     );
 
     const onChange = channel.on.mock.calls[0][2];
-    (listTodosByCalendar as jest.Mock).mockClear();
+    (listTodosByCalendars as jest.Mock).mockClear();
     await act(async () => {
       await onChange();
     });
 
-    await waitFor(() => expect(listTodosByCalendar).toHaveBeenCalled());
+    await waitFor(() => expect(listTodosByCalendars).toHaveBeenCalled());
+  });
+});
+
+describe("useOrphanedTodos", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("loads the caller's orphaned todos on mount", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const todos = [{ id: "todo-1", eventId: null, title: "宛名を書く", isDone: false }];
+    (listOrphanedTodos as jest.Mock).mockResolvedValue({ ok: true, value: todos });
+
+    const { result } = await renderHook(() => useOrphanedTodos());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.todos).toEqual(todos);
+    expect(listOrphanedTodos).toHaveBeenCalledWith({});
+  });
+
+  it("keeps an empty list and sets the error when loading fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (listOrphanedTodos as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useOrphanedTodos());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.todos).toEqual([]);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useReattachTodoToExistingEvent", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when it succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (reattachTodoToExistingEvent as jest.Mock).mockResolvedValue({ ok: true, value: { id: "todo-1" } });
+
+    const { result } = await renderHook(() => useReattachTodoToExistingEvent());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.reattachTodoToExistingEvent("todo-1", "event-2");
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(reattachTodoToExistingEvent).toHaveBeenCalledWith({}, "todo-1", "event-2");
+  });
+
+  it("returns false and sets the error when it fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (reattachTodoToExistingEvent as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useReattachTodoToExistingEvent());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.reattachTodoToExistingEvent("todo-1", "event-2");
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useReattachTodoToNewPersonalEvent", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when it succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (reattachTodoToNewPersonalEvent as jest.Mock).mockResolvedValue({ ok: true, value: { id: "todo-1" } });
+
+    const { result } = await renderHook(() => useReattachTodoToNewPersonalEvent());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.reattachTodoToNewPersonalEvent("todo-1", {
+        title: "出発準備の日",
+        date: "2026-10-05",
+      });
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(reattachTodoToNewPersonalEvent).toHaveBeenCalledWith({}, "todo-1", {
+      title: "出発準備の日",
+      date: "2026-10-05",
+    });
+  });
+
+  it("returns false and sets the error when it fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (reattachTodoToNewPersonalEvent as jest.Mock).mockResolvedValue({ ok: false, error: { type: "NotFound" } });
+
+    const { result } = await renderHook(() => useReattachTodoToNewPersonalEvent());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.reattachTodoToNewPersonalEvent("todo-1", {
+        title: "出発準備の日",
+        date: "2026-10-05",
+      });
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "NotFound" });
   });
 });
 

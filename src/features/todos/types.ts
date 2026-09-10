@@ -1,6 +1,6 @@
 export interface Todo {
   id: string;
-  eventId: string;
+  eventId: string | null;
   title: string;
   isDone: boolean;
   completedAt: string | null;
@@ -10,11 +10,19 @@ export interface Todo {
   updatedAt: string;
 }
 
-/** A todo along with its event's title and start/end time, for calendar-wide listings. */
+/**
+ * A todo along with its event's title and start/end time, for calendar-wide
+ * listings. Always comes from a query joined on an existing event, so
+ * eventId is never null here (unlike the general Todo, which can be orphaned).
+ */
 export interface TodoWithEventTitle extends Todo {
+  eventId: string;
+  eventCalendarId: string;
   eventTitle: string;
   eventStartAt: string;
   eventEndAt: string;
+  /** リマインドの選択肢(終日用/時刻指定用)を予定と同じ基準で出し分けるために持つ。 */
+  eventIsAllDay: boolean;
 }
 
 export interface CreateTodoInput {
@@ -26,6 +34,11 @@ export interface CreateTodoInput {
 export interface UpdateTodoInput {
   title?: string;
   reminderAt?: string | null;
+}
+
+export interface CreatePersonalEventForTodoInput {
+  title: string;
+  date: string;
 }
 
 export type TodoError =
