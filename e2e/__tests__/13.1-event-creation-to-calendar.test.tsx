@@ -11,7 +11,7 @@ import {
   useRemoveMember,
 } from "../../src/features/calendars/hooks";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
-import { useAttachTagsToEvent, useCreateTag, useTagTree } from "../../src/features/tags/hooks";
+import { useAttachTagsToEvent, useCreateTag, useEventTagsByEvents, useTagTree } from "../../src/features/tags/hooks";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
 jest.mock("expo-router", () => {
@@ -22,6 +22,9 @@ jest.mock("expo-router", () => {
     Tabs: {
       Screen: ({ options }: any) =>
         React.createElement(React.Fragment, null, options?.headerLeft?.(), options?.headerRight?.()),
+    },
+    useFocusEffect: (callback: () => void) => {
+      React.useEffect(() => callback(), [callback]);
     },
   };
 });
@@ -47,6 +50,7 @@ jest.mock("../../src/features/tags/hooks", () => ({
   useTagTree: jest.fn(),
   useCreateTag: jest.fn(),
   useAttachTagsToEvent: jest.fn(),
+  useEventTagsByEvents: jest.fn(),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => {
@@ -85,6 +89,12 @@ describe("13.1 予定作成からカレンダー月表示への反映", () => {
       attachTagsToEvent: jest.fn(),
       isSubmitting: false,
       error: null,
+    });
+    (useEventTagsByEvents as jest.Mock).mockReturnValue({
+      tagsByEventId: {},
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
     });
   });
 

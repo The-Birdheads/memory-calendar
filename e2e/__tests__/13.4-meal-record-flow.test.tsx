@@ -13,6 +13,13 @@ jest.mock("expo-router", () => {
       Screen: ({ options }: any) =>
         React.createElement(React.Fragment, null, options?.headerLeft?.(), options?.headerRight?.()),
     },
+    // Treats "focus" as "mount" for testing purposes, since there's no real
+    // navigation container here to fire actual focus events.
+    useFocusEffect: (callback: () => void) => {
+      React.useEffect(() => {
+        callback();
+      }, [callback]);
+    },
   };
 });
 
@@ -44,7 +51,7 @@ describe("13.4 献立記録フローの検証", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-08-18T12:00:00.000Z"));
-    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null });
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null, refetch: jest.fn() });
   });
 
   afterEach(() => {
@@ -52,7 +59,7 @@ describe("13.4 献立記録フローの検証", () => {
     jest.clearAllMocks();
   });
 
-  it("registers a future-dated meal record and shows it in the 食べる予定 list", async () => {
+  it("registers a future-dated meal record and shows it in the 予定 panel", async () => {
     const fakeClient = createFakeSupabaseClient();
     (getSupabaseClient as jest.Mock).mockReturnValue(fakeClient);
 
@@ -60,12 +67,13 @@ describe("13.4 献立記録フローの検証", () => {
 
     expect(queryByText("から揚げ")).toBeNull();
 
-    await fireEvent.changeText(getByTestId("meal-create-title-input"), "から揚げ");
-    await fireEvent.press(getByTestId("meal-create-date-button"));
-    await fireEvent.changeText(getByTestId("meal-create-date-picker"), "2026-09-01T00:00:00.000Z");
-    await fireEvent.press(getByTestId("meal-create-date-picker-done"));
-    await fireEvent.press(getByTestId("meal-create-slot-dinner"));
-    await fireEvent.press(getByTestId("meal-create-submit"));
+    await fireEvent.press(getByTestId("meals-plan-add"));
+    await fireEvent.changeText(getByTestId("meal-form-title-input"), "から揚げ");
+    await fireEvent.press(getByTestId("meal-form-date-button"));
+    await fireEvent.changeText(getByTestId("meal-form-date-picker"), "2026-09-01T00:00:00.000Z");
+    await fireEvent.press(getByTestId("meal-form-date-picker-done"));
+    await fireEvent.press(getByTestId("meal-form-slot-dinner"));
+    await fireEvent.press(getByTestId("meal-form-save"));
 
     await waitFor(() => expect(fakeClient.getTable("meal_records")).toHaveLength(1));
     const created = fakeClient.getTable("meal_records")[0];

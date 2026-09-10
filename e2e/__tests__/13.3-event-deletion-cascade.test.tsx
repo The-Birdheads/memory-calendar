@@ -11,7 +11,12 @@ import {
   useReactions,
   useToggleReaction,
 } from "../../src/features/communication/hooks";
-import { useAddReflection, useEventPhotos } from "../../src/features/memories/hooks";
+import {
+  useAttachPhoto,
+  useDetachPhoto,
+  useEventPhotos,
+  useSetPhotoThumbnail,
+} from "../../src/features/memories/hooks";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
 import {
   useAttachTagsToEvent,
@@ -23,10 +28,11 @@ import { useCreateTodo, useDeleteTodo, useToggleDone, useTodosByEvent } from "..
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
 jest.mock("expo-router", () => ({
-  router: { back: jest.fn(), replace: jest.fn() },
+  router: { back: jest.fn(), replace: jest.fn(), push: jest.fn() },
   useLocalSearchParams: jest.fn(),
-  Stack: { Screen: () => null },
 }));
+
+jest.mock("react-native-safe-area-context", () => require("react-native-safe-area-context/jest/mock").default);
 
 jest.mock("../../src/shared/api/supabaseClient", () => ({
   getSupabaseClient: jest.fn(),
@@ -51,7 +57,13 @@ jest.mock("../../src/features/communication/hooks", () => ({
 
 jest.mock("../../src/features/memories/hooks", () => ({
   useEventPhotos: jest.fn(),
-  useAddReflection: jest.fn(),
+  useAttachPhoto: jest.fn(),
+  useDetachPhoto: jest.fn(),
+  useSetPhotoThumbnail: jest.fn(),
+}));
+
+jest.mock("../../src/features/memories/imagePicker", () => ({
+  pickPhotoFromLibrary: jest.fn(),
 }));
 
 jest.mock("../../src/features/tags/hooks", () => ({
@@ -108,7 +120,9 @@ describe("13.3 予定削除フローの検証", () => {
     (useReactions as jest.Mock).mockReturnValue({ reactions: [], isLoading: false, error: null, refetch: jest.fn() });
     (useToggleReaction as jest.Mock).mockReturnValue({ toggleReaction: jest.fn(), isSubmitting: false, error: null });
     (useEventPhotos as jest.Mock).mockReturnValue({ photos: [], isLoading: false, error: null, refetch: jest.fn() });
-    (useAddReflection as jest.Mock).mockReturnValue({ addReflection: jest.fn(), isSubmitting: false, error: null });
+    (useAttachPhoto as jest.Mock).mockReturnValue({ attachPhoto: jest.fn(), isSubmitting: false, error: null });
+    (useDetachPhoto as jest.Mock).mockReturnValue({ detachPhoto: jest.fn(), isSubmitting: false, error: null });
+    (useSetPhotoThumbnail as jest.Mock).mockReturnValue({ setPhotoThumbnail: jest.fn(), isSubmitting: false, error: null });
     (useEventTags as jest.Mock).mockReturnValue({ tags: [], isLoading: false, error: null, refetch: jest.fn() });
     (useTagTree as jest.Mock).mockReturnValue({ tagTree: [], isLoading: false, error: null, refetch: jest.fn() });
     (useAttachTagsToEvent as jest.Mock).mockReturnValue({ attachTagsToEvent: jest.fn(), isSubmitting: false, error: null });
@@ -140,9 +154,29 @@ describe("13.3 予定削除フローの検証", () => {
     await fireEvent.press(getByTestId("delete-event-confirm-button"));
 
     await waitFor(() => expect(fakeClient.getTable("events")).toHaveLength(0));
-    expect(fakeClient.getTable("todos")).toHaveLength(0);
     expect(fakeClient.getTable("event_photos")).toHaveLength(0);
     expect(fakeClient.getTable("event_comments")).toHaveLength(0);
     await waitFor(() => expect(router.back).toHaveBeenCalled());
+  });
+
+  it("keeps the event's todos but clears their event_id instead of deleting them (要件3.10, 9.7)", async () => {
+    mockAuxiliaryHooks();
+    const fakeClient = createFakeSupabaseClient({
+      events: [EVENT_ROW],
+      todos: [{ id: "todo-1", event_id: "event-1", title: "花火を買う", is_done: false, completed_at: null, reminder_at: null }],
+    });
+    (getSupabaseClient as jest.Mock).mockReturnValue(fakeClient);
+
+    const { getByTestId, getByText } = await render(<EventDetailScreen />);
+
+    await waitFor(() => expect(getByText("夏祭り")).toBeTruthy());
+
+    await fireEvent.press(getByTestId("event-delete-button"));
+    await fireEvent.press(getByTestId("delete-event-confirm-button"));
+
+    await waitFor(() => expect(fakeClient.getTable("events")).toHaveLength(0));
+    expect(fakeClient.getTable("todos")).toEqual([
+      { id: "todo-1", event_id: null, title: "花火を買う", is_done: false, completed_at: null, reminder_at: null },
+    ]);
   });
 });

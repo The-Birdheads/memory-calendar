@@ -33,6 +33,19 @@ describe("createFakeSupabaseClient", () => {
     expect(data.map((row: any) => row.id)).toEqual(["e2", "e1"]);
   });
 
+  it("filters rows with is(column, null) for orphaned-style lookups", async () => {
+    const client = createFakeSupabaseClient({
+      todos: [
+        { id: "t1", event_id: "e1" },
+        { id: "t2", event_id: null },
+      ],
+    });
+
+    const { data } = await (client.from("todos") as any).select().is("event_id", null);
+
+    expect(data.map((row: any) => row.id)).toEqual(["t2"]);
+  });
+
   it("updates matching rows", async () => {
     const client = createFakeSupabaseClient({ todos: [{ id: "t1", is_done: false }] });
 
@@ -48,15 +61,24 @@ describe("createFakeSupabaseClient", () => {
   it("deletes matching rows and cascades to dependent tables", async () => {
     const client = createFakeSupabaseClient({
       events: [{ id: "e1", calendar_id: "cal-1" }],
-      todos: [{ id: "t1", event_id: "e1" }],
       event_comments: [{ id: "c1", event_id: "e1" }],
     });
 
     await (client.from("events") as any).delete().eq("id", "e1");
 
     expect(client.getTable("events")).toEqual([]);
-    expect(client.getTable("todos")).toEqual([]);
     expect(client.getTable("event_comments")).toEqual([]);
+  });
+
+  it("sets the foreign key to null on dependent todos instead of deleting them", async () => {
+    const client = createFakeSupabaseClient({
+      events: [{ id: "e1", calendar_id: "cal-1" }],
+      todos: [{ id: "t1", event_id: "e1" }],
+    });
+
+    await (client.from("events") as any).delete().eq("id", "e1");
+
+    expect(client.getTable("todos")).toEqual([{ id: "t1", event_id: null }]);
   });
 
   it("allows rpc and storage to be mocked per test", async () => {

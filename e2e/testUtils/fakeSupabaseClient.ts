@@ -7,13 +7,17 @@ interface CascadeRule {
 
 const CASCADE_RULES: Record<string, CascadeRule[]> = {
   events: [
-    { table: "todos", column: "event_id" },
     { table: "event_tags", column: "event_id" },
     { table: "event_reminder_targets", column: "event_id" },
     { table: "event_photos", column: "event_id" },
     { table: "event_comments", column: "event_id" },
     { table: "event_reactions", column: "event_id" },
   ],
+};
+
+// ON DELETE SET NULL: the child row is kept, only the foreign key column is cleared.
+const SET_NULL_RULES: Record<string, CascadeRule[]> = {
+  events: [{ table: "todos", column: "event_id" }],
 };
 
 export interface FakeSupabaseClient {
@@ -49,6 +53,19 @@ export function createFakeSupabaseClient(seed: Record<string, Row[]> = {}): Fake
     rules.forEach(({ table: childTable, column }) => {
       const rows = ensureTable(childTable);
       tables[childTable] = rows.filter((row) => !deletedIds.includes(row[column]));
+    });
+  }
+
+  function setNullOnDelete(table: string, deletedIds: unknown[]) {
+    const rules = SET_NULL_RULES[table];
+    if (!rules) return;
+    rules.forEach(({ table: childTable, column }) => {
+      const rows = ensureTable(childTable);
+      rows.forEach((row) => {
+        if (deletedIds.includes(row[column])) {
+          row[column] = null;
+        }
+      });
     });
   }
 
@@ -89,6 +106,7 @@ export function createFakeSupabaseClient(seed: Record<string, Row[]> = {}): Fake
         const matched = rows.filter((row) => filters.every((f) => f(row)));
         tables[table] = rows.filter((row) => !filters.every((f) => f(row)));
         cascadeDelete(table, matched.map((row) => row.id));
+        setNullOnDelete(table, matched.map((row) => row.id));
         return { data: null, error: null };
       }
 
@@ -129,6 +147,10 @@ export function createFakeSupabaseClient(seed: Record<string, Row[]> = {}): Fake
       },
       eq(column: string, value: unknown) {
         filters.push((row) => row[column] === value);
+        return builder;
+      },
+      is(column: string, value: null | boolean) {
+        filters.push((row) => (row[column] ?? null) === value);
         return builder;
       },
       lte(column: string, value: unknown) {
