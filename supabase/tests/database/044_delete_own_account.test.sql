@@ -4,7 +4,7 @@
 -- (予定・コメント・写真)は削除されず作成者/更新者列がNULLになることを確認する。
 
 begin;
-select plan(16);
+select plan(18);
 
 select has_function(
   'public', 'delete_own_account', array[]::text[],

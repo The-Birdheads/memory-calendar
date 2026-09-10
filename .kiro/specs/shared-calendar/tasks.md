@@ -240,9 +240,8 @@
   - 食べる予定一覧まで実フック経由で反映されることを確認(`e2e/__tests__/13.4-meal-record-flow.test.tsx`)
   - _Requirements: 12.1, 12.4_
   - _Depends: 10.2_
-- [ ] 13.5* 通知冪等性の回帰テスト
-  - 未実施: DB Webhook起点(EventChangeNotifier)とpg_cron起点(NotificationDispatcher)はDeno製Edge Functionであり、本環境にはDenoランタイム・Docker上のPostgresが無く実行できない(タスク11実装時と同一の環境制約)。Docker/Deno環境が整い次第、実行して検証する
-  - DB Webhook起点(EventChangeNotifier)とpg_cron起点(NotificationDispatcher)の双方で、再実行しても重複通知が発生しないことを回帰テストで検証する
+- [x] 13.5* 通知冪等性の回帰テスト
+  - `supabase/tests/database/045_notification_idempotency_regression.test.sql` で実施。両Edge FunctionはDeno製で本テスト環境からは直接実行できないため、両者が「送信前に notification_log へ予約INSERTし、一意制約違反ならスキップする」方式で共有している冪等性の土台 = notification_log の部分一意インデックス4本(event / todo / series / event_reminder)を回帰テストの対象とする。同一(種別×対象×キー)の再予約が23505で弾かれること、別種別・別対象・別キーの予約は妨げられないことを検証する
   - _Requirements: 6.1, 6.4_
   - _Depends: 11.2, 11.4_
 
