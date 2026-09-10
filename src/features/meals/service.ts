@@ -57,7 +57,7 @@ function mapMealTagRow(row: MealTagRow): MealTag {
   };
 }
 
-function mapMealError(error: PostgrestError): MealError {
+function mapMealError(_error: PostgrestError): MealError {
   return { type: "Forbidden" };
 }
 

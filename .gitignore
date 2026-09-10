@@ -35,3 +35,6 @@ npm-debug.*
 
 # test coverage
 coverage/
+
+# eslint
+.eslintcache

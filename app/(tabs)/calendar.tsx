@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -97,7 +97,6 @@ export default function CalendarScreen() {
   // is needed (new-event default, invite target), even while several are
   // selected for the overlay view.
   const activeCalendarId = activeCalendarIds[0] ?? "";
-  const activeCalendar = calendars.find((calendar) => calendar.id === activeCalendarId) ?? null;
 
   const [focusedDate, setFocusedDate] = useState(() => jstNow());
   const [selectedDateKey, setSelectedDateKey] = useState(() => todayDateKey());
@@ -298,18 +297,23 @@ export default function CalendarScreen() {
     });
   };
 
-  const monthSwipeResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_event, gestureState) =>
-        Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5,
-      onPanResponderRelease: (_event, gestureState) => {
-        const direction = resolveMonthSwipeDirection(gestureState.dx, gestureState.dy);
-        if (direction !== null) {
-          shiftFocusedDate(direction);
-        }
-      },
-    })
-  ).current;
+  // 初回レンダーで1度だけ生成する(依存配列は空)。生成時の shiftFocusedDate の
+  // クロージャを掴み続けるが、shiftFocusedDate は関数型 setState で常に最新の
+  // state を受け取るため問題ない(上のコメント参照)。
+  const monthSwipeResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gestureState) =>
+          Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5,
+        onPanResponderRelease: (_event, gestureState) => {
+          const direction = resolveMonthSwipeDirection(gestureState.dx, gestureState.dy);
+          if (direction !== null) {
+            shiftFocusedDate(direction);
+          }
+        },
+      }),
+    []
+  );
 
   const openCreateModal = () => {
     const base = new Date(`${selectedDateKey}T09:00:00.000Z`);

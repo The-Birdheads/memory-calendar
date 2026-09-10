@@ -328,7 +328,7 @@ describe("MealsScreen", () => {
       ];
       mockCommonHooks(records);
 
-      const { getByTestId, queryByTestId, queryByText } = await renderLogPanel();
+      const { getByTestId, queryByText } = await renderLogPanel();
 
       expect(getByTestId("meal-url-icon-meal-3")).toBeTruthy();
       expect(getByTestId("meal-memo-icon-meal-3")).toBeTruthy();

@@ -39,7 +39,7 @@ function mapEventReactionRow(row: EventReactionRow): EventReaction {
   };
 }
 
-function mapCommunicationError(error: PostgrestError): CommunicationError {
+function mapCommunicationError(_error: PostgrestError): CommunicationError {
   return { type: "Forbidden" };
 }
 

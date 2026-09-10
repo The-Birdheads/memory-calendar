@@ -12,6 +12,8 @@
 
 一気に全画面を変えず、1画面ずつ実装→シミュレータ/実機で確認→次の画面、のサイクルで進める。
 
+変更後は `npm run typecheck` / `npm test` / `npm run lint` を通す(`lint` は `eslint-config-expo` のフラット設定、`eslint.config.js`)。`lint` は現状 warning のみ（`react-hooks/set-state-in-effect` はこのリポジトリの「マウント時 refetch」パターンに合わせて warn 扱い、`exhaustive-deps` は助言的）で error は 0。新規コードで新たな error を出さないこと。DB側は Docker 起動時のみ `npx supabase test db`(pgTAP)。
+
 ## 2. カラーパレット
 
 既存実装（calendar/event画面）から抽出した現状のパレットを正とする。新規色を増やす場合もこの体系に合わせる。
