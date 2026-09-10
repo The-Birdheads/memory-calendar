@@ -1,8 +1,6 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
-import { postComment } from "../communication/service";
-import type { CommunicationError, EventComment } from "../communication/types";
-import { listEventsInRange } from "../events/service";
+import { listEventsInRangeForCalendars } from "../events/service";
 import type { DateRange, Event, EventError } from "../events/types";
 import { err, ok, type Result } from "../../shared/types/result";
 import type { EventPhoto, MemoryEntry, MemoryError, MemoryFilter, PhotoUploadInput } from "./types";
@@ -12,6 +10,7 @@ interface EventPhotoRow {
   event_id: string;
   storage_path: string;
   uploaded_by: string;
+  is_thumbnail: boolean;
   created_at: string;
 }
 
@@ -21,6 +20,7 @@ function mapEventPhotoRow(row: EventPhotoRow): EventPhoto {
     eventId: row.event_id,
     storagePath: row.storage_path,
     uploadedBy: row.uploaded_by,
+    isThumbnail: row.is_thumbnail,
     createdAt: row.created_at,
   };
 }
@@ -29,12 +29,8 @@ function mapMemoryError(error: { code?: string } | null): MemoryError {
   if (error?.code === "A0005") {
     return { type: "EventNotPast" };
   }
-  return { type: "Forbidden" };
-}
-
-function mapCommunicationError(error: CommunicationError): MemoryError {
-  if (error.type === "NotFound") {
-    return { type: "NotFound" };
+  if (error?.code === "23505") {
+    return { type: "AlreadyAttached" };
   }
   return { type: "Forbidden" };
 }
@@ -109,10 +105,59 @@ export async function attachPhoto(
     .single();
 
   if (error || !data) {
+    // アップロード済みのStorageオブジェクトが孤立しないよう、DB側の登録
+    // (例: 1人1枚までの一意制約違反)に失敗した場合はベストエフォートで削除する。
+    await client.storage.from("event-photos").remove([storagePath]);
     return err(mapMemoryError(error as PostgrestError));
   }
 
   return ok(mapEventPhotoRow(data as EventPhotoRow));
+}
+
+/** 自分が追加した写真を削除する(1枚差し替える際は削除してから追加し直す)。 */
+export async function detachPhoto(
+  client: SupabaseClient,
+  photoId: string,
+  storagePath: string
+): Promise<Result<void, MemoryError>> {
+  const { error: deleteRowError } = await client.from("event_photos").delete().eq("id", photoId);
+
+  if (deleteRowError) {
+    return err(mapMemoryError(deleteRowError));
+  }
+
+  await client.storage.from("event-photos").remove([storagePath]);
+
+  return ok(undefined);
+}
+
+/** その予定のサムネイルをphotoIdの写真に切り替える(誰の写真かは問わない、共有の設定)。
+ * 一意制約(1予定1枚まで)に触れないよう、まず既存のサムネイルを解除してから設定する。 */
+export async function setPhotoThumbnail(
+  client: SupabaseClient,
+  eventId: string,
+  photoId: string
+): Promise<Result<void, MemoryError>> {
+  const { error: clearError } = await client
+    .from("event_photos")
+    .update({ is_thumbnail: false })
+    .eq("event_id", eventId)
+    .eq("is_thumbnail", true);
+
+  if (clearError) {
+    return err(mapMemoryError(clearError));
+  }
+
+  const { error: setError } = await client
+    .from("event_photos")
+    .update({ is_thumbnail: true })
+    .eq("id", photoId);
+
+  if (setError) {
+    return err(mapMemoryError(setError));
+  }
+
+  return ok(undefined);
 }
 
 export async function listPhotosForEvent(
@@ -132,33 +177,37 @@ export async function listPhotosForEvent(
   return ok((data as EventPhotoRow[]).map(mapEventPhotoRow));
 }
 
-export async function addReflection(
+/**
+ * Batched "does this event have any photos" check for many events at once -
+ * used by list screens (e.g. the history tab's timeline) that just need a
+ * presence indicator per event, not the photos themselves.
+ */
+export async function listEventIdsWithPhotos(
   client: SupabaseClient,
-  eventId: string,
-  body: string
-): Promise<Result<EventComment, MemoryError>> {
-  const pastCheck = await ensureEventIsPast(client, eventId);
-  if (!pastCheck.ok) {
-    return pastCheck;
+  eventIds: string[]
+): Promise<Result<Set<string>, MemoryError>> {
+  if (eventIds.length === 0) {
+    return ok(new Set());
   }
 
-  const result = await postComment(client, eventId, body);
-  if (!result.ok) {
-    return err(mapCommunicationError(result.error));
+  const { data, error } = await client.from("event_photos").select("event_id").in("event_id", eventIds);
+
+  if (error || !data) {
+    return err(mapMemoryError(error as PostgrestError));
   }
 
-  return ok(result.value);
+  return ok(new Set((data as { event_id: string }[]).map((row) => row.event_id)));
 }
 
 export async function listMemoriesTimeline(
   client: SupabaseClient,
-  calendarId: string,
+  calendarIds: string[],
   filter?: MemoryFilter
 ): Promise<Result<MemoryEntry[], MemoryError>> {
   const now = new Date();
   const range = computeMemoryRange(filter, now);
 
-  const eventsResult = await listEventsInRange(client, calendarId, range);
+  const eventsResult = await listEventsInRangeForCalendars(client, calendarIds, range);
   if (!eventsResult.ok) {
     return err(mapEventErrorToMemoryError(eventsResult.error));
   }
@@ -172,11 +221,13 @@ export async function listMemoriesTimeline(
   }
 
   const eventIds = pastEvents.map((event) => event.id);
+  // サムネイルが設定された予定だけをタイムラインに出す(カメラロールのように、
+  // 誰かが「これ」と選んだ写真がある予定のみ)。
   const { data, error } = await client
     .from("event_photos")
     .select()
     .in("event_id", eventIds)
-    .order("created_at", { ascending: true });
+    .eq("is_thumbnail", true);
 
   if (error) {
     return err(mapMemoryError(error as PostgrestError));
@@ -184,16 +235,16 @@ export async function listMemoriesTimeline(
 
   const thumbnailByEventId = new Map<string, string>();
   ((data as EventPhotoRow[]) ?? []).forEach((row) => {
-    if (!thumbnailByEventId.has(row.event_id)) {
-      thumbnailByEventId.set(row.event_id, row.storage_path);
-    }
+    thumbnailByEventId.set(row.event_id, row.storage_path);
   });
 
   return ok(
-    pastEvents.map((event) => ({
-      ...event,
-      thumbnailStoragePath: thumbnailByEventId.get(event.id) ?? null,
-    }))
+    pastEvents
+      .filter((event) => thumbnailByEventId.has(event.id))
+      .map((event) => ({
+        ...event,
+        thumbnailStoragePath: thumbnailByEventId.get(event.id) as string,
+      }))
   );
 }
 

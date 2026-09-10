@@ -1,21 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { postComment } from "../../communication/service";
-import { listEventsInRange } from "../../events/service";
+import { listEventsInRangeForCalendars } from "../../events/service";
 import {
-  addReflection,
   attachPhoto,
+  detachPhoto,
   getPhotoUrl,
+  listEventIdsWithPhotos,
   listMemoriesTimeline,
   listPhotosForEvent,
+  setPhotoThumbnail,
 } from "../service";
 
-jest.mock("../../communication/service", () => ({
-  postComment: jest.fn(),
-}));
-
 jest.mock("../../events/service", () => ({
-  listEventsInRange: jest.fn(),
+  listEventsInRangeForCalendars: jest.fn(),
 }));
 
 function mockNow(iso: string) {
@@ -46,6 +43,7 @@ describe("attachPhoto", () => {
       event_id: "event-1",
       storage_path: "event-1/1_photo.jpg",
       uploaded_by: "user-1",
+      is_thumbnail: false,
       created_at: "2026-08-18T00:00:00.000Z",
     };
     const insert = jest.fn().mockReturnThis();
@@ -73,6 +71,7 @@ describe("attachPhoto", () => {
         eventId: "event-1",
         storagePath: "event-1/1_photo.jpg",
         uploadedBy: "user-1",
+        isThumbnail: false,
         createdAt: "2026-08-18T00:00:00.000Z",
       },
     });
@@ -162,6 +161,115 @@ describe("attachPhoto", () => {
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });
+
+  it("maps a unique-violation from the insert to AlreadyAttached and removes the just-uploaded file", async () => {
+    mockNow("2026-08-18T00:00:00.000Z");
+
+    const selectEventSingle = jest.fn().mockResolvedValue({
+      data: { end_at: "2026-08-01T00:00:00.000Z" },
+      error: null,
+    });
+    const selectEventEq = jest.fn().mockReturnThis();
+    const selectEvent = jest.fn().mockReturnThis();
+
+    const upload = jest.fn().mockResolvedValue({ data: { path: "event-1/1_photo.jpg" }, error: null });
+    const remove = jest.fn().mockResolvedValue({ data: null, error: null });
+    const storageFrom = jest.fn().mockReturnValue({ upload, remove });
+
+    const insert = jest.fn().mockReturnThis();
+    const insertSelect = jest.fn().mockReturnThis();
+    const insertSingle = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: "duplicate key", code: "23505" },
+    });
+
+    const client = {
+      from: jest
+        .fn()
+        .mockReturnValueOnce({ select: selectEvent, eq: selectEventEq, single: selectEventSingle })
+        .mockReturnValueOnce({ insert, select: insertSelect, single: insertSingle }),
+      storage: { from: storageFrom },
+    } as unknown as SupabaseClient;
+
+    const result = await attachPhoto(client, "event-1", {
+      fileName: "photo.jpg",
+      contentType: "image/jpeg",
+      data: "base64data",
+    });
+
+    expect(result).toEqual({ ok: false, error: { type: "AlreadyAttached" } });
+    expect(remove).toHaveBeenCalledWith([expect.stringContaining("event-1/")]);
+  });
+});
+
+describe("detachPhoto", () => {
+  it("deletes the row and removes the storage object", async () => {
+    const deleteEq = jest.fn().mockResolvedValue({ error: null });
+    const del = jest.fn().mockReturnValue({ eq: deleteEq });
+    const remove = jest.fn().mockResolvedValue({ data: null, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ delete: del }),
+      storage: { from: jest.fn().mockReturnValue({ remove }) },
+    } as unknown as SupabaseClient;
+
+    const result = await detachPhoto(client, "photo-1", "event-1/photo.jpg");
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(deleteEq).toHaveBeenCalledWith("id", "photo-1");
+    expect(remove).toHaveBeenCalledWith(["event-1/photo.jpg"]);
+  });
+
+  it("maps a permission error to Forbidden without touching storage", async () => {
+    const deleteEq = jest.fn().mockResolvedValue({ error: { message: "denied", code: "42501" } });
+    const del = jest.fn().mockReturnValue({ eq: deleteEq });
+    const remove = jest.fn();
+    const client = {
+      from: jest.fn().mockReturnValue({ delete: del }),
+      storage: { from: jest.fn().mockReturnValue({ remove }) },
+    } as unknown as SupabaseClient;
+
+    const result = await detachPhoto(client, "photo-1", "event-1/photo.jpg");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+    expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe("setPhotoThumbnail", () => {
+  it("clears any existing thumbnail for the event, then sets the given photo as the new one", async () => {
+    const clearEq2 = jest.fn().mockResolvedValue({ error: null });
+    const clearEq1 = jest.fn().mockReturnValue({ eq: clearEq2 });
+    const clearUpdate = jest.fn().mockReturnValue({ eq: clearEq1 });
+    const setEq = jest.fn().mockResolvedValue({ error: null });
+    const setUpdate = jest.fn().mockReturnValue({ eq: setEq });
+
+    const client = {
+      from: jest
+        .fn()
+        .mockReturnValueOnce({ update: clearUpdate })
+        .mockReturnValueOnce({ update: setUpdate }),
+    } as unknown as SupabaseClient;
+
+    const result = await setPhotoThumbnail(client, "event-1", "photo-2");
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(clearUpdate).toHaveBeenCalledWith({ is_thumbnail: false });
+    expect(clearEq1).toHaveBeenCalledWith("event_id", "event-1");
+    expect(clearEq2).toHaveBeenCalledWith("is_thumbnail", true);
+    expect(setUpdate).toHaveBeenCalledWith({ is_thumbnail: true });
+    expect(setEq).toHaveBeenCalledWith("id", "photo-2");
+  });
+
+  it("maps a permission error from the clear step to Forbidden", async () => {
+    const clearEq2 = jest.fn().mockResolvedValue({ error: { message: "denied", code: "42501" } });
+    const clearEq1 = jest.fn().mockReturnValue({ eq: clearEq2 });
+    const clearUpdate = jest.fn().mockReturnValue({ eq: clearEq1 });
+    const client = { from: jest.fn().mockReturnValue({ update: clearUpdate }) } as unknown as SupabaseClient;
+
+    const result = await setPhotoThumbnail(client, "event-1", "photo-2");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
 });
 
 describe("listPhotosForEvent", () => {
@@ -172,6 +280,7 @@ describe("listPhotosForEvent", () => {
         event_id: "event-1",
         storage_path: "event-1/1_photo.jpg",
         uploaded_by: "user-1",
+        is_thumbnail: true,
         created_at: "2026-08-18T00:00:00.000Z",
       },
     ];
@@ -192,6 +301,7 @@ describe("listPhotosForEvent", () => {
           eventId: "event-1",
           storagePath: "event-1/1_photo.jpg",
           uploadedBy: "user-1",
+          isThumbnail: true,
           createdAt: "2026-08-18T00:00:00.000Z",
         },
       ],
@@ -212,6 +322,48 @@ describe("listPhotosForEvent", () => {
     } as unknown as SupabaseClient;
 
     const result = await listPhotosForEvent(client, "event-1");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("listEventIdsWithPhotos", () => {
+  it("returns the set of event ids that have at least one photo", async () => {
+    const rows = [{ event_id: "event-1" }, { event_id: "event-1" }, { event_id: "event-3" }];
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn }),
+    } as unknown as SupabaseClient;
+
+    const result = await listEventIdsWithPhotos(client, ["event-1", "event-2", "event-3"]);
+
+    expect(result).toEqual({ ok: true, value: new Set(["event-1", "event-3"]) });
+    expect(client.from).toHaveBeenCalledWith("event_photos");
+    expect(select).toHaveBeenCalledWith("event_id");
+    expect(inFn).toHaveBeenCalledWith("event_id", ["event-1", "event-2", "event-3"]);
+  });
+
+  it("returns an empty set without querying when given no event ids", async () => {
+    const client = { from: jest.fn() } as unknown as SupabaseClient;
+
+    const result = await listEventIdsWithPhotos(client, []);
+
+    expect(result).toEqual({ ok: true, value: new Set() });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("maps a Supabase error to Forbidden", async () => {
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: "permission denied", code: "42501" },
+    });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn }),
+    } as unknown as SupabaseClient;
+
+    const result = await listEventIdsWithPhotos(client, ["event-1"]);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });
@@ -247,80 +399,6 @@ describe("getPhotoUrl", () => {
   });
 });
 
-describe("addReflection", () => {
-  afterEach(() => {
-    jest.useRealTimers();
-    jest.clearAllMocks();
-  });
-
-  it("posts a reflection comment when the event is past", async () => {
-    mockNow("2026-08-18T00:00:00.000Z");
-
-    const selectEventSingle = jest.fn().mockResolvedValue({
-      data: { end_at: "2026-08-01T00:00:00.000Z" },
-      error: null,
-    });
-    const selectEventEq = jest.fn().mockReturnThis();
-    const selectEvent = jest.fn().mockReturnThis();
-    const client = {
-      from: jest.fn().mockReturnValue({ select: selectEvent, eq: selectEventEq, single: selectEventSingle }),
-    } as unknown as SupabaseClient;
-
-    const comment = {
-      id: "comment-1",
-      eventId: "event-1",
-      userId: "user-1",
-      body: "楽しかったです",
-      createdAt: "2026-08-18T00:00:00.000Z",
-    };
-    (postComment as jest.Mock).mockResolvedValue({ ok: true, value: comment });
-
-    const result = await addReflection(client, "event-1", "楽しかったです");
-
-    expect(result).toEqual({ ok: true, value: comment });
-    expect(postComment).toHaveBeenCalledWith(client, "event-1", "楽しかったです");
-  });
-
-  it("returns EventNotPast without posting when the event has not ended yet", async () => {
-    mockNow("2026-08-18T00:00:00.000Z");
-
-    const selectEventSingle = jest.fn().mockResolvedValue({
-      data: { end_at: "2026-08-20T00:00:00.000Z" },
-      error: null,
-    });
-    const selectEventEq = jest.fn().mockReturnThis();
-    const selectEvent = jest.fn().mockReturnThis();
-    const client = {
-      from: jest.fn().mockReturnValue({ select: selectEvent, eq: selectEventEq, single: selectEventSingle }),
-    } as unknown as SupabaseClient;
-
-    const result = await addReflection(client, "event-1", "楽しかったです");
-
-    expect(result).toEqual({ ok: false, error: { type: "EventNotPast" } });
-    expect(postComment).not.toHaveBeenCalled();
-  });
-
-  it("maps a Forbidden error from postComment through", async () => {
-    mockNow("2026-08-18T00:00:00.000Z");
-
-    const selectEventSingle = jest.fn().mockResolvedValue({
-      data: { end_at: "2026-08-01T00:00:00.000Z" },
-      error: null,
-    });
-    const selectEventEq = jest.fn().mockReturnThis();
-    const selectEvent = jest.fn().mockReturnThis();
-    const client = {
-      from: jest.fn().mockReturnValue({ select: selectEvent, eq: selectEventEq, single: selectEventSingle }),
-    } as unknown as SupabaseClient;
-
-    (postComment as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
-
-    const result = await addReflection(client, "event-1", "楽しかったです");
-
-    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
-  });
-});
-
 describe("listMemoriesTimeline", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -347,49 +425,52 @@ describe("listMemoriesTimeline", () => {
     };
   }
 
-  it("returns only past events, sorted descending, with a thumbnail from the first attached photo", async () => {
+  it("returns only past events that have a thumbnail set, sorted descending", async () => {
     mockNow("2026-08-18T00:00:00.000Z");
 
-    const pastEarly = makeEvent("event-1", "2026-08-01T10:00:00.000Z", "2026-08-01T11:00:00.000Z");
-    const pastLate = makeEvent("event-2", "2026-08-10T10:00:00.000Z", "2026-08-10T11:00:00.000Z");
+    const pastWithThumbnail = makeEvent("event-1", "2026-08-01T10:00:00.000Z", "2026-08-01T11:00:00.000Z");
+    const pastWithoutThumbnail = makeEvent("event-2", "2026-08-10T10:00:00.000Z", "2026-08-10T11:00:00.000Z");
     const future = makeEvent("event-3", "2026-08-20T10:00:00.000Z", "2026-08-20T11:00:00.000Z");
-    (listEventsInRange as jest.Mock).mockResolvedValue({ ok: true, value: [pastEarly, pastLate, future] });
+    (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({
+      ok: true,
+      value: [pastWithThumbnail, pastWithoutThumbnail, future],
+    });
 
-    const photoRows = [
+    const thumbnailRows = [
       {
         id: "photo-1",
-        event_id: "event-2",
-        storage_path: "event-2/a.jpg",
+        event_id: "event-1",
+        storage_path: "event-1/a.jpg",
         uploaded_by: "user-1",
-        created_at: "2026-08-10T12:00:00.000Z",
+        is_thumbnail: true,
+        created_at: "2026-08-01T12:00:00.000Z",
       },
     ];
     const select = jest.fn().mockReturnThis();
     const inFilter = jest.fn().mockReturnThis();
-    const order = jest.fn().mockResolvedValue({ data: photoRows, error: null });
+    const eqFilter = jest.fn().mockResolvedValue({ data: thumbnailRows, error: null });
     const client = {
-      from: jest.fn().mockReturnValue({ select, eq: jest.fn(), in: inFilter, order }),
+      from: jest.fn().mockReturnValue({ select, in: inFilter, eq: eqFilter }),
     } as unknown as SupabaseClient;
 
-    const result = await listMemoriesTimeline(client, "cal-1");
+    const result = await listMemoriesTimeline(client, ["cal-1", "cal-2"]);
 
+    // event-2はサムネイル未設定なので除外され、event-1のみ返る
     expect(result).toEqual({
       ok: true,
-      value: [
-        { ...pastLate, thumbnailStoragePath: "event-2/a.jpg" },
-        { ...pastEarly, thumbnailStoragePath: null },
-      ],
+      value: [{ ...pastWithThumbnail, thumbnailStoragePath: "event-1/a.jpg" }],
     });
     expect(inFilter.mock.calls[0][0]).toBe("event_id");
     expect(inFilter.mock.calls[0][1]).toEqual(expect.arrayContaining(["event-1", "event-2"]));
+    expect(eqFilter).toHaveBeenCalledWith("is_thumbnail", true);
   });
 
   it("returns an empty array when there are no memories", async () => {
     mockNow("2026-08-18T00:00:00.000Z");
-    (listEventsInRange as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+    (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
     const client = { from: jest.fn() } as unknown as SupabaseClient;
 
-    const result = await listMemoriesTimeline(client, "cal-1");
+    const result = await listMemoriesTimeline(client, ["cal-1"]);
 
     expect(result).toEqual({ ok: true, value: [] });
     expect(client.from).not.toHaveBeenCalled();
@@ -397,23 +478,23 @@ describe("listMemoriesTimeline", () => {
 
   it("converts a year/month filter into the corresponding date range", async () => {
     mockNow("2026-08-18T00:00:00.000Z");
-    (listEventsInRange as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+    (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
     const client = { from: jest.fn() } as unknown as SupabaseClient;
 
-    await listMemoriesTimeline(client, "cal-1", { year: 2026, month: 7 });
+    await listMemoriesTimeline(client, ["cal-1"], { year: 2026, month: 7 });
 
-    expect(listEventsInRange).toHaveBeenCalledWith(client, "cal-1", {
+    expect(listEventsInRangeForCalendars).toHaveBeenCalledWith(client, ["cal-1"], {
       start: "2026-07-01T00:00:00.000Z",
       end: "2026-07-31T23:59:59.999Z",
     });
   });
 
-  it("maps an error from listEventsInRange to Forbidden", async () => {
+  it("maps an error from listEventsInRangeForCalendars to Forbidden", async () => {
     mockNow("2026-08-18T00:00:00.000Z");
-    (listEventsInRange as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+    (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
     const client = { from: jest.fn() } as unknown as SupabaseClient;
 
-    const result = await listMemoriesTimeline(client, "cal-1");
+    const result = await listMemoriesTimeline(client, ["cal-1"]);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

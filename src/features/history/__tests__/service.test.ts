@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { listPastEventsByTag } from "../service";
 
 describe("listPastEventsByTag", () => {
-  it("calls the RPC without a tag filter and returns past events ordered by date", async () => {
+  it("calls the RPC with no filters and returns past events ordered by date", async () => {
     const rows = [
       {
         id: "event-1",
@@ -26,7 +26,7 @@ describe("listPastEventsByTag", () => {
     const rpc = jest.fn().mockResolvedValue({ data: rows, error: null });
     const client = { rpc } as unknown as SupabaseClient;
 
-    const result = await listPastEventsByTag(client, "cal-1");
+    const result = await listPastEventsByTag(client);
 
     expect(result).toEqual({
       ok: true,
@@ -52,19 +52,59 @@ describe("listPastEventsByTag", () => {
       ],
     });
     expect(rpc).toHaveBeenCalledWith("list_past_events_by_tag", {
-      p_calendar_id: "cal-1",
+      p_calendar_ids: null,
       p_tag_id: null,
     });
   });
 
-  it("calls the RPC with the given tag id", async () => {
+  it("calls the RPC with the given tag id, across all of the caller's calendars", async () => {
     const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
     const client = { rpc } as unknown as SupabaseClient;
 
-    await listPastEventsByTag(client, "cal-1", "tag-1");
+    await listPastEventsByTag(client, "tag-1");
 
     expect(rpc).toHaveBeenCalledWith("list_past_events_by_tag", {
-      p_calendar_id: "cal-1",
+      p_calendar_ids: null,
+      p_tag_id: "tag-1",
+    });
+  });
+
+  it("calls the RPC with both the tag id and an additional calendar filter", async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    await listPastEventsByTag(client, "tag-1", ["cal-1", "cal-2"]);
+
+    expect(rpc).toHaveBeenCalledWith("list_past_events_by_tag", {
+      p_calendar_ids: ["cal-1", "cal-2"],
+      p_tag_id: "tag-1",
+    });
+  });
+
+  it("passes an empty calendar id list through as-is (deliberately \"no calendars\", not \"no filter\")", async () => {
+    // The caller only ever passes an explicit [] when the user has actively
+    // deselected every calendar in the filter - that must mean "show
+    // nothing", not silently fall back to "no filter" (which would show
+    // events from every calendar instead of the none the user asked for).
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    await listPastEventsByTag(client, "tag-1", []);
+
+    expect(rpc).toHaveBeenCalledWith("list_past_events_by_tag", {
+      p_calendar_ids: [],
+      p_tag_id: "tag-1",
+    });
+  });
+
+  it("still treats omitting the calendar filter entirely (undefined) as no filter", async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    await listPastEventsByTag(client, "tag-1", undefined);
+
+    expect(rpc).toHaveBeenCalledWith("list_past_events_by_tag", {
+      p_calendar_ids: null,
       p_tag_id: "tag-1",
     });
   });
@@ -73,7 +113,7 @@ describe("listPastEventsByTag", () => {
     const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
     const client = { rpc } as unknown as SupabaseClient;
 
-    const result = await listPastEventsByTag(client, "cal-1", "tag-1");
+    const result = await listPastEventsByTag(client, "tag-1");
 
     expect(result).toEqual({ ok: true, value: [] });
   });
@@ -85,7 +125,7 @@ describe("listPastEventsByTag", () => {
     });
     const client = { rpc } as unknown as SupabaseClient;
 
-    const result = await listPastEventsByTag(client, "cal-1");
+    const result = await listPastEventsByTag(client);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

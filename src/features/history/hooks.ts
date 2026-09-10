@@ -12,14 +12,15 @@ export interface UsePastEventsByTagResult {
   refetch: () => Promise<void>;
 }
 
-export function usePastEventsByTag(calendarId: string, tagId?: string): UsePastEventsByTagResult {
+export function usePastEventsByTag(tagId?: string, calendarIds?: string[]): UsePastEventsByTagResult {
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<HistoryError | null>(null);
+  const calendarIdsKey = calendarIds?.join(",") ?? "";
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
-    const result = await listPastEventsByTag(getSupabaseClient(), calendarId, tagId);
+    const result = await listPastEventsByTag(getSupabaseClient(), tagId, calendarIds);
     if (result.ok) {
       setEvents(result.value);
       setError(null);
@@ -28,7 +29,8 @@ export function usePastEventsByTag(calendarId: string, tagId?: string): UsePastE
       setError(result.error);
     }
     setIsLoading(false);
-  }, [calendarId, tagId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tagId, calendarIdsKey]);
 
   useEffect(() => {
     refetch();

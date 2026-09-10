@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import {
-  addReflection,
   attachPhoto,
+  detachPhoto,
   getPhotoUrl,
+  listEventIdsWithPhotos,
   listMemoriesTimeline,
   listPhotosForEvent,
+  setPhotoThumbnail,
 } from "./service";
 import type { EventPhoto, MemoryEntry, MemoryError, MemoryFilter, PhotoUploadInput } from "./types";
 
@@ -33,6 +35,56 @@ export function useAttachPhoto(): UseAttachPhotoResult {
   }, []);
 
   return { attachPhoto: runAttachPhoto, isSubmitting, error };
+}
+
+export interface UseDetachPhotoResult {
+  detachPhoto: (photoId: string, storagePath: string) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: MemoryError | null;
+}
+
+export function useDetachPhoto(): UseDetachPhotoResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<MemoryError | null>(null);
+
+  const runDetachPhoto = useCallback(async (photoId: string, storagePath: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await detachPhoto(getSupabaseClient(), photoId, storagePath);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { detachPhoto: runDetachPhoto, isSubmitting, error };
+}
+
+export interface UseSetPhotoThumbnailResult {
+  setPhotoThumbnail: (eventId: string, photoId: string) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: MemoryError | null;
+}
+
+export function useSetPhotoThumbnail(): UseSetPhotoThumbnailResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<MemoryError | null>(null);
+
+  const runSetPhotoThumbnail = useCallback(async (eventId: string, photoId: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await setPhotoThumbnail(getSupabaseClient(), eventId, photoId);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { setPhotoThumbnail: runSetPhotoThumbnail, isSubmitting, error };
 }
 
 export type EventPhotoWithUrl = EventPhoto & { url: string | null };
@@ -78,30 +130,52 @@ export function useEventPhotos(eventId: string): UseEventPhotosResult {
   return { photos, isLoading, error, refetch };
 }
 
-export interface UseAddReflectionResult {
-  addReflection: (eventId: string, body: string) => Promise<boolean>;
-  isSubmitting: boolean;
+export interface UseEventIdsWithPhotosResult {
+  eventIdsWithPhotos: Set<string>;
+  isLoading: boolean;
   error: MemoryError | null;
+  refetch: () => Promise<void>;
 }
 
-export function useAddReflection(): UseAddReflectionResult {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+/**
+ * Batched "does this event have any photos" presence check, for list screens
+ * (e.g. the history tab's timeline) that show many events at once.
+ */
+export function useEventIdsWithPhotos(eventIds: string[]): UseEventIdsWithPhotosResult {
+  const [eventIdsWithPhotos, setEventIdsWithPhotos] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(eventIds.length > 0);
   const [error, setError] = useState<MemoryError | null>(null);
+  // See useEventTagsByEvents (tags feature) for why this keys off a derived
+  // string instead of the array reference itself.
+  const eventIdsKey = eventIds.join(",");
 
-  const runAddReflection = useCallback(async (eventId: string, body: string) => {
-    setIsSubmitting(true);
-    setError(null);
-    const result = await addReflection(getSupabaseClient(), eventId, body);
-    setIsSubmitting(false);
-    if (!result.ok) {
-      setError(result.error);
-      return false;
+  const refetch = useCallback(async () => {
+    if (eventIds.length === 0) {
+      setEventIdsWithPhotos(new Set());
+      setError(null);
+      setIsLoading(false);
+      return;
     }
-    return true;
-  }, []);
+    setIsLoading(true);
+    const result = await listEventIdsWithPhotos(getSupabaseClient(), eventIds);
+    if (result.ok) {
+      setEventIdsWithPhotos(result.value);
+      setError(null);
+    } else {
+      setEventIdsWithPhotos(new Set());
+      setError(result.error);
+    }
+    setIsLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventIdsKey]);
 
-  return { addReflection: runAddReflection, isSubmitting, error };
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { eventIdsWithPhotos, isLoading, error, refetch };
 }
+
 
 export type MemoryEntryWithThumbnail = MemoryEntry & { thumbnailUrl: string | null };
 
@@ -113,7 +187,7 @@ export interface UseMemoriesTimelineResult {
 }
 
 export function useMemoriesTimeline(
-  calendarId: string,
+  calendarIds: string[],
   filter?: MemoryFilter
 ): UseMemoriesTimelineResult {
   const [entries, setEntries] = useState<MemoryEntryWithThumbnail[]>([]);
@@ -121,13 +195,14 @@ export function useMemoriesTimeline(
   const [error, setError] = useState<MemoryError | null>(null);
   const year = filter?.year;
   const month = filter?.month;
+  const calendarIdsKey = calendarIds.join(",");
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
     const client = getSupabaseClient();
     const result = await listMemoriesTimeline(
       client,
-      calendarId,
+      calendarIds,
       year !== undefined || month !== undefined ? { year, month } : undefined
     );
     if (!result.ok) {
@@ -139,9 +214,6 @@ export function useMemoriesTimeline(
 
     const withThumbnails = await Promise.all(
       result.value.map(async (entry) => {
-        if (!entry.thumbnailStoragePath) {
-          return { ...entry, thumbnailUrl: null };
-        }
         const urlResult = await getPhotoUrl(client, entry.thumbnailStoragePath);
         return { ...entry, thumbnailUrl: urlResult.ok ? urlResult.value : null };
       })
@@ -149,7 +221,8 @@ export function useMemoriesTimeline(
     setEntries(withThumbnails);
     setError(null);
     setIsLoading(false);
-  }, [calendarId, year, month]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarIdsKey, year, month]);
 
   useEffect(() => {
     refetch();

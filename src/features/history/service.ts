@@ -7,11 +7,15 @@ import type { HistoryError } from "./types";
 
 export async function listPastEventsByTag(
   client: SupabaseClient,
-  calendarId: string,
-  tagId?: string
+  tagId?: string,
+  calendarIds?: string[]
 ): Promise<Result<Event[], HistoryError>> {
   const { data, error } = await client.rpc("list_past_events_by_tag", {
-    p_calendar_id: calendarId,
+    // undefined (caller passed no calendar filter at all) -> null = no
+    // filter, show every calendar. An actual [] (the user deliberately
+    // deselected every calendar in the filter) must be passed through as
+    // [] - it means "show nothing", not "no filter given".
+    p_calendar_ids: calendarIds ?? null,
     p_tag_id: tagId ?? null,
   });
 
