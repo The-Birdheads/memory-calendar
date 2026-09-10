@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity } from "react-native";
 import { router } from "expo-router";
 
 import { useAuthActions } from "../../src/features/auth/hooks";
@@ -19,7 +19,8 @@ export default function SignupScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.flexOne} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>アカウント登録</Text>
       <TextInput
         testID="signup-display-name-input"
@@ -58,13 +59,17 @@ export default function SignupScreen() {
       <TouchableOpacity testID="signup-login-link" onPress={() => router.push("/(auth)/login")}>
         <Text style={styles.linkText}>すでにアカウントをお持ちの方はこちら</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  flexOne: {
     flex: 1,
+  },
+  container: {
+    flexGrow: 1,
     justifyContent: "center",
     padding: 24,
     gap: 12,
