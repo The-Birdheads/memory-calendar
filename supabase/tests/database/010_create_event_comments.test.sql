@@ -82,7 +82,10 @@ select is(
   '非メンバーはコメントを閲覧できないこと'
 );
 select throws_ok(
-  $$ insert into public.event_comments (event_id, body) values (:'event8_id', '不正な投稿') $$,
+  format(
+    $$ insert into public.event_comments (event_id, body) values (%L, '不正な投稿') $$,
+    :'event8_id'
+  ),
   '42501',
   null,
   '非メンバーはコメントを投稿できないこと'

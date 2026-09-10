@@ -101,8 +101,11 @@ select is(
   '非メンバーはevent_photosを閲覧できないこと'
 );
 select throws_ok(
-  $$ insert into public.event_photos (event_id, storage_path)
-     values (:'otherEvent16_id', :'otherEvent16_id' || '/other.jpg') $$,
+  format(
+    $$ insert into public.event_photos (event_id, storage_path)
+       values (%L, %L) $$,
+    :'otherEvent16_id', :'otherEvent16_id' || '/other.jpg'
+  ),
   '42501',
   null,
   '非メンバーはevent_photosに追加できないこと'

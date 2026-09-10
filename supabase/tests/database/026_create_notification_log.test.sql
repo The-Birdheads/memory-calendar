@@ -41,8 +41,11 @@ insert into public.notification_log (type, target_user_id, event_id, status)
   values ('event_updated', '55555555-5555-6666-7777-888888888881', :'event23_id', 'sent');
 
 select throws_ok(
-  $$ insert into public.notification_log (type, target_user_id, event_id, status)
-     values ('event_updated', '55555555-5555-6666-7777-888888888881', :'event23_id', 'sent') $$,
+  format(
+    $$ insert into public.notification_log (type, target_user_id, event_id, status)
+       values ('event_updated', '55555555-5555-6666-7777-888888888881', %L, 'sent') $$,
+    :'event23_id'
+  ),
   '23505',
   null,
   '同一(type, target_user_id, event_id)の重複記録は一意制約で拒否されること(冪等性)'

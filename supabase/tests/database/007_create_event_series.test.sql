@@ -38,8 +38,11 @@ insert into public.calendars (name) values ('繰り返し検証用') returning i
 -- CHECK制約: recurrence_end_at は start_at から1年を超えられない(RLSを回避しテーブル制約のみを直接検証)
 set local role postgres;
 select throws_ok(
-  $$ insert into public.event_series (calendar_id, recurrence_rule, start_at, recurrence_end_at)
-     values (:'cal5_id', 'daily', '2026-01-01T00:00:00+00', '2027-01-02T00:00:00+00') $$,
+  format(
+    $$ insert into public.event_series (calendar_id, recurrence_rule, start_at, recurrence_end_at)
+       values (%L, 'daily', '2026-01-01T00:00:00+00', '2027-01-02T00:00:00+00') $$,
+    :'cal5_id'
+  ),
   '23514',
   null,
   'recurrence_end_atがstart_atから1年を超える場合はCHECK制約で拒否されること'
@@ -74,10 +77,13 @@ select is(
 
 -- 終了日未指定はエラーで登録が行われない
 select throws_ok(
-  $$ select * from public.create_recurring_series(
-       :'cal5_id'::uuid, '終了日なし', '2026-10-01T10:00:00+00', '2026-10-01T11:00:00+00',
-       'daily', null
-     ) $$,
+  format(
+    $$ select * from public.create_recurring_series(
+         %L::uuid, '終了日なし', '2026-10-01T10:00:00+00', '2026-10-01T11:00:00+00',
+         'daily', null
+       ) $$,
+    :'cal5_id'
+  ),
   'A0003',
   null,
   '終了日未指定の場合はエラーとなり登録が行われないこと'
@@ -90,10 +96,13 @@ select is(
 
 -- 開始日から1年を超える終了日はエラーで登録が行われない
 select throws_ok(
-  $$ select * from public.create_recurring_series(
-       :'cal5_id'::uuid, '1年超過', '2026-01-01T00:00:00+00', '2026-01-01T01:00:00+00',
-       'monthly', '2027-01-02T00:00:00+00'
-     ) $$,
+  format(
+    $$ select * from public.create_recurring_series(
+         %L::uuid, '1年超過', '2026-01-01T00:00:00+00', '2026-01-01T01:00:00+00',
+         'monthly', '2027-01-02T00:00:00+00'
+       ) $$,
+    :'cal5_id'
+  ),
   'A0003',
   null,
   '開始日から1年を超える終了日はエラーとなり登録が行われないこと'
@@ -110,10 +119,13 @@ insert into auth.users (id) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2');
 set local role authenticated;
 set local request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2';
 select throws_ok(
-  $$ select * from public.create_recurring_series(
-       :'cal5_id'::uuid, '非メンバー', '2026-11-01T10:00:00+00', '2026-11-01T11:00:00+00',
-       'daily', '2026-11-03T10:00:00+00'
-     ) $$,
+  format(
+    $$ select * from public.create_recurring_series(
+         %L::uuid, '非メンバー', '2026-11-01T10:00:00+00', '2026-11-01T11:00:00+00',
+         'daily', '2026-11-03T10:00:00+00'
+       ) $$,
+    :'cal5_id'
+  ),
   '42501',
   null,
   '非メンバーはシリーズを生成できないこと'

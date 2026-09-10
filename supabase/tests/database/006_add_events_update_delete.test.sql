@@ -55,7 +55,10 @@ select is(
 
 -- CHECK制約: 更新時も終了日時が開始日時より前の値は許可しない
 select throws_ok(
-  $$ update public.events set end_at = '2026-09-05T09:00:00+00' where id = :'event4_id' $$,
+  format(
+    $$ update public.events set end_at = '2026-09-05T09:00:00+00' where id = %L $$,
+    :'event4_id'
+  ),
   '23514',
   null,
   '更新時に終了日時が開始日時より前になる変更はCHECK制約で拒否されること'
@@ -68,13 +71,17 @@ set local role authenticated;
 set local request.jwt.claim.sub = '88888888-8888-8888-8888-888888888884';
 
 update public.events set title = '不正な変更' where id = :'event4_id'::uuid;
+delete from public.events where id = :'event4_id'::uuid;
+
+-- 非メンバーの操作結果は、その予定を閲覧できるメンバーとして確認する
+-- (非メンバーは events_select_member で SELECT もできないため、非メンバーの
+--  ままだと下の副問い合わせが常にNULL/0件になり検証にならない)
+set local request.jwt.claim.sub = '88888888-8888-8888-8888-888888888881';
 select is(
   (select title from public.events where id = :'event4_id'::uuid),
   '会議(変更後)',
   '非メンバーが編集を試みても変更されないこと'
 );
-
-delete from public.events where id = :'event4_id'::uuid;
 select ok(
   exists(select 1 from public.events where id = :'event4_id'::uuid),
   '非メンバーが削除を試みても予定は削除されないこと'

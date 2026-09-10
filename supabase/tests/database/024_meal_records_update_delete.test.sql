@@ -57,14 +57,16 @@ insert into auth.users (id) values ('33333333-3333-4444-5555-666666666663');
 set local role authenticated;
 set local request.jwt.claim.sub = '33333333-3333-4444-5555-666666666663';
 update public.meal_records set title = '不正な変更' where id = :'meal22_id'::uuid;
+delete from public.meal_records where id = :'meal22_id'::uuid;
 
+-- 非メンバーの操作結果は、その記録を閲覧できるメンバーとして確認する
+-- (非メンバーは meal_records_select_member で SELECT もできないため)
+set local request.jwt.claim.sub = '33333333-3333-4444-5555-666666666661';
 select is(
   (select title from public.meal_records where id = :'meal22_id'::uuid),
   'トーストとコーヒー',
   '非メンバーが編集を試みても変更されないこと'
 );
-
-delete from public.meal_records where id = :'meal22_id'::uuid;
 select ok(
   exists(select 1 from public.meal_records where id = :'meal22_id'::uuid),
   '非メンバーが削除を試みても削除されないこと'

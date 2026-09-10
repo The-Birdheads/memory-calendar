@@ -21,7 +21,7 @@ select is(
 );
 select policies_are(
   'public', 'calendars',
-  array['calendars_insert_own', 'calendars_select_member'],
+  array['calendars_insert_own', 'calendars_select_member', 'calendars_update_owner'],
   'calendars に想定通りのRLSポリシーが定義されていること'
 );
 
@@ -40,7 +40,7 @@ select is(
 );
 select policies_are(
   'public', 'calendar_members',
-  array['calendar_members_select_member'],
+  array['calendar_members_select_member', 'calendar_members_delete_owner'],
   'calendar_members に想定通りのRLSポリシーが定義されていること'
 );
 
@@ -84,8 +84,11 @@ select is(
 -- RLS: calendar_membersへの直接INSERTは許可されない(トリガー経由のみ許可)
 set local request.jwt.claim.sub = '44444444-4444-4444-4444-444444444444';
 select throws_ok(
-  $$ insert into public.calendar_members (calendar_id, user_id, role)
-     values (:'calendar1_id', '44444444-4444-4444-4444-444444444444', 'viewer') $$,
+  format(
+    $$ insert into public.calendar_members (calendar_id, user_id, role)
+       values (%L, '44444444-4444-4444-4444-444444444444', 'viewer') $$,
+    :'calendar1_id'
+  ),
   '42501',
   null,
   'calendar_members への直接INSERTはRLSで拒否されること'
@@ -94,8 +97,11 @@ select throws_ok(
 -- CHECK制約: role は owner/editor/viewer 以外を許可しない
 set local role postgres;
 select throws_ok(
-  $$ insert into public.calendar_members (calendar_id, user_id, role)
-     values (:'calendar1_id', '44444444-4444-4444-4444-444444444444', 'admin') $$,
+  format(
+    $$ insert into public.calendar_members (calendar_id, user_id, role)
+       values (%L, '44444444-4444-4444-4444-444444444444', 'admin') $$,
+    :'calendar1_id'
+  ),
   '23514',
   null,
   'role は owner/editor/viewer 以外を許可しないこと'

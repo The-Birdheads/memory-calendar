@@ -62,9 +62,13 @@ select ok(
 );
 
 -- RLS: カレンダーメンバーは登録した予定を閲覧できる(招待経由の別メンバーを想定)
+-- calendar_members への直接INSERTはRLSで禁止されている(トリガー/RPC経由のみ)ため、
+-- テストのセットアップでは postgres ロールで直接投入する。
+set local role postgres;
 insert into public.calendar_members (calendar_id, user_id, role)
   values (:'calendar1_id', '66666666-6666-6666-6666-666666666666', 'viewer');
 
+set local role authenticated;
 set local request.jwt.claim.sub = '66666666-6666-6666-6666-666666666666';
 select is(
   (select count(*) from public.events where id = :'event1_id'::uuid),
@@ -85,8 +89,11 @@ select is(
 
 -- RLS: 非メンバーは予定を登録できない
 select throws_ok(
-  $$ insert into public.events (calendar_id, title, start_at, end_at)
-     values (:'calendar1_id', '不正な予定', now(), now() + interval '1 hour') $$,
+  format(
+    $$ insert into public.events (calendar_id, title, start_at, end_at)
+       values (%L, '不正な予定', now(), now() + interval '1 hour') $$,
+    :'calendar1_id'
+  ),
   '42501',
   null,
   '非メンバーは予定をINSERTできないこと'
@@ -95,8 +102,11 @@ select throws_ok(
 -- CHECK制約: 終了日時が開始日時より前の予定は許可しない
 set local request.jwt.claim.sub = '55555555-5555-5555-5555-555555555555';
 select throws_ok(
-  $$ insert into public.events (calendar_id, title, start_at, end_at)
-     values (:'calendar1_id', '不正な予定', '2026-09-02T10:00:00+00', '2026-09-02T09:00:00+00') $$,
+  format(
+    $$ insert into public.events (calendar_id, title, start_at, end_at)
+       values (%L, '不正な予定', '2026-09-02T10:00:00+00', '2026-09-02T09:00:00+00') $$,
+    :'calendar1_id'
+  ),
   '23514',
   null,
   '終了日時が開始日時より前の予定はCHECK制約で拒否されること'

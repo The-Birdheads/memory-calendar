@@ -46,7 +46,7 @@ select is(
 );
 select is(
   (select event_count from public.event_series_creation_events where calendar_id = :'cal24_id'::uuid),
-  3::bigint,
+  3,
   'event_countが実際に生成された回数(3回)と一致すること'
 );
 
@@ -62,20 +62,17 @@ select is(
 
 -- notification_log: series_idをキーとした冪等性(同一type/target/seriesの重複記録は拒否される)
 set local role postgres;
+select series_id as sid from public.event_series_creation_events
+  where calendar_id = :'cal24_id'::uuid limit 1 \gset series24_
 insert into public.notification_log (type, target_user_id, series_id, status)
-  values (
-    'series_created', '66666666-6666-7777-8888-999999999991',
-    (select series_id from public.event_series_creation_events where calendar_id = :'cal24_id'::uuid limit 1),
-    'sent'
-  );
+  values ('series_created', '66666666-6666-7777-8888-999999999991', :'series24_sid'::uuid, 'sent');
 
 select throws_ok(
-  $$ insert into public.notification_log (type, target_user_id, series_id, status)
-     values (
-       'series_created', '66666666-6666-7777-8888-999999999991',
-       (select series_id from public.event_series_creation_events where calendar_id = :'cal24_id'::uuid limit 1),
-       'sent'
-     ) $$,
+  format(
+    $$ insert into public.notification_log (type, target_user_id, series_id, status)
+       values ('series_created', '66666666-6666-7777-8888-999999999991', %L::uuid, 'sent') $$,
+    :'series24_sid'
+  ),
   '23505',
   null,
   'series_idをキーとした重複記録は一意制約で拒否されること(冪等性)'

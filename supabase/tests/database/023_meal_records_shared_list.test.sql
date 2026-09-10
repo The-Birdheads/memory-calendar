@@ -17,16 +17,16 @@ set local role postgres;
 insert into public.calendar_members (calendar_id, user_id, role)
   values (:'cal21_id'::uuid, '22222222-2222-3333-4444-555555555552', 'viewer');
 
--- ownerが過去の献立を登録
+-- ownerが過去の献立を登録(実行日基準で相対指定 - 固定日付だと時間経過でテストが壊れる)
 set local role authenticated;
 set local request.jwt.claim.sub = '22222222-2222-3333-4444-555555555551';
 insert into public.meal_records (calendar_id, meal_date, slot, title)
-  values (:'cal21_id', '2026-08-10', 'breakfast', 'ownerのトースト');
+  values (:'cal21_id', current_date - 30, 'breakfast', 'ownerのトースト');
 
 -- viewerが未来の献立(食べる予定)を登録
 set local request.jwt.claim.sub = '22222222-2222-3333-4444-555555555552';
 insert into public.meal_records (calendar_id, meal_date, slot, title)
-  values (:'cal21_id', '2026-08-25', 'dinner', 'viewerのカレー');
+  values (:'cal21_id', current_date + 30, 'dinner', 'viewerのカレー');
 
 -- ownerから見ると、両メンバーの記録が一覧に含まれる
 set local request.jwt.claim.sub = '22222222-2222-3333-4444-555555555551';

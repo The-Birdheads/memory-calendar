@@ -89,8 +89,11 @@ select is(
 
 -- CHECK制約: slotは4区分以外を許可しない
 select throws_ok(
-  $$ insert into public.meal_records (calendar_id, meal_date, slot, title)
-     values (:'cal20_id', '2026-08-20', 'brunch', '不正な区分') $$,
+  format(
+    $$ insert into public.meal_records (calendar_id, meal_date, slot, title)
+       values (%L, '2026-08-20', 'brunch', '不正な区分') $$,
+    :'cal20_id'
+  ),
   '23514',
   null,
   'slotが4区分以外の場合はCHECK制約で拒否されること'
@@ -98,8 +101,11 @@ select throws_ok(
 
 -- CHECK制約: ratingは1〜5の範囲
 select throws_ok(
-  $$ insert into public.meal_records (calendar_id, meal_date, slot, title, rating)
-     values (:'cal20_id', '2026-08-20', 'lunch', '不正な点数', 6) $$,
+  format(
+    $$ insert into public.meal_records (calendar_id, meal_date, slot, title, rating)
+       values (%L, '2026-08-20', 'lunch', '不正な点数', 6) $$,
+    :'cal20_id'
+  ),
   '23514',
   null,
   'ratingが1〜5の範囲外の場合はCHECK制約で拒否されること'
@@ -124,8 +130,11 @@ select is(
   '非メンバーは献立記録を閲覧できないこと'
 );
 select throws_ok(
-  $$ insert into public.meal_records (calendar_id, meal_date, slot, title)
-     values (:'cal20_id', '2026-08-20', 'snack', '不正な登録') $$,
+  format(
+    $$ insert into public.meal_records (calendar_id, meal_date, slot, title)
+       values (%L, '2026-08-20', 'snack', '不正な登録') $$,
+    :'cal20_id'
+  ),
   '42501',
   null,
   '非メンバーは献立記録を登録できないこと'

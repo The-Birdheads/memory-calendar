@@ -70,17 +70,18 @@ set local request.jwt.claim.sub = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3';
 update public.events
   set title = '不正な一括変更'
   where calendar_id = :'cal6_id'::uuid and title = '毎週買い物(変更後)';
+delete from public.events
+  where calendar_id = :'cal6_id'::uuid and title = '毎週買い物(変更後)';
 
+-- 非メンバーの操作結果は、その予定を閲覧できるメンバーとして確認する
+-- (非メンバーは events_select_member で SELECT もできないため)
+set local request.jwt.claim.sub = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1';
 select is(
   (select count(*) from public.events
      where calendar_id = :'cal6_id'::uuid and title = '不正な一括変更'),
   0::bigint,
   '非メンバーがまとめ編集を試みても変更が反映されないこと'
 );
-
-delete from public.events
-  where calendar_id = :'cal6_id'::uuid and title = '毎週買い物(変更後)';
-
 select is(
   (select count(*) from public.events
      where calendar_id = :'cal6_id'::uuid and title = '毎週買い物(変更後)'),

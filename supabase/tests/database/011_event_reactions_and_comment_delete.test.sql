@@ -15,7 +15,10 @@ select is(
 );
 select policies_are(
   'public', 'event_reactions',
-  array['event_reactions_insert_member', 'event_reactions_select_member'],
+  array[
+    'event_reactions_insert_member', 'event_reactions_select_member',
+    'event_reactions_update_own', 'event_reactions_delete_own'
+  ],
   'event_reactions に想定通りのRLSポリシーが定義されていること'
 );
 select policies_are(

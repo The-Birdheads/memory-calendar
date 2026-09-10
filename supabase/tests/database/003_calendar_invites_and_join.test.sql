@@ -73,7 +73,7 @@ select ok(
 -- viewerは招待を発行できない
 set local request.jwt.claim.sub = '66666666-6666-6666-6666-666666666666';
 select throws_ok(
-  $$ insert into public.calendar_invites (calendar_id) values (:'cal2_id') $$,
+  format($$ insert into public.calendar_invites (calendar_id) values (%L) $$, :'cal2_id'),
   '42501',
   null,
   'viewerロールのメンバーは招待コードを発行できないこと'
@@ -84,7 +84,7 @@ set local request.jwt.claim.sub = '77777777-7777-7777-7777-777777777777';
 select role from public.join_by_invite(:'invite1_code') \gset joinresult_
 
 select is(
-  :'joinresult_role',
+  :'joinresult_role'::text,
   'viewer',
   '招待コードで参加すると viewer ロールで追加されること'
 );
@@ -115,7 +115,7 @@ returning code \gset expired_
 set local role authenticated;
 set local request.jwt.claim.sub = '88888888-8888-8888-8888-888888888888';
 select throws_ok(
-  $$ select * from public.join_by_invite(:'expired_code') $$,
+  format($$ select * from public.join_by_invite(%L) $$, :'expired_code'),
   'A0002',
   null,
   '有効期限切れの招待コードはエラーになること'
@@ -124,7 +124,7 @@ select throws_ok(
 -- 既にメンバーの場合、同じ招待コードを再利用してもエラーにならず冪等であること
 set local request.jwt.claim.sub = '77777777-7777-7777-7777-777777777777';
 select lives_ok(
-  $$ select * from public.join_by_invite(:'invite1_code') $$,
+  format($$ select * from public.join_by_invite(%L) $$, :'invite1_code'),
   '既にメンバーが同じ招待コードを再利用してもエラーにならないこと'
 );
 select is(
