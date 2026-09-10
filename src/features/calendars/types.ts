@@ -7,6 +7,8 @@ export interface Calendar {
   id: string;
   name: string;
   kind: CalendarKind;
+  /** タグが付いていない予定をこの色で表示する(タグが付いていればタグの色が優先)。 */
+  color: string;
   createdBy: string;
   createdAt: string;
 }
@@ -21,11 +23,12 @@ export interface CalendarMember {
 
 export interface CreateCalendarInput {
   name: string;
-  kind?: CalendarKind;
+  color?: string;
 }
 
 export interface UpdateCalendarInput {
   name?: string;
+  color?: string;
 }
 
 export interface CalendarInvite {

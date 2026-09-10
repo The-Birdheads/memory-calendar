@@ -1,13 +1,25 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
-import { createCalendar, createInvite, joinByInvite, listMembers, listMyCalendars, removeMember, updateCalendar } from "../service";
+import {
+  createCalendar,
+  createInvite,
+  getPersonalCalendar,
+  joinByInvite,
+  leaveOrDeleteCalendar,
+  listMembers,
+  listMyCalendars,
+  removeMember,
+  updateCalendar,
+} from "../service";
 import {
   useCalendarMembers,
   useCreateCalendar,
   useCreateInvite,
   useJoinByInvite,
+  useLeaveOrDeleteCalendar,
   useMyCalendars,
+  usePersonalCalendar,
   useRemoveMember,
   useUpdateCalendar,
 } from "../hooks";
@@ -24,6 +36,8 @@ jest.mock("../service", () => ({
   updateCalendar: jest.fn(),
   createInvite: jest.fn(),
   joinByInvite: jest.fn(),
+  getPersonalCalendar: jest.fn(),
+  leaveOrDeleteCalendar: jest.fn(),
 }));
 
 describe("useCreateCalendar", () => {
@@ -205,6 +219,35 @@ describe("useMyCalendars", () => {
   });
 });
 
+describe("usePersonalCalendar", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("loads the caller's personal calendar on mount", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const calendar = { id: "cal-personal", name: "Myカレンダー", kind: "personal", createdBy: "u1", createdAt: "2026-08-17" };
+    (getPersonalCalendar as jest.Mock).mockResolvedValue({ ok: true, value: calendar });
+
+    const { result } = await renderHook(() => usePersonalCalendar());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.calendar).toEqual(calendar);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("keeps the calendar null and sets the error when loading fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (getPersonalCalendar as jest.Mock).mockResolvedValue({ ok: false, error: { type: "NotFound" } });
+
+    const { result } = await renderHook(() => usePersonalCalendar());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.calendar).toBeNull();
+    expect(result.current.error).toEqual({ type: "NotFound" });
+  });
+});
+
 describe("useCalendarMembers", () => {
   afterEach(() => {
     jest.clearAllMocks();
@@ -280,6 +323,43 @@ describe("useRemoveMember", () => {
     });
 
     expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useLeaveOrDeleteCalendar", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns the result and clears the error on success", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (leaveOrDeleteCalendar as jest.Mock).mockResolvedValue({ ok: true, value: false });
+
+    const { result } = await renderHook(() => useLeaveOrDeleteCalendar());
+
+    let deleted: boolean | null = null;
+    await act(async () => {
+      deleted = await result.current.leaveOrDeleteCalendar("cal-1");
+    });
+
+    expect(deleted).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(leaveOrDeleteCalendar).toHaveBeenCalledWith({}, "cal-1");
+  });
+
+  it("returns null and sets the error on failure", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (leaveOrDeleteCalendar as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useLeaveOrDeleteCalendar());
+
+    let deleted: boolean | null = false;
+    await act(async () => {
+      deleted = await result.current.leaveOrDeleteCalendar("cal-1");
+    });
+
+    expect(deleted).toBeNull();
     expect(result.current.error).toEqual({ type: "Forbidden" });
   });
 });

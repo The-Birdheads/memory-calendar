@@ -4,7 +4,9 @@ import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import {
   createCalendar,
   createInvite,
+  getPersonalCalendar,
   joinByInvite,
+  leaveOrDeleteCalendar,
   listMembers,
   listMyCalendars,
   removeMember,
@@ -151,6 +153,38 @@ export function useMyCalendars(): UseMyCalendarsResult {
   return { calendars, isLoading, error, refetch };
 }
 
+export interface UsePersonalCalendarResult {
+  calendar: Calendar | null;
+  isLoading: boolean;
+  error: CalendarError | null;
+  refetch: () => Promise<void>;
+}
+
+export function usePersonalCalendar(): UsePersonalCalendarResult {
+  const [calendar, setCalendar] = useState<Calendar | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<CalendarError | null>(null);
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const result = await getPersonalCalendar(getSupabaseClient());
+    if (result.ok) {
+      setCalendar(result.value);
+      setError(null);
+    } else {
+      setCalendar(null);
+      setError(result.error);
+    }
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { calendar, isLoading, error, refetch };
+}
+
 export interface UseCalendarMembersResult {
   members: CalendarMember[];
   isLoading: boolean;
@@ -205,4 +239,29 @@ export function useRemoveMember(): UseRemoveMemberResult {
   }, []);
 
   return { removeMember: runRemoveMember, isSubmitting, error };
+}
+
+export interface UseLeaveOrDeleteCalendarResult {
+  leaveOrDeleteCalendar: (calendarId: string) => Promise<boolean | null>;
+  isSubmitting: boolean;
+  error: CalendarError | null;
+}
+
+export function useLeaveOrDeleteCalendar(): UseLeaveOrDeleteCalendarResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<CalendarError | null>(null);
+
+  const runLeaveOrDeleteCalendar = useCallback(async (calendarId: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await leaveOrDeleteCalendar(getSupabaseClient(), calendarId);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return null;
+    }
+    return result.value;
+  }, []);
+
+  return { leaveOrDeleteCalendar: runLeaveOrDeleteCalendar, isSubmitting, error };
 }

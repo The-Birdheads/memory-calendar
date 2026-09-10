@@ -15,6 +15,7 @@ interface CalendarRow {
   id: string;
   name: string;
   kind: string;
+  color: string;
   created_by: string;
   created_at: string;
 }
@@ -24,6 +25,7 @@ function mapCalendarRow(row: CalendarRow): Calendar {
     id: row.id,
     name: row.name,
     kind: row.kind === "personal" ? "personal" : "group",
+    color: row.color,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
@@ -88,14 +90,28 @@ export async function createCalendar(
     return err({ type: "ValidationError", field: "name" });
   }
 
-  const { data, error } = await client
-    .from("calendars")
-    .insert({ name: input.name, kind: input.kind ?? "group" })
-    .select()
-    .single();
+  const payload: Record<string, unknown> = { name: input.name, kind: "group" };
+  if (input.color !== undefined) payload.color = input.color;
+
+  const { data, error } = await client.from("calendars").insert(payload).select().single();
 
   if (error || !data) {
     return err(mapCalendarError(error as PostgrestError));
+  }
+
+  return ok(mapCalendarRow(data as CalendarRow));
+}
+
+export async function getPersonalCalendar(
+  client: SupabaseClient
+): Promise<Result<Calendar, CalendarError>> {
+  const { data, error } = await client.from("calendars").select().eq("kind", "personal").maybeSingle();
+
+  if (error) {
+    return err(mapCalendarError(error as PostgrestError));
+  }
+  if (!data) {
+    return err({ type: "NotFound" });
   }
 
   return ok(mapCalendarRow(data as CalendarRow));
@@ -112,6 +128,7 @@ export async function updateCalendar(
 
   const payload: Record<string, unknown> = {};
   if (input.name !== undefined) payload.name = input.name;
+  if (input.color !== undefined) payload.color = input.color;
 
   const { data, error } = await client
     .from("calendars")
@@ -159,6 +176,24 @@ export async function joinByInvite(
   return ok(mapCalendarMembershipRow(data as CalendarMembershipRow));
 }
 
+/** Leaves a group calendar the caller belongs to. Removes only the caller's
+ * own membership if other members remain, or deletes the whole calendar
+ * (cascading to its events, members, etc.) if the caller was the only one.
+ * Returns true when the calendar itself was deleted, false when the caller
+ * just left it. Personal calendars can't be targeted (server-enforced). */
+export async function leaveOrDeleteCalendar(
+  client: SupabaseClient,
+  calendarId: string
+): Promise<Result<boolean, CalendarError>> {
+  const { data, error } = await client.rpc("leave_or_delete_calendar", { p_calendar_id: calendarId });
+
+  if (error || data === null || data === undefined) {
+    return err(mapCalendarError(error as PostgrestError));
+  }
+
+  return ok(data as boolean);
+}
+
 export async function listMyCalendars(
   client: SupabaseClient
 ): Promise<Result<Calendar[], CalendarError>> {
@@ -168,7 +203,12 @@ export async function listMyCalendars(
     return err(mapCalendarError(error as PostgrestError));
   }
 
-  return ok((data as CalendarRow[]).map(mapCalendarRow));
+  const calendars = (data as CalendarRow[]).map(mapCalendarRow);
+  // The personal calendar always sorts first, so it reads as "always there"
+  // wherever the list is rendered (switcher chips, settings, etc.).
+  calendars.sort((a, b) => (a.kind === "personal" ? -1 : b.kind === "personal" ? 1 : 0));
+
+  return ok(calendars);
 }
 
 export async function listMembers(
