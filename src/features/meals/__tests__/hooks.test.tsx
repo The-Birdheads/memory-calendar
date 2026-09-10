@@ -6,6 +6,7 @@ import {
   createMealTag,
   deleteMealRecord,
   listMealRecords,
+  listMealRecordsByCalendars,
   updateMealRecord,
 } from "../service";
 import {
@@ -13,6 +14,7 @@ import {
   useCreateMealTag,
   useDeleteMealRecord,
   useMealRecords,
+  useMealRecordsByCalendars,
   useUpdateMealRecord,
 } from "../hooks";
 
@@ -24,6 +26,7 @@ jest.mock("../service", () => ({
   createMealRecord: jest.fn(),
   createMealTag: jest.fn(),
   listMealRecords: jest.fn(),
+  listMealRecordsByCalendars: jest.fn(),
   updateMealRecord: jest.fn(),
   deleteMealRecord: jest.fn(),
 }));
@@ -149,6 +152,48 @@ describe("useMealRecords", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.mealRecords).toEqual([]);
     expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useMealRecordsByCalendars", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("loads meal records across every given calendar on mount", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const records = [
+      { id: "meal-1", calendarId: "cal-1", title: "トースト" },
+      { id: "meal-2", calendarId: "cal-2", title: "カレー" },
+    ];
+    (listMealRecordsByCalendars as jest.Mock).mockResolvedValue({ ok: true, value: records });
+
+    const { result } = await renderHook(() => useMealRecordsByCalendars(["cal-1", "cal-2"]));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.mealRecords).toEqual(records);
+    expect(listMealRecordsByCalendars).toHaveBeenCalledWith({}, ["cal-1", "cal-2"], undefined);
+  });
+
+  it("keeps an empty list and sets the error when loading fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (listMealRecordsByCalendars as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useMealRecordsByCalendars(["cal-1"]));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.mealRecords).toEqual([]);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+
+  it("skips fetching when given no calendar ids", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+
+    const { result } = await renderHook(() => useMealRecordsByCalendars([]));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.mealRecords).toEqual([]);
+    expect(listMealRecordsByCalendars).not.toHaveBeenCalled();
   });
 });
 

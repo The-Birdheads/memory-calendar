@@ -1,635 +1,474 @@
-import { useState } from "react";
-import {
-  Keyboard,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-} from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { Tabs, router } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Tabs, router, useFocusEffect } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
-import { Icon } from "../../src/shared/components/Icon";
+import { CalendarSwitchChip } from "../../src/features/calendars/components/CalendarSwitchChip";
+import { groupMealsByDate, groupMealsByMonth } from "../../src/features/meals/grouping";
 import {
   useCreateMealRecord,
   useDeleteMealRecord,
-  useMealRecords,
+  useMealRecordsByCalendars,
   useUpdateMealRecord,
 } from "../../src/features/meals/hooks";
+import { MealFormModal, type MealFormTarget, type MealFormValues } from "../../src/features/meals/components/MealFormModal";
+import { MealRow } from "../../src/features/meals/components/MealRow";
 import type { MealRecord, MealSlot } from "../../src/features/meals/types";
-import { formatDateOnly, jstNow, toJstDateKey } from "../../src/shared/utils/formatDateTime";
+import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
+import { Icon } from "../../src/shared/components/Icon";
+import { todayJstDateKey } from "../../src/shared/utils/formatDateTime";
 
-const MEAL_SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
-const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
-  breakfast: "朝食",
-  lunch: "昼食",
-  dinner: "夕食",
-  snack: "間食",
-};
-
-// jstNow() itself already IS the JST-shifted Date, so slicing its own
-// .toISOString() directly gives the JST day - do NOT also pass it through
-// toJstDateKey (that expects a real, un-shifted absolute instant, and would
-// double-shift by another 9h). See the same pattern/comment in calendar.tsx.
-function todayDateString(): string {
-  return jstNow().toISOString().slice(0, 10);
-}
+type MealsMode = "plan" | "log";
 
 /**
- * A native date picker hands back a real absolute instant (e.g. tapping
- * "9/4" on a JST device yields JST-midnight-Sept-4, i.e. 15:00 UTC on the
- * 3rd) - reading its JST calendar day (not a raw UTC slice) is what keeps
- * the date you pick and the date that gets saved/displayed in sync.
+ * 献立タブ本体。上部のメニュー(予定/記録)で表示を切り替える - 振り返り
+ * タブの年表/画像と同じ「統合タブ内に独立したパネルを複数持たせる」構成。
+ * 「予定」はあらかじめ献立を決めてメモしておく(忘れずに食べられる)ため、
+ * 「記録」は食べたものを振り返る(食べたいものが思いつかない時の参考に
+ * する)ためのパネルで、それぞれ目的に合わせて別々にレイアウトしている。
  */
-function mealDateKeyFromPicked(date: Date): string {
-  return toJstDateKey(date.toISOString());
-}
-
-/** "YYYY-MM-DD" (already a plain date, no time) + the slot label, e.g. "2026/9/1 昼食". */
-function formatMealDateSlotLabel(mealDate: string, slot: MealSlot): string {
-  return `${mealDate.replace(/-/g, "/")} ${MEAL_SLOT_LABELS[slot]}`;
-}
-
-/** Parses a "YYYY-MM-DD" mealDate into a Date for the picker (UTC midnight -
- * round-trips correctly through mealDateKeyFromPicked's JST-day read, same
- * as the web date-input fallback). */
-function mealDateToPickerValue(mealDate: string): Date {
-  return new Date(`${mealDate}T00:00:00.000Z`);
-}
-
-interface MealRecordRowProps {
-  mealRecord: MealRecord;
-  onSave: (mealRecordId: string, title: string, url: string, memo: string, mealDate: string, slot: MealSlot) => void;
-  onDelete: (mealRecordId: string) => void;
-}
-
-function MealRecordRow({ mealRecord, onSave, onDelete }: MealRecordRowProps) {
-  const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
-  const [title, setTitle] = useState(mealRecord.title);
-  const [url, setUrl] = useState(mealRecord.url ?? "");
-  const [memo, setMemo] = useState(mealRecord.memo ?? "");
-  const [editMealDate, setEditMealDate] = useState(() => mealDateToPickerValue(mealRecord.mealDate));
-  const [editSlot, setEditSlot] = useState(mealRecord.slot);
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-
-  const openDetailModal = () => {
-    setTitle(mealRecord.title);
-    setUrl(mealRecord.url ?? "");
-    setMemo(mealRecord.memo ?? "");
-    setEditMealDate(mealDateToPickerValue(mealRecord.mealDate));
-    setEditSlot(mealRecord.slot);
-    setIsDatePickerOpen(false);
-    setIsDetailModalVisible(true);
-  };
-
-  const handleSave = () => {
-    onSave(mealRecord.id, title, url, memo, mealDateKeyFromPicked(editMealDate), editSlot);
-    setIsDetailModalVisible(false);
-  };
+export default function MealsScreen() {
+  const [mode, setMode] = useState<MealsMode>("plan");
 
   return (
-    <View style={styles.mealRow} testID={`meal-item-${mealRecord.id}`}>
-      <View style={styles.mealMainRow}>
-        <View style={styles.mealInfo}>
-          <Text style={styles.mealTitle}>{mealRecord.title}</Text>
-          <View style={styles.mealMetaRow}>
-            <Text style={styles.meta}>{formatMealDateSlotLabel(mealRecord.mealDate, mealRecord.slot)}</Text>
-            {mealRecord.url ? (
-              <Icon testID={`meal-url-icon-${mealRecord.id}`} name="link" size={12} color="#2f6fed" />
-            ) : null}
-            {mealRecord.memo ? (
-              <Icon testID={`meal-memo-icon-${mealRecord.id}`} name="note" size={12} color="#666" />
-            ) : null}
-          </View>
-        </View>
-        <TouchableOpacity testID={`meal-details-${mealRecord.id}`} onPress={openDetailModal}>
-          <Text style={styles.editText}>詳細</Text>
+    <View style={styles.container}>
+      <View style={styles.modeSwitchRow} testID="meals-mode-switch">
+        <TouchableOpacity
+          testID="meals-mode-plan"
+          style={[styles.modeSwitchButton, mode === "plan" && styles.modeSwitchButtonActive]}
+          onPress={() => setMode("plan")}
+        >
+          <Text style={mode === "plan" ? styles.modeSwitchTextActive : styles.modeSwitchText}>予定</Text>
         </TouchableOpacity>
-        <TouchableOpacity testID={`meal-delete-${mealRecord.id}`} onPress={() => onDelete(mealRecord.id)}>
-          <Text style={styles.deleteText}>削除</Text>
+        <TouchableOpacity
+          testID="meals-mode-log"
+          style={[styles.modeSwitchButton, mode === "log" && styles.modeSwitchButtonActive]}
+          onPress={() => setMode("log")}
+        >
+          <Text style={mode === "log" ? styles.modeSwitchTextActive : styles.modeSwitchText}>記録</Text>
         </TouchableOpacity>
       </View>
 
-      <Modal
-        visible={isDetailModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsDetailModalVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>献立の詳細</Text>
-
-              <TouchableOpacity
-                testID={`meal-edit-date-button-${mealRecord.id}`}
-                style={styles.dateField}
-                onPress={() => setIsDatePickerOpen(true)}
-              >
-                <Text style={styles.dateFieldLabel}>日付</Text>
-                <Text>{formatDateOnly(editMealDate.toISOString())}</Text>
-              </TouchableOpacity>
-
-              {isDatePickerOpen ? (
-                <View style={styles.pickerContainer}>
-                  {Platform.OS === "web" ? (
-                    <TextInput
-                      testID={`meal-edit-date-picker-${mealRecord.id}`}
-                      style={styles.input}
-                      placeholder="YYYY-MM-DD"
-                      onChangeText={(text) => {
-                        const parsed = new Date(`${text}T00:00:00.000Z`);
-                        if (!Number.isNaN(parsed.getTime())) setEditMealDate(parsed);
-                      }}
-                    />
-                  ) : (
-                    <DateTimePicker
-                      testID={`meal-edit-date-picker-${mealRecord.id}`}
-                      value={editMealDate}
-                      mode="date"
-                      onChange={(_event, selected) => {
-                        if (selected) setEditMealDate(selected);
-                      }}
-                    />
-                  )}
-                  <TouchableOpacity
-                    testID={`meal-edit-date-picker-done-${mealRecord.id}`}
-                    style={styles.pickerDoneButton}
-                    onPress={() => setIsDatePickerOpen(false)}
-                  >
-                    <Text>完了</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-
-              <View style={styles.slotRow}>
-                {MEAL_SLOTS.map((slot) => (
-                  <TouchableOpacity
-                    key={slot}
-                    testID={`meal-edit-slot-${slot}-${mealRecord.id}`}
-                    style={[styles.slotButton, slot === editSlot && styles.slotButtonActive]}
-                    onPress={() => setEditSlot(slot)}
-                  >
-                    <Text style={slot === editSlot ? styles.slotButtonTextActive : undefined}>
-                      {MEAL_SLOT_LABELS[slot]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <TextInput
-                testID={`meal-edit-title-input-${mealRecord.id}`}
-                style={styles.input}
-                placeholder="料理名"
-                returnKeyType="done"
-                value={title}
-                onChangeText={setTitle}
-              />
-              <TextInput
-                testID={`meal-edit-url-input-${mealRecord.id}`}
-                style={styles.input}
-                placeholder="URL"
-                autoCapitalize="none"
-                keyboardType="url"
-                returnKeyType="done"
-                value={url}
-                onChangeText={setUrl}
-              />
-              <TextInput
-                testID={`meal-edit-memo-input-${mealRecord.id}`}
-                style={styles.input}
-                placeholder="メモ"
-                multiline
-                value={memo}
-                onChangeText={setMemo}
-              />
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  testID={`meal-edit-cancel-${mealRecord.id}`}
-                  onPress={() => setIsDetailModalVisible(false)}
-                >
-                  <Text>キャンセル</Text>
-                </TouchableOpacity>
-                <TouchableOpacity testID={`meal-edit-save-${mealRecord.id}`} onPress={handleSave}>
-                  <Text style={styles.saveLink}>保存</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+      {mode === "plan" ? <PlanPanel /> : <LogPanel />}
     </View>
   );
 }
 
-export default function MealsScreen() {
-  const { calendars } = useMyCalendars();
-  const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(null);
-  const activeCalendarId = selectedCalendarId ?? calendars[0]?.id ?? "";
+/**
+ * カレンダー絞り込み(デフォルト全選択・タップでトグル)まわりの状態一式。
+ * 予定パネル・記録パネルどちらも同じ仕組みを個別に持つ(パネルを離れる
+ * =アンマウントされるたびにリセットされる、共通フィルターの決まり)。
+ */
+function useCalendarFilter() {
+  const { calendars, refetch: refetchCalendars } = useMyCalendars();
+  // 他画面と同じ「デフォルトで全カレンダー選択、タップで表示/非表示切り替え」方式。
+  // null = まだ明示的に選択を触っていない(=全カレンダー)。
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<Set<string> | null>(null);
+  const activeCalendarIds =
+    selectedCalendarIds !== null ? Array.from(selectedCalendarIds) : calendars.map((calendar) => calendar.id);
+  // 新規記録は複数カレンダーへ同時に作れないので、選択中(なければ先頭)の
+  // カレンダーを保存先にする。
+  const createTargetCalendarId = activeCalendarIds[0] ?? calendars[0]?.id ?? "";
 
-  const { mealRecords, refetch } = useMealRecords(activeCalendarId);
+  const handleToggleCalendar = (calendarId: string) => {
+    setSelectedCalendarIds((prev) => {
+      const base = prev ?? new Set(calendars.map((calendar) => calendar.id));
+      const next = new Set(base);
+      if (next.has(calendarId)) {
+        next.delete(calendarId);
+      } else {
+        next.add(calendarId);
+      }
+      return next;
+    });
+  };
+
+  const isFilterActive = selectedCalendarIds !== null;
+  const handleResetFilter = useCallback(() => {
+    setSelectedCalendarIds(null);
+  }, []);
+
+  // カレンダー名の変更はCalendarタブ自身のuseMyCalendarsしか再取得しないため、
+  // このタブに来るたびに取り直して最新の名前を反映する。パネルを離れるたびに
+  // 絞り込みをリセットする(共通フィルターの決まり)。
+  useFocusEffect(
+    useCallback(() => {
+      refetchCalendars();
+      return handleResetFilter;
+    }, [refetchCalendars, handleResetFilter])
+  );
+
+  return { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter };
+}
+
+/**
+ * 献立の追加/編集/削除まわりの状態とハンドラ一式。予定パネル・記録パネル
+ * どちらも同じ流れ(フォームを開く→保存/削除→閉じてrefetch)なので、
+ * ここに集約して2箇所での重複を避けている。
+ */
+function useMealFormController(createTargetCalendarId: string, refetch: () => Promise<void>) {
   const { createMealRecord } = useCreateMealRecord();
   const { updateMealRecord } = useUpdateMealRecord();
   const { deleteMealRecord } = useDeleteMealRecord();
+  const [formTarget, setFormTarget] = useState<MealFormTarget | null>(null);
 
-  const [newTitle, setNewTitle] = useState("");
-  const [newUrl, setNewUrl] = useState("");
-  const [newMemo, setNewMemo] = useState("");
-  const [newMealDate, setNewMealDate] = useState(() => new Date());
-  const [newSlot, setNewSlot] = useState<MealSlot>("breakfast");
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [isPastCollapsed, setIsPastCollapsed] = useState(true);
-  const [isFutureCollapsed, setIsFutureCollapsed] = useState(false);
-
-  const today = todayDateString();
-  const pastRecords = mealRecords.filter((record) => record.mealDate < today);
-  const futureRecords = mealRecords.filter((record) => record.mealDate >= today);
-
-  const handleSave = async (
-    mealRecordId: string,
-    title: string,
-    url: string,
-    memo: string,
-    mealDate: string,
-    slot: MealSlot
-  ) => {
-    const success = await updateMealRecord(mealRecordId, {
-      title,
-      url: url || null,
-      memo: memo || null,
-      mealDate,
-      slot,
+  const openCreate = (defaults: { mealDate: string; slot: MealSlot }) => {
+    setFormTarget({
+      mode: "create",
+      initialValues: { title: "", url: "", memo: "", rating: null, calendarId: createTargetCalendarId, ...defaults },
     });
-    if (success) await refetch();
   };
 
-  const handleDelete = async (mealRecordId: string) => {
-    const success = await deleteMealRecord(mealRecordId);
-    if (success) await refetch();
+  const openEdit = (record: MealRecord) => {
+    setFormTarget({
+      mode: "edit",
+      recordId: record.id,
+      initialValues: {
+        title: record.title,
+        url: record.url ?? "",
+        memo: record.memo ?? "",
+        mealDate: record.mealDate,
+        slot: record.slot,
+        rating: record.rating,
+        calendarId: record.calendarId,
+      },
+    });
   };
 
-  const handleCreate = async () => {
-    const success = await createMealRecord({
-      calendarId: activeCalendarId,
-      mealDate: mealDateKeyFromPicked(newMealDate),
-      slot: newSlot,
-      title: newTitle,
-      url: newUrl || undefined,
-      memo: newMemo || undefined,
-    });
+  const closeForm = () => setFormTarget(null);
+
+  const handleSave = async (values: MealFormValues) => {
+    const success =
+      formTarget?.mode === "edit"
+        ? await updateMealRecord(formTarget.recordId, {
+            title: values.title,
+            url: values.url || null,
+            memo: values.memo || null,
+            mealDate: values.mealDate,
+            slot: values.slot,
+            rating: values.rating,
+          })
+        : await createMealRecord({
+            // 作成時はフォーム内のカレンダーピッカーで選び直せる - 呼び出し
+            // 時点のcreateTargetCalendarId(フィルターの先頭)ではなく、
+            // ユーザーが最終的に選んだvalues.calendarIdを使う。
+            calendarId: values.calendarId,
+            mealDate: values.mealDate,
+            slot: values.slot,
+            title: values.title,
+            url: values.url || undefined,
+            memo: values.memo || undefined,
+            rating: values.rating ?? undefined,
+          });
     if (success) {
-      setNewTitle("");
-      setNewUrl("");
-      setNewMemo("");
-      setNewMealDate(new Date());
+      closeForm();
       await refetch();
     }
   };
 
+  const handleDelete = async (recordId: string) => {
+    const success = await deleteMealRecord(recordId);
+    if (success) {
+      closeForm();
+      await refetch();
+    }
+  };
+
+  return { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete };
+}
+
+function PlanPanel() {
+  const { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter } =
+    useCalendarFilter();
+  const { mealRecords, refetch } = useMealRecordsByCalendars(activeCalendarIds);
+  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete } = useMealFormController(
+    createTargetCalendarId,
+    refetch
+  );
+
+  const today = todayJstDateKey();
+  // 予定は近い将来のものが中心なので、月をまたいで束ねず日付見出しだけで
+  // 十分 - 年表のように月単位でまとめると逆に見づらくなる。
+  const dateGroups = useMemo(
+    () => groupMealsByDate(mealRecords.filter((record) => record.mealDate >= today)),
+    [mealRecords, today]
+  );
+
   return (
-    <>
+    <View style={styles.panel}>
       <Tabs.Screen
         options={{
           headerRight: () => (
-            <TouchableOpacity
-              testID="meals-search-button"
-              style={styles.headerSearchButton}
-              onPress={() => router.push({ pathname: "/meal-search", params: { calendarId: activeCalendarId } })}
-            >
-              <Icon name="search" size={20} color="#2f6fed" />
-            </TouchableOpacity>
+            <View style={styles.headerRightRow}>
+              <FilterButton testID="meals-filter" isActive={isFilterActive} onReset={handleResetFilter}>
+                <FilterSection title="カレンダー">
+                  {calendars.map((calendar) => (
+                    <CalendarSwitchChip
+                      key={calendar.id}
+                      testID={`meals-calendar-switch-${calendar.id}`}
+                      calendar={calendar}
+                      isActive={activeCalendarIds.includes(calendar.id)}
+                      onPress={() => handleToggleCalendar(calendar.id)}
+                    />
+                  ))}
+                </FilterSection>
+              </FilterButton>
+              <TouchableOpacity
+                testID="meals-search-button"
+                style={styles.headerSearchButton}
+                onPress={() =>
+                  router.push({ pathname: "/meal-search", params: { calendarId: createTargetCalendarId } })
+                }
+              >
+                <Icon name="search" size={20} color="#2f6fed" />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-      <View style={styles.switcher}>
-        {calendars.map((calendar) => (
-          <TouchableOpacity
-            key={calendar.id}
-            testID={`meals-calendar-switch-${calendar.id}`}
-            onPress={() => setSelectedCalendarId(calendar.id)}
-            style={[
-              styles.switchButton,
-              calendar.id === activeCalendarId && styles.switchButtonActive,
-            ]}
-          >
-            <Text>{calendar.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
 
-      <View style={styles.createCard}>
-        <Text style={styles.createCardTitle}>献立を記録</Text>
-        <TextInput
-          testID="meal-create-title-input"
-          style={styles.input}
-          placeholder="料理名"
-          returnKeyType="done"
-          value={newTitle}
-          onChangeText={setNewTitle}
-        />
-        <TextInput
-          testID="meal-create-url-input"
-          style={styles.input}
-          placeholder="URL"
-          autoCapitalize="none"
-          keyboardType="url"
-          returnKeyType="done"
-          value={newUrl}
-          onChangeText={setNewUrl}
-        />
-        <TextInput
-          testID="meal-create-memo-input"
-          style={styles.input}
-          placeholder="メモ"
-          multiline
-          value={newMemo}
-          onChangeText={setNewMemo}
-        />
-
-        <TouchableOpacity
-          testID="meal-create-date-button"
-          style={styles.dateField}
-          onPress={() => setIsDatePickerOpen(true)}
-        >
-          <Text style={styles.dateFieldLabel}>日付</Text>
-          <Text>{formatDateOnly(newMealDate.toISOString())}</Text>
-        </TouchableOpacity>
-
-        {isDatePickerOpen ? (
-          <View style={styles.pickerContainer}>
-            {Platform.OS === "web" ? (
-              <TextInput
-                testID="meal-create-date-picker"
-                style={styles.input}
-                placeholder="YYYY-MM-DD"
-                onChangeText={(text) => {
-                  const parsed = new Date(`${text}T00:00:00.000Z`);
-                  if (!Number.isNaN(parsed.getTime())) setNewMealDate(parsed);
-                }}
-              />
-            ) : (
-              <DateTimePicker
-                testID="meal-create-date-picker"
-                value={newMealDate}
-                mode="date"
-                onChange={(_event, selected) => {
-                  if (selected) setNewMealDate(selected);
-                }}
-              />
-            )}
-            <TouchableOpacity
-              testID="meal-create-date-picker-done"
-              style={styles.pickerDoneButton}
-              onPress={() => setIsDatePickerOpen(false)}
-            >
-              <Text>完了</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-
-        <View style={styles.slotRow}>
-          {MEAL_SLOTS.map((slot) => (
-            <TouchableOpacity
-              key={slot}
-              testID={`meal-create-slot-${slot}`}
-              style={[styles.slotButton, slot === newSlot && styles.slotButtonActive]}
-              onPress={() => setNewSlot(slot)}
-            >
-              <Text style={slot === newSlot && styles.slotButtonTextActive}>{MEAL_SLOT_LABELS[slot]}</Text>
-            </TouchableOpacity>
-          ))}
+      {dateGroups.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateEmoji}>🍽️</Text>
+          <Text style={styles.emptyStateText}>まだ献立の予定がありません</Text>
+          <Text style={styles.emptyStateHint}>右下の＋から、あらかじめ決めた献立をメモしておきましょう</Text>
         </View>
-        <TouchableOpacity testID="meal-create-submit" style={styles.createButton} onPress={handleCreate}>
-          <Text style={styles.createButtonText}>記録を追加</Text>
-        </TouchableOpacity>
-      </View>
+      ) : (
+        <FlatList
+          testID="meals-plan-list"
+          data={dateGroups}
+          keyExtractor={(group) => group.mealDate}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item: group }) => (
+            <View testID={`meals-plan-date-group-${group.mealDate}`}>
+              <Text style={styles.dateHeader}>{group.label}</Text>
+              {group.records.map((record) => (
+                <MealRow key={record.id} record={record} onPress={() => openEdit(record)} />
+              ))}
+            </View>
+          )}
+        />
+      )}
 
       <TouchableOpacity
-        testID="meals-past-toggle"
-        style={styles.sectionHeader}
-        onPress={() => setIsPastCollapsed((prev) => !prev)}
+        testID="meals-plan-add"
+        style={styles.fab}
+        onPress={() => openCreate({ mealDate: today, slot: "dinner" })}
       >
-        <Icon name={isPastCollapsed ? "chevron-right" : "chevron-down"} size={13} color="#666" />
-        <Text style={styles.sectionTitle}>食べたもの ({pastRecords.length})</Text>
+        <Icon name="plus" size={22} color="#fff" />
       </TouchableOpacity>
-      {!isPastCollapsed ? (
-        pastRecords.length === 0 ? (
-          <Text style={styles.sectionEmptyText}>記録がありません</Text>
-        ) : (
-          pastRecords.map((record) => (
-            <MealRecordRow key={record.id} mealRecord={record} onSave={handleSave} onDelete={handleDelete} />
-          ))
-        )
-      ) : null}
+
+      <MealFormModal
+        target={formTarget}
+        calendars={calendars}
+        onClose={closeForm}
+        onSave={handleSave}
+        onDelete={formTarget?.mode === "edit" ? handleDelete : undefined}
+      />
+    </View>
+  );
+}
+
+function LogPanel() {
+  const { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter } =
+    useCalendarFilter();
+  const { mealRecords, refetch } = useMealRecordsByCalendars(activeCalendarIds);
+  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete } = useMealFormController(
+    createTargetCalendarId,
+    refetch
+  );
+
+  const today = todayJstDateKey();
+  // 振り返りは直近から遡って眺めたいので新しい順に並べ替えてから月ごとに
+  // まとめ、月の中はさらに日付ごとに小見出しを立てる(振り返りタブの
+  // 年表と同じ「月見出し＋日付ラベル」の2段構成)。
+  const monthGroups = useMemo(() => {
+    const pastRecordsDescending = mealRecords.filter((record) => record.mealDate < today).slice().reverse();
+    return groupMealsByMonth(pastRecordsDescending);
+  }, [mealRecords, today]);
+
+  return (
+    <View style={styles.panel}>
+      <Tabs.Screen
+        options={{
+          headerRight: () => (
+            <View style={styles.headerRightRow}>
+              <FilterButton testID="meals-filter" isActive={isFilterActive} onReset={handleResetFilter}>
+                <FilterSection title="カレンダー">
+                  {calendars.map((calendar) => (
+                    <CalendarSwitchChip
+                      key={calendar.id}
+                      testID={`meals-calendar-switch-${calendar.id}`}
+                      calendar={calendar}
+                      isActive={activeCalendarIds.includes(calendar.id)}
+                      onPress={() => handleToggleCalendar(calendar.id)}
+                    />
+                  ))}
+                </FilterSection>
+              </FilterButton>
+              <TouchableOpacity
+                testID="meals-search-button"
+                style={styles.headerSearchButton}
+                onPress={() =>
+                  router.push({ pathname: "/meal-search", params: { calendarId: createTargetCalendarId } })
+                }
+              >
+                <Icon name="search" size={20} color="#2f6fed" />
+              </TouchableOpacity>
+            </View>
+          ),
+        }}
+      />
+
+      {monthGroups.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateEmoji}>📝</Text>
+          <Text style={styles.emptyStateText}>記録がありません</Text>
+          <Text style={styles.emptyStateHint}>食べたものをメモしておくと、次に迷ったときの参考になります</Text>
+        </View>
+      ) : (
+        <FlatList
+          testID="meals-log-list"
+          data={monthGroups}
+          keyExtractor={(group) => group.yearMonth}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item: group }) => (
+            <View testID={`meals-log-month-group-${group.yearMonth}`}>
+              <Text style={styles.monthHeader}>{group.label}</Text>
+              {groupMealsByDate(group.records).map((dateGroup) => (
+                <View key={dateGroup.mealDate} testID={`meals-log-date-group-${dateGroup.mealDate}`}>
+                  <Text style={styles.dateSubHeader}>{dateGroup.label}</Text>
+                  {dateGroup.records.map((record) => (
+                    <MealRow key={record.id} record={record} onPress={() => openEdit(record)} />
+                  ))}
+                </View>
+              ))}
+            </View>
+          )}
+        />
+      )}
 
       <TouchableOpacity
-        testID="meals-future-toggle"
-        style={styles.sectionHeader}
-        onPress={() => setIsFutureCollapsed((prev) => !prev)}
+        testID="meals-log-add"
+        style={styles.fab}
+        onPress={() => openCreate({ mealDate: today, slot: "dinner" })}
       >
-        <Icon name={isFutureCollapsed ? "chevron-right" : "chevron-down"} size={13} color="#666" />
-        <Text style={styles.sectionTitle}>食べる予定 ({futureRecords.length})</Text>
+        <Icon name="plus" size={22} color="#fff" />
       </TouchableOpacity>
-      {!isFutureCollapsed ? (
-        futureRecords.length === 0 ? (
-          <Text style={styles.sectionEmptyText}>予定がありません</Text>
-        ) : (
-          futureRecords.map((record) => (
-            <MealRecordRow key={record.id} mealRecord={record} onSave={handleSave} onDelete={handleDelete} />
-          ))
-        )
-      ) : null}
-      </ScrollView>
-      </TouchableWithoutFeedback>
-    </>
+
+      <MealFormModal
+        target={formTarget}
+        calendars={calendars}
+        onClose={closeForm}
+        onSave={handleSave}
+        onDelete={formTarget?.mode === "edit" ? handleDelete : undefined}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#fafbfc",
   },
-  contentContainer: {
-    paddingBottom: 24,
-  },
-  headerSearchButton: {
-    marginRight: 12,
-  },
-  switcher: {
+  modeSwitchRow: {
     flexDirection: "row",
-    gap: 8,
-    padding: 12,
-  },
-  switchButton: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  switchButtonActive: {
-    borderColor: "#2f6fed",
-    backgroundColor: "#e8f0fe",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 4,
   },
-  sectionTitle: {
+  modeSwitchButton: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#f2f3f5",
+  },
+  modeSwitchButtonActive: {
+    backgroundColor: "#2f6fed",
+  },
+  modeSwitchText: {
     fontSize: 14,
     fontWeight: "700",
+    color: "#666",
   },
-  sectionEmptyText: {
-    color: "#999",
-    fontSize: 13,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+  modeSwitchTextActive: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fff",
   },
-  mealRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  panel: {
+    flex: 1,
+  },
+  headerRightRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
-  mealMainRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+  headerSearchButton: {
+    marginRight: 12,
   },
-  mealInfo: {
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 88,
+  },
+  emptyState: {
     flex: 1,
-    gap: 2,
-  },
-  mealTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  mealMetaRow: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  editText: {
-    color: "#2f6fed",
-    fontWeight: "700",
-  },
-  deleteText: {
-    color: "#d32f2f",
-  },
-  meta: {
-    color: "#666",
-    fontSize: 12,
-  },
-  createCard: {
-    gap: 10,
-    marginHorizontal: 12,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  createCardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  dateField: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  dateFieldLabel: {
-    color: "#666",
-  },
-  pickerContainer: {
-    gap: 8,
-    alignItems: "flex-end",
-  },
-  pickerDoneButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  slotRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  slotButton: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  slotButtonActive: {
-    borderColor: "#2f6fed",
-    backgroundColor: "#e8f0fe",
-  },
-  slotButtonTextActive: {
-    color: "#2f6fed",
-    fontWeight: "600",
-  },
-  createButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#2f6fed",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  createButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  modalOverlay: {
-    flex: 1,
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 32,
+    gap: 4,
   },
-  modalCard: {
-    width: "85%",
-    borderRadius: 12,
-    padding: 20,
-    gap: 12,
-    backgroundColor: "#fff",
+  emptyStateEmoji: {
+    fontSize: 40,
+    marginBottom: 8,
   },
-  modalTitle: {
+  emptyStateText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#444",
+  },
+  emptyStateHint: {
+    fontSize: 13,
+    color: "#999",
+    textAlign: "center",
+  },
+  dateHeader: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#666",
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  monthHeader: {
     fontSize: 16,
     fontWeight: "700",
+    color: "#333",
+    paddingTop: 16,
+    paddingBottom: 4,
   },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 20,
+  dateSubHeader: {
+    fontSize: 12,
+    color: "#999",
+    paddingTop: 10,
+    paddingBottom: 4,
   },
-  saveLink: {
-    color: "#2f6fed",
-    fontWeight: "700",
+  fab: {
+    position: "absolute",
+    right: 16,
+    bottom: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#2f6fed",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
 });

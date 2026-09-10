@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
-import { createMealRecord, createMealTag, deleteMealRecord, listMealRecords, updateMealRecord } from "./service";
+import {
+  createMealRecord,
+  createMealTag,
+  deleteMealRecord,
+  listMealRecords,
+  listMealRecordsByCalendars,
+  updateMealRecord,
+} from "./service";
 import type {
   CreateMealRecordInput,
   CreateMealTagInput,
@@ -92,6 +99,50 @@ export function useMealRecords(calendarId: string, filter?: MealFilter): UseMeal
     }
     setIsLoading(false);
   }, [calendarId, slot, rangeStart, rangeEnd]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { mealRecords, isLoading, error, refetch };
+}
+
+/**
+ * Batched version of useMealRecords, for screens (e.g. the meals tab) that
+ * show records across several selected calendars at once instead of just one.
+ */
+export function useMealRecordsByCalendars(calendarIds: string[], filter?: MealFilter): UseMealRecordsResult {
+  const [mealRecords, setMealRecords] = useState<MealRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(calendarIds.length > 0);
+  const [error, setError] = useState<MealError | null>(null);
+  const calendarIdsKey = calendarIds.join(",");
+  const slot = filter?.slot;
+  const rangeStart = filter?.dateRange?.start;
+  const rangeEnd = filter?.dateRange?.end;
+
+  const refetch = useCallback(async () => {
+    if (calendarIds.length === 0) {
+      setMealRecords([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    const resolvedFilter: MealFilter | undefined =
+      slot !== undefined || (rangeStart !== undefined && rangeEnd !== undefined)
+        ? { slot, dateRange: rangeStart !== undefined && rangeEnd !== undefined ? { start: rangeStart, end: rangeEnd } : undefined }
+        : undefined;
+    const result = await listMealRecordsByCalendars(getSupabaseClient(), calendarIds, resolvedFilter);
+    if (result.ok) {
+      setMealRecords(result.value);
+      setError(null);
+    } else {
+      setMealRecords([]);
+      setError(result.error);
+    }
+    setIsLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarIdsKey, slot, rangeStart, rangeEnd]);
 
   useEffect(() => {
     refetch();

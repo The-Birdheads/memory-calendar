@@ -5,6 +5,7 @@ import {
   createMealTag,
   deleteMealRecord,
   listMealRecords,
+  listMealRecordsByCalendars,
   updateMealRecord,
 } from "../service";
 
@@ -310,6 +311,107 @@ describe("listMealRecords", () => {
     } as unknown as SupabaseClient;
 
     const result = await listMealRecords(client, "cal-1");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("listMealRecordsByCalendars", () => {
+  it("returns the meal records across every given calendar, ordered by date", async () => {
+    const rows = [
+      {
+        id: "meal-1",
+        calendar_id: "cal-1",
+        meal_date: "2026-08-19",
+        slot: "breakfast",
+        title: "トースト",
+        rating: 4,
+        url: null,
+        memo: null,
+        created_by: "user-1",
+        created_at: "2026-08-18T00:00:00.000Z",
+        updated_at: "2026-08-18T00:00:00.000Z",
+      },
+      {
+        id: "meal-2",
+        calendar_id: "cal-2",
+        meal_date: "2026-08-25",
+        slot: "dinner",
+        title: "カレー",
+        rating: null,
+        url: null,
+        memo: null,
+        created_by: "user-2",
+        created_at: "2026-08-18T00:00:00.000Z",
+        updated_at: "2026-08-18T00:00:00.000Z",
+      },
+    ];
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn, order }),
+    } as unknown as SupabaseClient;
+
+    const result = await listMealRecordsByCalendars(client, ["cal-1", "cal-2"]);
+
+    expect(result).toEqual({
+      ok: true,
+      value: [
+        {
+          id: "meal-1",
+          calendarId: "cal-1",
+          mealDate: "2026-08-19",
+          slot: "breakfast",
+          title: "トースト",
+          rating: 4,
+          url: null,
+          memo: null,
+          createdBy: "user-1",
+          createdAt: "2026-08-18T00:00:00.000Z",
+          updatedAt: "2026-08-18T00:00:00.000Z",
+        },
+        {
+          id: "meal-2",
+          calendarId: "cal-2",
+          mealDate: "2026-08-25",
+          slot: "dinner",
+          title: "カレー",
+          rating: null,
+          url: null,
+          memo: null,
+          createdBy: "user-2",
+          createdAt: "2026-08-18T00:00:00.000Z",
+          updatedAt: "2026-08-18T00:00:00.000Z",
+        },
+      ],
+    });
+    expect(client.from).toHaveBeenCalledWith("meal_records");
+    expect(inFn).toHaveBeenCalledWith("calendar_id", ["cal-1", "cal-2"]);
+    expect(order).toHaveBeenCalledWith("meal_date", { ascending: true });
+  });
+
+  it("returns an empty array without querying when given no calendar ids", async () => {
+    const client = { from: jest.fn() } as unknown as SupabaseClient;
+
+    const result = await listMealRecordsByCalendars(client, []);
+
+    expect(result).toEqual({ ok: true, value: [] });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("maps a Supabase error to Forbidden", async () => {
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: "permission denied", code: "42501" },
+    });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn, order }),
+    } as unknown as SupabaseClient;
+
+    const result = await listMealRecordsByCalendars(client, ["cal-1"]);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

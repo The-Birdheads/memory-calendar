@@ -146,6 +146,37 @@ export async function listMealRecords(
   return ok((data as MealRecordRow[]).map(mapMealRecordRow));
 }
 
+/**
+ * Batched version of listMealRecords, for screens (e.g. the meals tab) that
+ * show records across several selected calendars at once instead of just one.
+ */
+export async function listMealRecordsByCalendars(
+  client: SupabaseClient,
+  calendarIds: string[],
+  filter?: MealFilter
+): Promise<Result<MealRecord[], MealError>> {
+  if (calendarIds.length === 0) {
+    return ok([]);
+  }
+
+  let query = client.from("meal_records").select().in("calendar_id", calendarIds);
+
+  if (filter?.slot) {
+    query = query.eq("slot", filter.slot);
+  }
+  if (filter?.dateRange) {
+    query = query.gte("meal_date", filter.dateRange.start).lte("meal_date", filter.dateRange.end);
+  }
+
+  const { data, error } = await query.order("meal_date", { ascending: true });
+
+  if (error || !data) {
+    return err(mapMealError(error as PostgrestError));
+  }
+
+  return ok((data as MealRecordRow[]).map(mapMealRecordRow));
+}
+
 export async function updateMealRecord(
   client: SupabaseClient,
   mealRecordId: string,
