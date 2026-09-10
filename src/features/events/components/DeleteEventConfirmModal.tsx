@@ -1,5 +1,7 @@
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { Icon } from "../../../shared/components/Icon";
+
 export interface DeleteEventConfirmModalProps {
   visible: boolean;
   onConfirm: () => void;
@@ -12,23 +14,31 @@ export function DeleteEventConfirmModal({ visible, onConfirm, onCancel }: Delete
   }
 
   return (
-    <Modal visible transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+    <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
+      <TouchableOpacity testID="delete-event-backdrop" style={styles.overlay} activeOpacity={1} onPress={onCancel}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.card}>
           <Text style={styles.title}>予定を削除しますか?</Text>
           <Text style={styles.warning}>
             この予定に紐づく思い出データ(写真・コメント)も削除されます
           </Text>
           <View style={styles.actions}>
-            <TouchableOpacity testID="delete-event-cancel-button" onPress={onCancel}>
-              <Text>キャンセル</Text>
+            <TouchableOpacity
+              testID="delete-event-cancel-button"
+              onPress={onCancel}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.cancelText}>✕</Text>
             </TouchableOpacity>
-            <TouchableOpacity testID="delete-event-confirm-button" onPress={onConfirm}>
-              <Text style={styles.confirmText}>削除する</Text>
+            <TouchableOpacity
+              testID="delete-event-confirm-button"
+              onPress={onConfirm}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Icon name="trash" size={20} color="#d32f2f" />
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
@@ -62,5 +72,9 @@ const styles = StyleSheet.create({
   confirmText: {
     color: "#d32f2f",
     fontWeight: "600",
+  },
+  cancelText: {
+    fontSize: 16,
+    color: "#666",
   },
 });

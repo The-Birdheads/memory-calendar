@@ -1,6 +1,6 @@
 import { fireEvent, render } from "@testing-library/react-native";
 
-import { CATEGORY_COLORS, EventFormFields, type EventFormValue } from "../EventFormFields";
+import { EventFormFields, type EventFormValue } from "../EventFormFields";
 
 jest.mock("@react-native-community/datetimepicker", () => {
   const React = require("react");
@@ -20,7 +20,6 @@ const BASE_VALUE: EventFormValue = {
   end: new Date("2026-09-01T10:00:00.000Z"),
   location: "",
   url: "",
-  categoryColor: CATEGORY_COLORS[0].hex,
 };
 
 describe("EventFormFields", () => {
@@ -112,22 +111,29 @@ describe("EventFormFields", () => {
       <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={onChange} />
     );
 
+    await fireEvent.press(getByTestId("event-create-location-add"));
     await fireEvent.changeText(getByTestId("event-create-location-input"), "自宅");
+    await fireEvent.press(getByTestId("event-create-url-add"));
     await fireEvent.changeText(getByTestId("event-create-url-input"), "https://example.com");
 
     expect(onChange).toHaveBeenCalledWith({ location: "自宅" });
     expect(onChange).toHaveBeenCalledWith({ url: "https://example.com" });
   });
 
-  it("calls onChange with the selected category color", async () => {
+  it("hides the location/url add buttons and shows the inputs directly when a value is already set", async () => {
     const onChange = jest.fn();
-    const { getByTestId } = await render(
-      <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={onChange} />
+    const { getByTestId, queryByTestId } = await render(
+      <EventFormFields
+        testIDPrefix="event-edit"
+        value={{ ...BASE_VALUE, location: "渋谷", url: "https://example.com" }}
+        onChange={onChange}
+      />
     );
 
-    await fireEvent.press(getByTestId("event-create-color-green"));
-
-    expect(onChange).toHaveBeenCalledWith({ categoryColor: "#43a047" });
+    expect(queryByTestId("event-edit-location-add")).toBeNull();
+    expect(queryByTestId("event-edit-url-add")).toBeNull();
+    expect(getByTestId("event-edit-location-input").props.value).toBe("渋谷");
+    expect(getByTestId("event-edit-url-input").props.value).toBe("https://example.com");
   });
 
   it("uses the given testIDPrefix so create and edit forms don't collide", async () => {

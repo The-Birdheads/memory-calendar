@@ -1,13 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  addEventReminder,
+  createDefaultEventReminders,
   createEvent,
   createRecurringSeries,
   deleteEvent,
   getEvent,
   getEventErrorMessageJa,
+  listEventReminders,
   listEventsInRange,
-  setReminderTargets,
+  listEventsInRangeForCalendars,
+  removeEventReminder,
   updateEvent,
 } from "../service";
 
@@ -749,15 +753,59 @@ describe("listEventsInRange", () => {
           createdAt: "2026-08-17T00:00:00.000Z",
           updatedAt: "2026-08-17T00:00:00.000Z",
           tagColor: null,
+          photoCount: 0,
+          commentCount: 0,
         },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("events");
-    expect(select).toHaveBeenCalledWith("*, event_tags(tags(color, level))");
+    expect(select).toHaveBeenCalledWith(
+      "*, event_tags(tags(color, level)), event_photos(count), event_comments(count)"
+    );
     expect(eq).toHaveBeenCalledWith("calendar_id", "cal-1");
     expect(lte).toHaveBeenCalledWith("start_at", "2026-09-30T23:59:59.999Z");
     expect(gte).toHaveBeenCalledWith("end_at", "2026-09-01T00:00:00.000Z");
     expect(order).toHaveBeenCalledWith("start_at", { ascending: true });
+  });
+
+  it("extracts the photo/comment counts from the embedded count() joins", async () => {
+    const rows = [
+      {
+        id: "event-1",
+        calendar_id: "cal-1",
+        series_id: null,
+        title: "会議",
+        location: null,
+        memo: null,
+        category_color: "#2f6fed",
+        start_at: "2026-09-01T10:00:00.000Z",
+        end_at: "2026-09-01T11:00:00.000Z",
+        is_all_day: false,
+        reminder_at: null,
+        created_by: "user-1",
+        updated_by: "user-1",
+        created_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000Z",
+        event_photos: [{ count: 2 }],
+        event_comments: [{ count: 4 }],
+      },
+    ];
+    const select = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const lte = jest.fn().mockReturnThis();
+    const gte = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, eq, lte, gte, order }),
+    } as unknown as SupabaseClient;
+
+    const result = await listEventsInRange(client, "cal-1", {
+      start: "2026-09-01T00:00:00.000Z",
+      end: "2026-09-30T23:59:59.999Z",
+    });
+
+    expect(result.ok && result.value[0].photoCount).toBe(2);
+    expect(result.ok && result.value[0].commentCount).toBe(4);
   });
 
   it("uses the 大分類 tag's color as tagColor when the event has multiple attached tags", async () => {
@@ -862,83 +910,217 @@ describe("listEventsInRange", () => {
   });
 });
 
-describe("setReminderTargets", () => {
-  it("clears existing targets and inserts the given member ids", async () => {
-    const deleteEq = jest.fn().mockResolvedValue({ error: null });
-    const del = jest.fn().mockReturnValue({ eq: deleteEq });
+describe("listEventsInRangeForCalendars", () => {
+  it("queries events across multiple calendars using an IN filter", async () => {
+    const rows = [
+      {
+        id: "event-1",
+        calendar_id: "cal-1",
+        series_id: null,
+        title: "会議",
+        location: null,
+        memo: null,
+        category_color: "#2f6fed",
+        start_at: "2026-09-01T10:00:00.000Z",
+        end_at: "2026-09-01T11:00:00.000Z",
+        is_all_day: false,
+        reminder_at: null,
+        created_by: "user-1",
+        updated_by: "user-1",
+        created_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000Z",
+      },
+      {
+        id: "event-2",
+        calendar_id: "cal-2",
+        series_id: null,
+        title: "家族の予定",
+        location: null,
+        memo: null,
+        category_color: "#ff8800",
+        start_at: "2026-09-02T10:00:00.000Z",
+        end_at: "2026-09-02T11:00:00.000Z",
+        is_all_day: false,
+        reminder_at: null,
+        created_by: "user-1",
+        updated_by: "user-1",
+        created_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000Z",
+      },
+    ];
+    const select = jest.fn().mockReturnThis();
+    const inFilter = jest.fn().mockReturnThis();
+    const lte = jest.fn().mockReturnThis();
+    const gte = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFilter, lte, gte, order }),
+    } as unknown as SupabaseClient;
+
+    const result = await listEventsInRangeForCalendars(client, ["cal-1", "cal-2"], {
+      start: "2026-09-01T00:00:00.000Z",
+      end: "2026-09-30T23:59:59.999Z",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.value.map((event) => event.id)).toEqual(["event-1", "event-2"]);
+    expect(client.from).toHaveBeenCalledWith("events");
+    expect(inFilter).toHaveBeenCalledWith("calendar_id", ["cal-1", "cal-2"]);
+    expect(lte).toHaveBeenCalledWith("start_at", "2026-09-30T23:59:59.999Z");
+    expect(gte).toHaveBeenCalledWith("end_at", "2026-09-01T00:00:00.000Z");
+  });
+
+  it("returns an empty list without querying when given no calendar ids", async () => {
+    const client = { from: jest.fn() } as unknown as SupabaseClient;
+
+    const result = await listEventsInRangeForCalendars(client, [], {
+      start: "2026-09-01T00:00:00.000Z",
+      end: "2026-09-30T23:59:59.999Z",
+    });
+
+    expect(result).toEqual({ ok: true, value: [] });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+});
+
+describe("listEventReminders", () => {
+  it("returns the caller's own reminders for the event", async () => {
+    const rows = [
+      { id: "r1", event_id: "event-1", user_id: "user-1", kind: "on_day", custom_value: null, custom_unit: null, remind_at: "2026-09-06T00:00:00.000Z" },
+    ];
+    const eq = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const select = jest.fn().mockReturnValue({ eq });
+    const client = { from: jest.fn().mockReturnValue({ select }) } as unknown as SupabaseClient;
+
+    const result = await listEventReminders(client, "event-1");
+
+    expect(eq).toHaveBeenCalledWith("event_id", "event-1");
+    expect(result).toEqual({
+      ok: true,
+      value: [
+        {
+          id: "r1",
+          eventId: "event-1",
+          userId: "user-1",
+          kind: "on_day",
+          customValue: null,
+          customUnit: null,
+          remindAt: "2026-09-06T00:00:00.000Z",
+        },
+      ],
+    });
+  });
+
+  it("maps an error to Forbidden", async () => {
+    const eq = jest.fn().mockResolvedValue({ data: null, error: { message: "denied", code: "42501" } });
+    const select = jest.fn().mockReturnValue({ eq });
+    const client = { from: jest.fn().mockReturnValue({ select }) } as unknown as SupabaseClient;
+
+    const result = await listEventReminders(client, "event-1");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("addEventReminder", () => {
+  it("clears any existing row of the same (non-custom) kind, then inserts the new one", async () => {
+    const deleteEq2 = jest.fn().mockResolvedValue({ error: null });
+    const deleteEq1 = jest.fn().mockReturnValue({ eq: deleteEq2 });
+    const del = jest.fn().mockReturnValue({ eq: deleteEq1 });
     const insert = jest.fn().mockResolvedValue({ error: null });
 
     const client = {
       from: jest.fn().mockReturnValueOnce({ delete: del }).mockReturnValueOnce({ insert }),
     } as unknown as SupabaseClient;
 
-    const result = await setReminderTargets(client, "event-1", ["user-1", "user-2"]);
+    const result = await addEventReminder(client, "event-1", "on_day");
 
     expect(result).toEqual({ ok: true, value: undefined });
-    expect(deleteEq).toHaveBeenCalledWith("event_id", "event-1");
-    expect(insert).toHaveBeenCalledWith([
-      { event_id: "event-1", user_id: "user-1" },
-      { event_id: "event-1", user_id: "user-2" },
-    ]);
+    expect(deleteEq1).toHaveBeenCalledWith("event_id", "event-1");
+    expect(deleteEq2).toHaveBeenCalledWith("kind", "on_day");
+    expect(insert).toHaveBeenCalledWith({ event_id: "event-1", kind: "on_day", custom_value: null, custom_unit: null });
   });
 
-  it("only clears existing targets without inserting when set to all members", async () => {
-    const deleteEq = jest.fn().mockResolvedValue({ error: null });
-    const del = jest.fn().mockReturnValue({ eq: deleteEq });
-    const insert = jest.fn();
+  it("passes the offset through as custom_value/custom_unit for kind custom, without clearing existing custom rows first", async () => {
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
 
-    const client = {
-      from: jest.fn().mockReturnValueOnce({ delete: del }).mockReturnValueOnce({ insert }),
-    } as unknown as SupabaseClient;
-
-    const result = await setReminderTargets(client, "event-1", "all");
+    const result = await addEventReminder(client, "event-1", "custom", { value: 30, unit: "minute" });
 
     expect(result).toEqual({ ok: true, value: undefined });
-    expect(deleteEq).toHaveBeenCalledWith("event_id", "event-1");
-    expect(insert).not.toHaveBeenCalled();
-  });
-
-  it("treats an empty member list the same as all members", async () => {
-    const deleteEq = jest.fn().mockResolvedValue({ error: null });
-    const del = jest.fn().mockReturnValue({ eq: deleteEq });
-    const insert = jest.fn();
-
-    const client = {
-      from: jest.fn().mockReturnValueOnce({ delete: del }).mockReturnValueOnce({ insert }),
-    } as unknown as SupabaseClient;
-
-    const result = await setReminderTargets(client, "event-1", []);
-
-    expect(result).toEqual({ ok: true, value: undefined });
-    expect(insert).not.toHaveBeenCalled();
-  });
-
-  it("maps a permission error from the delete step to Forbidden", async () => {
-    const deleteEq = jest.fn().mockResolvedValue({
-      error: { message: "permission denied", code: "42501" },
+    expect(client.from).toHaveBeenCalledTimes(1); // no delete step, several customs may coexist
+    expect(insert).toHaveBeenCalledWith({
+      event_id: "event-1",
+      kind: "custom",
+      custom_value: 30,
+      custom_unit: "minute",
     });
-    const del = jest.fn().mockReturnValue({ eq: deleteEq });
-    const client = {
-      from: jest.fn().mockReturnValue({ delete: del }),
-    } as unknown as SupabaseClient;
+  });
 
-    const result = await setReminderTargets(client, "event-1", ["user-1"]);
+  it("maps a permission error to Forbidden", async () => {
+    const deleteEq2 = jest.fn().mockResolvedValue({ error: { message: "denied", code: "42501" } });
+    const deleteEq1 = jest.fn().mockReturnValue({ eq: deleteEq2 });
+    const del = jest.fn().mockReturnValue({ eq: deleteEq1 });
+    const client = { from: jest.fn().mockReturnValue({ delete: del }) } as unknown as SupabaseClient;
+
+    const result = await addEventReminder(client, "event-1", "on_day");
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });
+});
 
-  it("maps a permission error from the insert step to Forbidden", async () => {
-    const deleteEq = jest.fn().mockResolvedValue({ error: null });
-    const del = jest.fn().mockReturnValue({ eq: deleteEq });
-    const insert = jest.fn().mockResolvedValue({
-      error: { message: "permission denied", code: "42501" },
-    });
+describe("removeEventReminder", () => {
+  it("deletes the row matching the given reminder id", async () => {
+    const eq = jest.fn().mockResolvedValue({ error: null });
+    const del = jest.fn().mockReturnValue({ eq });
+    const client = { from: jest.fn().mockReturnValue({ delete: del }) } as unknown as SupabaseClient;
 
-    const client = {
-      from: jest.fn().mockReturnValueOnce({ delete: del }).mockReturnValueOnce({ insert }),
-    } as unknown as SupabaseClient;
+    const result = await removeEventReminder(client, "reminder-1");
 
-    const result = await setReminderTargets(client, "event-1", ["user-1"]);
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(eq).toHaveBeenCalledWith("id", "reminder-1");
+  });
+
+  it("maps a permission error to Forbidden", async () => {
+    const eq = jest.fn().mockResolvedValue({ error: { message: "denied", code: "42501" } });
+    const del = jest.fn().mockReturnValue({ eq });
+    const client = { from: jest.fn().mockReturnValue({ delete: del }) } as unknown as SupabaseClient;
+
+    const result = await removeEventReminder(client, "reminder-1");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("createDefaultEventReminders", () => {
+  it("inserts 当日+1日前 for an all-day event", async () => {
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
+
+    const result = await createDefaultEventReminders(client, "event-1", true);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(insert).toHaveBeenCalledWith([
+      { event_id: "event-1", kind: "on_day" },
+      { event_id: "event-1", kind: "day_before_1" },
+    ]);
+  });
+
+  it("inserts 10分前 for a timed event", async () => {
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
+
+    const result = await createDefaultEventReminders(client, "event-1", false);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(insert).toHaveBeenCalledWith([{ event_id: "event-1", kind: "before_10m" }]);
+  });
+
+  it("maps a permission error to Forbidden", async () => {
+    const insert = jest.fn().mockResolvedValue({ error: { message: "denied", code: "42501" } });
+    const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
+
+    const result = await createDefaultEventReminders(client, "event-1", true);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

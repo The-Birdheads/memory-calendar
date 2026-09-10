@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
+import { RevealableTextField } from "../../../shared/components/RevealableTextField";
 import { formatDateOnly, formatDateTime } from "../../../shared/utils/formatDateTime";
 
 export interface EventFormValue {
@@ -11,16 +12,7 @@ export interface EventFormValue {
   end: Date;
   location: string;
   url: string;
-  categoryColor: string;
 }
-
-export const CATEGORY_COLORS: { name: string; hex: string }[] = [
-  { name: "blue", hex: "#2f6fed" },
-  { name: "red", hex: "#e53935" },
-  { name: "green", hex: "#43a047" },
-  { name: "orange", hex: "#fb8c00" },
-  { name: "purple", hex: "#8e24aa" },
-];
 
 function formatFieldLabel(date: Date, isAllDay: boolean): string {
   return isAllDay ? formatDateOnly(date.toISOString()) : formatDateTime(date.toISOString());
@@ -114,44 +106,32 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         </View>
       ) : null}
 
-      <TextInput
+      <RevealableTextField
         testID={`${testIDPrefix}-location-input`}
-        style={styles.input}
+        addButtonTestID={`${testIDPrefix}-location-add`}
+        addLabel="場所を追加"
         placeholder="場所"
         value={value.location}
         onChangeText={(location) => onChange({ location })}
       />
 
-      <TextInput
+      <RevealableTextField
         testID={`${testIDPrefix}-url-input`}
-        style={styles.input}
+        addButtonTestID={`${testIDPrefix}-url-add`}
+        addLabel="URLを追加"
         placeholder="URL"
         autoCapitalize="none"
         keyboardType="url"
         value={value.url}
         onChangeText={(url) => onChange({ url })}
       />
-
-      <View style={styles.colorRow}>
-        {CATEGORY_COLORS.map((color) => (
-          <TouchableOpacity
-            key={color.name}
-            testID={`${testIDPrefix}-color-${color.name}`}
-            style={[
-              styles.colorSwatch,
-              { backgroundColor: color.hex },
-              value.categoryColor === color.hex && styles.colorSwatchSelected,
-            ]}
-            onPress={() => onChange({ categoryColor: color.hex })}
-          />
-        ))}
-      </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
   input: {
+    backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 8,
@@ -190,6 +170,7 @@ const styles = StyleSheet.create({
     transform: [{ translateX: 18 }],
   },
   dateField: {
+    backgroundColor: "#fff",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -209,19 +190,5 @@ const styles = StyleSheet.create({
   pickerDoneButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-  },
-  colorRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  colorSwatch: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  colorSwatchSelected: {
-    borderColor: "#333",
   },
 });

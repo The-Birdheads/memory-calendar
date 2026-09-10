@@ -1,13 +1,28 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
-import { createEvent, deleteEvent, getEvent, listEventsInRange, setReminderTargets, updateEvent } from "../service";
 import {
+  addEventReminder,
+  createDefaultEventReminders,
+  createEvent,
+  deleteEvent,
+  getEvent,
+  listEventReminders,
+  listEventsInRange,
+  listEventsInRangeForCalendars,
+  removeEventReminder,
+  updateEvent,
+} from "../service";
+import {
+  useAddEventReminder,
+  useCreateDefaultEventReminders,
   useCreateEvent,
   useDeleteEvent,
   useEvent,
+  useEventReminders,
   useEventsInRange,
-  useSetReminderTargets,
+  useEventsInRangeForCalendars,
+  useRemoveEventReminder,
   useUpdateEvent,
 } from "../hooks";
 
@@ -20,7 +35,11 @@ jest.mock("../service", () => ({
   updateEvent: jest.fn(),
   deleteEvent: jest.fn(),
   listEventsInRange: jest.fn(),
-  setReminderTargets: jest.fn(),
+  listEventsInRangeForCalendars: jest.fn(),
+  listEventReminders: jest.fn(),
+  addEventReminder: jest.fn(),
+  removeEventReminder: jest.fn(),
+  createDefaultEventReminders: jest.fn(),
   getEvent: jest.fn(),
 }));
 
@@ -249,36 +268,207 @@ describe("useEventsInRange", () => {
   });
 });
 
-describe("useSetReminderTargets", () => {
+describe("useEventsInRangeForCalendars", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const range = { start: "2026-09-01T00:00:00.000Z", end: "2026-09-30T23:59:59.999Z" };
+
+  it("loads and merges events across the given calendars", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const events = [
+      { id: "event-1", calendarId: "cal-1", title: "会議" },
+      { id: "event-2", calendarId: "cal-2", title: "家族の予定" },
+    ];
+    (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: events });
+
+    const { result } = await renderHook(() => useEventsInRangeForCalendars(["cal-1", "cal-2"], range));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.events).toEqual(events);
+    expect(listEventsInRangeForCalendars).toHaveBeenCalledWith({}, ["cal-1", "cal-2"], range);
+  });
+
+  it("keeps an empty list and sets the error when loading fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useEventsInRangeForCalendars(["cal-1"], range));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.events).toEqual([]);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+
+  it("subscribes to realtime changes for every selected calendar", async () => {
+    const channel = { on: jest.fn(), subscribe: jest.fn(), unsubscribe: jest.fn() };
+    channel.on.mockReturnValue(channel);
+    channel.subscribe.mockReturnValue(channel);
+    const client = { channel: jest.fn(() => channel) };
+    (getSupabaseClient as jest.Mock).mockReturnValue(client);
+    (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+
+    await renderHook(() => useEventsInRangeForCalendars(["cal-1", "cal-2"], range));
+
+    await waitFor(() =>
+      expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^events-overlay-cal-1-/))
+    );
+    expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^events-overlay-cal-2-/));
+  });
+
+  it("reloads when the set of selected calendars changes", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+
+    const { rerender } = await renderHook(
+      ({ ids }: { ids: string[] }) => useEventsInRangeForCalendars(ids, range),
+      { initialProps: { ids: ["cal-1"] } }
+    );
+    await waitFor(() => expect(listEventsInRangeForCalendars).toHaveBeenCalledWith({}, ["cal-1"], range));
+
+    await rerender({ ids: ["cal-1", "cal-2"] });
+
+    await waitFor(() =>
+      expect(listEventsInRangeForCalendars).toHaveBeenLastCalledWith({}, ["cal-1", "cal-2"], range)
+    );
+  });
+});
+
+describe("useEventReminders", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("loads the caller's own reminders for the event on mount", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const reminders = [{ id: "r1", eventId: "event-1", userId: "user-1", kind: "on_day", customAt: null, remindAt: "2026-09-06T00:00:00.000Z" }];
+    (listEventReminders as jest.Mock).mockResolvedValue({ ok: true, value: reminders });
+
+    const { result } = await renderHook(() => useEventReminders("event-1"));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.reminders).toEqual(reminders);
+    expect(listEventReminders).toHaveBeenCalledWith({}, "event-1");
+  });
+
+  it("keeps an empty list and sets the error when loading fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (listEventReminders as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useEventReminders("event-1"));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.reminders).toEqual([]);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useAddEventReminder", () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
   it("returns true and clears the error when it succeeds", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (setReminderTargets as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+    (addEventReminder as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
 
-    const { result } = await renderHook(() => useSetReminderTargets());
+    const { result } = await renderHook(() => useAddEventReminder());
 
     let success = false;
     await act(async () => {
-      success = await result.current.setReminderTargets("event-1", ["user-1"]);
+      success = await result.current.addEventReminder("event-1", "on_day");
     });
 
     expect(success).toBe(true);
     expect(result.current.error).toBeNull();
-    expect(setReminderTargets).toHaveBeenCalledWith({}, "event-1", ["user-1"]);
+    expect(addEventReminder).toHaveBeenCalledWith({}, "event-1", "on_day", undefined);
   });
 
   it("returns false and sets the error when it fails", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (setReminderTargets as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+    (addEventReminder as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
 
-    const { result } = await renderHook(() => useSetReminderTargets());
+    const { result } = await renderHook(() => useAddEventReminder());
 
     let success = true;
     await act(async () => {
-      success = await result.current.setReminderTargets("event-1", "all");
+      success = await result.current.addEventReminder("event-1", "custom", { value: 30, unit: "minute" });
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+    expect(addEventReminder).toHaveBeenCalledWith({}, "event-1", "custom", { value: 30, unit: "minute" });
+  });
+});
+
+describe("useRemoveEventReminder", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when it succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (removeEventReminder as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    const { result } = await renderHook(() => useRemoveEventReminder());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.removeEventReminder("reminder-1");
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(removeEventReminder).toHaveBeenCalledWith({}, "reminder-1");
+  });
+
+  it("returns false and sets the error when it fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (removeEventReminder as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useRemoveEventReminder());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.removeEventReminder("reminder-1");
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useCreateDefaultEventReminders", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when it succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (createDefaultEventReminders as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    const { result } = await renderHook(() => useCreateDefaultEventReminders());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.createDefaultEventReminders("event-1", true);
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(createDefaultEventReminders).toHaveBeenCalledWith({}, "event-1", true);
+  });
+
+  it("returns false and sets the error when it fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (createDefaultEventReminders as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useCreateDefaultEventReminders());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.createDefaultEventReminders("event-1", false);
     });
 
     expect(success).toBe(false);

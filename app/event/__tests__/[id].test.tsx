@@ -4,21 +4,23 @@ import { router, useLocalSearchParams } from "expo-router";
 import EventDetailScreen from "../[id]";
 import { useAuthSession } from "../../../src/features/auth/hooks";
 import { useCalendarMembers, useMyCalendars } from "../../../src/features/calendars/hooks";
+import { useComments, useDeleteComment, usePostComment } from "../../../src/features/communication/hooks";
 import {
-  useComments,
-  useDeleteComment,
-  usePostComment,
-  useReactions,
-  useToggleReaction,
-} from "../../../src/features/communication/hooks";
-import {
+  useAddEventReminder,
   useDeleteEvent,
   useEvent,
-  useSetReminderTargets,
+  useEventReminders,
+  useRemoveEventReminder,
   useUpdateEvent,
 } from "../../../src/features/events/hooks";
 import type { Event } from "../../../src/features/events/types";
-import { useAddReflection, useEventPhotos } from "../../../src/features/memories/hooks";
+import {
+  useAttachPhoto,
+  useDetachPhoto,
+  useEventPhotos,
+  useSetPhotoThumbnail,
+} from "../../../src/features/memories/hooks";
+import { pickPhotoFromLibrary } from "../../../src/features/memories/imagePicker";
 import {
   useAttachTagsToEvent,
   useDetachTagFromEvent,
@@ -33,10 +35,11 @@ import {
 } from "../../../src/features/todos/hooks";
 
 jest.mock("expo-router", () => ({
-  router: { back: jest.fn(), replace: jest.fn() },
+  router: { back: jest.fn(), replace: jest.fn(), push: jest.fn() },
   useLocalSearchParams: jest.fn(),
-  Stack: { Screen: () => null },
 }));
+
+jest.mock("react-native-safe-area-context", () => require("react-native-safe-area-context/jest/mock").default);
 
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
@@ -51,14 +54,14 @@ jest.mock("../../../src/features/communication/hooks", () => ({
   useComments: jest.fn(),
   usePostComment: jest.fn(),
   useDeleteComment: jest.fn(),
-  useReactions: jest.fn(),
-  useToggleReaction: jest.fn(),
 }));
 
 jest.mock("../../../src/features/events/hooks", () => ({
   useEvent: jest.fn(),
   useDeleteEvent: jest.fn(),
-  useSetReminderTargets: jest.fn(),
+  useEventReminders: jest.fn(),
+  useAddEventReminder: jest.fn(),
+  useRemoveEventReminder: jest.fn(),
   useUpdateEvent: jest.fn(),
 }));
 
@@ -73,9 +76,15 @@ jest.mock("@react-native-community/datetimepicker", () => {
   };
 });
 
+jest.mock("../../../src/features/memories/imagePicker", () => ({
+  pickPhotoFromLibrary: jest.fn(),
+}));
+
 jest.mock("../../../src/features/memories/hooks", () => ({
   useEventPhotos: jest.fn(),
-  useAddReflection: jest.fn(),
+  useAttachPhoto: jest.fn(),
+  useDetachPhoto: jest.fn(),
+  useSetPhotoThumbnail: jest.fn(),
 }));
 
 jest.mock("../../../src/features/tags/hooks", () => ({
@@ -121,17 +130,18 @@ function mockCommonHooks(
     event?: typeof FUTURE_EVENT | null;
     isEventLoading?: boolean;
     comments?: unknown[];
-    reactions?: unknown[];
     tags?: unknown[];
     tagTree?: unknown[];
     todos?: unknown[];
     members?: { userId: string; role: string; displayName?: string | null }[];
     photos?: unknown[];
+    reminders?: unknown[];
     refetchComments?: jest.Mock;
-    refetchReactions?: jest.Mock;
     refetchTags?: jest.Mock;
+    refetchPhotos?: jest.Mock;
     refetchTodos?: jest.Mock;
     refetchEvent?: jest.Mock;
+    refetchReminders?: jest.Mock;
     calendarKind?: "personal" | "group";
   } = {}
 ) {
@@ -169,26 +179,25 @@ function mockCommonHooks(
     error: null,
   });
 
-  const refetchReactions = overrides.refetchReactions ?? jest.fn();
-  (useReactions as jest.Mock).mockReturnValue({
-    reactions: overrides.reactions ?? [],
-    isLoading: false,
-    error: null,
-    refetch: refetchReactions,
-  });
-  (useToggleReaction as jest.Mock).mockReturnValue({
-    toggleReaction: jest.fn().mockResolvedValue(true),
-    isSubmitting: false,
-    error: null,
-  });
-
   (useDeleteEvent as jest.Mock).mockReturnValue({
     deleteEvent: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
-  (useSetReminderTargets as jest.Mock).mockReturnValue({
-    setReminderTargets: jest.fn().mockResolvedValue(true),
+  const refetchReminders = overrides.refetchReminders ?? jest.fn();
+  (useEventReminders as jest.Mock).mockReturnValue({
+    reminders: overrides.reminders ?? [],
+    isLoading: false,
+    error: null,
+    refetch: refetchReminders,
+  });
+  (useAddEventReminder as jest.Mock).mockReturnValue({
+    addEventReminder: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useRemoveEventReminder as jest.Mock).mockReturnValue({
+    removeEventReminder: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -198,14 +207,25 @@ function mockCommonHooks(
     error: null,
   });
 
+  const refetchPhotos = overrides.refetchPhotos ?? jest.fn();
   (useEventPhotos as jest.Mock).mockReturnValue({
     photos: overrides.photos ?? [],
     isLoading: false,
     error: null,
-    refetch: jest.fn(),
+    refetch: refetchPhotos,
   });
-  (useAddReflection as jest.Mock).mockReturnValue({
-    addReflection: jest.fn().mockResolvedValue(true),
+  (useAttachPhoto as jest.Mock).mockReturnValue({
+    attachPhoto: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useDetachPhoto as jest.Mock).mockReturnValue({
+    detachPhoto: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useSetPhotoThumbnail as jest.Mock).mockReturnValue({
+    setPhotoThumbnail: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -264,7 +284,14 @@ function mockCommonHooks(
     refetch: jest.fn(),
   });
 
-  return { refetchComments, refetchReactions, refetchTags, refetchTodos, refetchEvent };
+  return {
+    refetchComments,
+    refetchTags,
+    refetchTodos,
+    refetchEvent,
+    refetchReminders,
+    refetchPhotos,
+  };
 }
 
 describe("EventDetailScreen", () => {
@@ -286,6 +313,24 @@ describe("EventDetailScreen", () => {
     const { getByText } = await render(<EventDetailScreen />);
 
     expect(getByText("誕生日会")).toBeTruthy();
+  });
+
+  it("navigates back when the header back button is pressed", async () => {
+    mockCommonHooks();
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-detail-back"));
+
+    expect(router.back).toHaveBeenCalled();
+  });
+
+  it("does not show a go-to-calendar button on this route (it's already the calendar's own detail view)", async () => {
+    mockCommonHooks();
+
+    const { queryByTestId } = await render(<EventDetailScreen />);
+
+    expect(queryByTestId("event-detail-go-to-calendar")).toBeNull();
   });
 
   it("posts a comment and refetches the comment list", async () => {
@@ -317,61 +362,101 @@ describe("EventDetailScreen", () => {
     await waitFor(() => expect(refetchComments).toHaveBeenCalled());
   });
 
-  it("adds a reaction (no existing reaction) and refetches", async () => {
-    const { refetchReactions } = mockCommonHooks();
-    const toggleReactionMock = jest.fn().mockResolvedValue(true);
-    (useToggleReaction as jest.Mock).mockReturnValue({
-      toggleReaction: toggleReactionMock,
-      isSubmitting: false,
-      error: null,
-    });
+  it("shows no stamp/reaction UI at all, regardless of calendar kind (the feature was removed - comments only)", async () => {
+    mockCommonHooks({ calendarKind: "group" });
 
-    const { getByTestId } = await render(<EventDetailScreen />);
+    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
 
-    await fireEvent.press(getByTestId("event-reaction-add-👍"));
-
-    await waitFor(() => expect(toggleReactionMock).toHaveBeenCalledWith("event-1", "👍", null));
-    await waitFor(() => expect(refetchReactions).toHaveBeenCalled());
+    expect(getByTestId("event-comments-card")).toBeTruthy();
+    expect(getByTestId("event-comment-input")).toBeTruthy();
+    expect(queryByTestId("event-stamp-toggle")).toBeNull();
+    expect(queryByTestId(/event-reaction/)).toBeNull();
   });
 
-  it("passes the caller's own existing reaction so pressing it again toggles it off", async () => {
-    const myReaction = {
-      id: "reaction-1",
-      eventId: "event-1",
-      userId: "user-1",
-      stampType: "👍",
-      createdAt: "2026-08-18T00:00:00.000Z",
-    };
-    const { refetchReactions } = mockCommonHooks({ reactions: [myReaction] });
-    const toggleReactionMock = jest.fn().mockResolvedValue(true);
-    (useToggleReaction as jest.Mock).mockReturnValue({
-      toggleReaction: toggleReactionMock,
-      isSubmitting: false,
-      error: null,
-    });
+  it("shows a shared-group label for a group calendar's event, and a personal-only badge to distinguish the two groups", async () => {
+    mockCommonHooks({ calendarKind: "group" });
 
-    const { getByTestId } = await render(<EventDetailScreen />);
+    const { getByText, getByTestId } = await render(<EventDetailScreen />);
 
-    await fireEvent.press(getByTestId("event-reaction-add-👍"));
-
-    await waitFor(() => expect(toggleReactionMock).toHaveBeenCalledWith("event-1", "👍", myReaction));
-    await waitFor(() => expect(refetchReactions).toHaveBeenCalled());
+    expect(getByText("メンバーと共有")).toBeTruthy();
+    expect(getByTestId("event-personal-group-label")).toBeTruthy();
+    expect(getByText("個人用")).toBeTruthy();
   });
 
-  it("shows the stamps section for a group calendar's event", async () => {
+  it("hides the shared-group label for a personal calendar's event (there's no one to share with), but still shows comments", async () => {
+    mockCommonHooks({ calendarKind: "personal" });
+
+    const { queryByTestId, queryByText, getByTestId } = await render(<EventDetailScreen />);
+
+    expect(queryByText("メンバーと共有")).toBeNull();
+    expect(queryByTestId("event-shared-group-label")).toBeNull();
+    expect(getByTestId("event-comments-card")).toBeTruthy();
+  });
+
+  it("orders sections タグ→ToDo→思い出→コメント (personal-only group before the shared group)", async () => {
+    // Uses a past event so the 思い出(memories) section - hidden for future
+    // events - actually renders, letting this test check its position too.
+    mockCommonHooks({ calendarKind: "group", event: PAST_EVENT });
+
+    const { toJSON } = await render(<EventDetailScreen />);
+
+    const tree = JSON.stringify(toJSON());
+    const personalLabelIndex = tree.indexOf("event-personal-group-label");
+    const tagsEditButtonIndex = tree.indexOf("event-tags-edit-button");
+    const todoInputIndex = tree.indexOf("event-todo-input");
+    const sharedLabelIndex = tree.indexOf("event-shared-group-label");
+    const memoriesIndex = tree.indexOf("思い出");
+    const commentsIndex = tree.indexOf("event-comments-card");
+
+    expect(personalLabelIndex).toBeGreaterThan(-1);
+    expect(sharedLabelIndex).toBeGreaterThan(-1);
+    // 個人用の枠(タグ→ToDo)がまず来て...
+    expect(personalLabelIndex).toBeLessThan(tagsEditButtonIndex);
+    expect(tagsEditButtonIndex).toBeLessThan(todoInputIndex);
+    // ...続けて共有の枠(思い出→コメント)が来る。
+    expect(todoInputIndex).toBeLessThan(sharedLabelIndex);
+    expect(sharedLabelIndex).toBeLessThan(memoriesIndex);
+    expect(memoriesIndex).toBeLessThan(commentsIndex);
+  });
+
+  it("wraps the shared (comments/memories) and personal (reminder/tags/todo) sections in two visually distinct, differently colored frames", async () => {
     mockCommonHooks({ calendarKind: "group" });
 
     const { getByTestId } = await render(<EventDetailScreen />);
 
-    expect(getByTestId("event-reactions-section")).toBeTruthy();
+    const flattenStyle = (style: unknown) =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+
+    const sharedFrameStyle = flattenStyle(getByTestId("event-shared-frame").props.style);
+    const personalFrameStyle = flattenStyle(getByTestId("event-personal-frame").props.style);
+
+    // Both frames are bordered...
+    expect(sharedFrameStyle.borderWidth).toBeGreaterThan(0);
+    expect(personalFrameStyle.borderWidth).toBeGreaterThan(0);
+    // ...and colored differently from each other, so which is which is obvious at a glance.
+    expect(sharedFrameStyle.backgroundColor).not.toBe(personalFrameStyle.backgroundColor);
+
+    // Both the comment card and the ToDo section live inside their respective frame.
+    expect(within(getByTestId("event-shared-frame")).getByTestId("event-comments-card")).toBeTruthy();
+    expect(within(getByTestId("event-personal-frame")).getByTestId("event-todo-input")).toBeTruthy();
   });
 
-  it("hides the stamps section for a personal calendar's event", async () => {
+  it("puts every section in the single personal-colored frame for a personal calendar's event (no shared/personal split, since there's no one to share with)", async () => {
     mockCommonHooks({ calendarKind: "personal" });
 
-    const { queryByTestId } = await render(<EventDetailScreen />);
+    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
 
-    expect(queryByTestId("event-reactions-section")).toBeNull();
+    // No separate blue "shared" frame - a personal calendar has nothing to
+    // distinguish "shared" from "personal-only" (there's no one else on it).
+    expect(queryByTestId("event-shared-frame")).toBeNull();
+    // Everything - including comments/memories, which DO get their own blue
+    // frame on a group calendar - lives inside the one gray personal frame.
+    const personalFrame = getByTestId("event-personal-frame");
+    expect(within(personalFrame).getByTestId("event-comments-card")).toBeTruthy();
+    expect(within(personalFrame).getByTestId("event-todo-input")).toBeTruthy();
+    // The "個人用" badge only makes sense as a contrast against a shared
+    // section, which doesn't exist here - it's dropped too.
+    expect(queryByTestId("event-personal-group-label")).toBeNull();
   });
 
   it("shows attached tag badges", async () => {
@@ -391,7 +476,24 @@ describe("EventDetailScreen", () => {
     expect(queryByTestId("event-tag-badge-tag-a")).toBeNull();
   });
 
-  it("pre-selects the event's current tags in the edit modal's tag picker", async () => {
+  it("does not show the tag picker or the edit modal's tag picker before entering tag edit mode", async () => {
+    mockCommonHooks({
+      tags: [TAG_A],
+      tagTree: [{ ...TAG_A, children: [] }, { ...TAG_B, children: [] }],
+    });
+
+    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+    expect(getByTestId("event-tags-edit-button")).toBeTruthy();
+    expect(queryByTestId("event-tags-tag-tag-a")).toBeNull();
+
+    // The event edit modal only covers the shared fields now (title, all-day,
+    // dates, location, url, color) - tags are edited from their own section.
+    await fireEvent.press(getByTestId("event-edit-button"));
+    expect(queryByTestId("event-edit-tag-tag-a")).toBeNull();
+  });
+
+  it("pre-selects the event's current tags when entering tag edit mode", async () => {
     mockCommonHooks({
       tags: [TAG_A],
       tagTree: [{ ...TAG_A, children: [] }, { ...TAG_B, children: [] }],
@@ -399,13 +501,13 @@ describe("EventDetailScreen", () => {
 
     const { getByTestId } = await render(<EventDetailScreen />);
 
-    await fireEvent.press(getByTestId("event-edit-button"));
+    await fireEvent.press(getByTestId("event-tags-edit-button"));
 
-    expect(getByTestId("event-edit-tag-tag-a")).toBeTruthy();
-    expect(getByTestId("event-edit-tag-tag-b")).toBeTruthy();
+    expect(getByTestId("event-tags-tag-tag-a")).toBeTruthy();
+    expect(getByTestId("event-tags-tag-tag-b")).toBeTruthy();
   });
 
-  it("adds and removes tags via the edit modal and refetches on save", async () => {
+  it("adds and removes tags via tag edit mode and refetches when confirmed, then returns to showing the edit button", async () => {
     const { refetchTags } = mockCommonHooks({
       tags: [TAG_A],
       tagTree: [{ ...TAG_A, children: [] }, { ...TAG_B, children: [] }],
@@ -423,22 +525,24 @@ describe("EventDetailScreen", () => {
       error: null,
     });
 
-    const { getByTestId } = await render(<EventDetailScreen />);
+    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
 
-    await fireEvent.press(getByTestId("event-edit-button"));
-    // tag-a is already attached; toggling it off should detach it on save.
-    await fireEvent.press(getByTestId("event-edit-tag-tag-a"));
-    // tag-b is not attached yet; toggling it on should attach it on save.
-    await fireEvent.press(getByTestId("event-edit-tag-tag-b"));
-    await fireEvent.press(getByTestId("event-edit-submit"));
+    await fireEvent.press(getByTestId("event-tags-edit-button"));
+    // tag-a is already attached; toggling it off should detach it on confirm.
+    await fireEvent.press(getByTestId("event-tags-tag-tag-a"));
+    // tag-b is not attached yet; toggling it on should attach it on confirm.
+    await fireEvent.press(getByTestId("event-tags-tag-tag-b"));
+    await fireEvent.press(getByTestId("event-tags-confirm-button"));
 
     await waitFor(() => expect(attachTagsToEventMock).toHaveBeenCalledWith("event-1", ["tag-b"]));
     await waitFor(() => expect(detachTagFromEventMock).toHaveBeenCalledWith("event-1", "tag-a"));
     await waitFor(() => expect(refetchTags).toHaveBeenCalled());
+    await waitFor(() => expect(getByTestId("event-tags-edit-button")).toBeTruthy());
+    expect(queryByTestId("event-tags-confirm-button")).toBeNull();
   });
 
-  it("does not touch tags on save when the selection is unchanged", async () => {
-    const { refetchEvent } = mockCommonHooks({
+  it("does not attach or detach tags when confirming with the selection unchanged", async () => {
+    mockCommonHooks({
       tags: [TAG_A],
       tagTree: [{ ...TAG_A, children: [] }],
     });
@@ -457,12 +561,81 @@ describe("EventDetailScreen", () => {
 
     const { getByTestId } = await render(<EventDetailScreen />);
 
-    await fireEvent.press(getByTestId("event-edit-button"));
-    await fireEvent.press(getByTestId("event-edit-submit"));
+    await fireEvent.press(getByTestId("event-tags-edit-button"));
+    await fireEvent.press(getByTestId("event-tags-confirm-button"));
 
-    await waitFor(() => expect(refetchEvent).toHaveBeenCalled());
     expect(attachTagsToEventMock).not.toHaveBeenCalled();
     expect(detachTagFromEventMock).not.toHaveBeenCalled();
+  });
+
+  it("discards the selection and shows the original tags again when the cancel (X) button is pressed", async () => {
+    mockCommonHooks({
+      tags: [TAG_A],
+      tagTree: [{ ...TAG_A, children: [] }, { ...TAG_B, children: [] }],
+    });
+    const attachTagsToEventMock = jest.fn().mockResolvedValue(true);
+    (useAttachTagsToEvent as jest.Mock).mockReturnValue({
+      attachTagsToEvent: attachTagsToEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-tags-edit-button"));
+    await fireEvent.press(getByTestId("event-tags-tag-tag-b"));
+    await fireEvent.press(getByTestId("event-tags-cancel-button"));
+
+    expect(attachTagsToEventMock).not.toHaveBeenCalled();
+    expect(getByTestId("event-tags-edit-button")).toBeTruthy();
+    expect(queryByTestId("event-tags-tag-tag-b")).toBeNull();
+    expect(getByTestId("event-tag-badge-tag-a")).toBeTruthy();
+  });
+
+  it("saves the tag selection on unmount (screen navigated away) while still in tag edit mode", async () => {
+    mockCommonHooks({
+      tags: [TAG_A],
+      tagTree: [{ ...TAG_A, children: [] }, { ...TAG_B, children: [] }],
+    });
+    const attachTagsToEventMock = jest.fn().mockResolvedValue(true);
+    (useAttachTagsToEvent as jest.Mock).mockReturnValue({
+      attachTagsToEvent: attachTagsToEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+    const detachTagFromEventMock = jest.fn().mockResolvedValue(true);
+    (useDetachTagFromEvent as jest.Mock).mockReturnValue({
+      detachTagFromEvent: detachTagFromEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId, unmount } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-tags-edit-button"));
+    await fireEvent.press(getByTestId("event-tags-tag-tag-a"));
+    await fireEvent.press(getByTestId("event-tags-tag-tag-b"));
+
+    unmount();
+
+    await waitFor(() => expect(attachTagsToEventMock).toHaveBeenCalledWith("event-1", ["tag-b"]));
+    await waitFor(() => expect(detachTagFromEventMock).toHaveBeenCalledWith("event-1", "tag-a"));
+  });
+
+  it("does not save anything on unmount when tag edit mode was never entered", async () => {
+    mockCommonHooks({ tags: [TAG_A], tagTree: [{ ...TAG_A, children: [] }] });
+    const attachTagsToEventMock = jest.fn().mockResolvedValue(true);
+    (useAttachTagsToEvent as jest.Mock).mockReturnValue({
+      attachTagsToEvent: attachTagsToEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { unmount } = await render(<EventDetailScreen />);
+
+    unmount();
+
+    expect(attachTagsToEventMock).not.toHaveBeenCalled();
   });
 
   it("adds a todo scoped to the event and refetches", async () => {
@@ -494,6 +667,17 @@ describe("EventDetailScreen", () => {
     await waitFor(() => expect(refetchTodos).toHaveBeenCalled());
   });
 
+  it("uses a trash icon instead of the 削除 text label for the todo delete button", async () => {
+    mockCommonHooks({
+      todos: [{ id: "todo-1", eventId: "event-1", title: "飲み物を買う", isDone: false, completedAt: null, reminderAt: null }],
+    });
+
+    const { queryByText, getByTestId } = await render(<EventDetailScreen />);
+
+    expect(queryByText("削除")).toBeNull();
+    expect(getByTestId("event-todo-delete-todo-1")).toBeTruthy();
+  });
+
   it("deletes a todo and refetches", async () => {
     const { refetchTodos } = mockCommonHooks({
       todos: [{ id: "todo-1", eventId: "event-1", title: "飲み物を買う", isDone: false, completedAt: null, reminderAt: null }],
@@ -509,47 +693,204 @@ describe("EventDetailScreen", () => {
     await waitFor(() => expect(refetchTodos).toHaveBeenCalled());
   });
 
-  it("selects a reminder target member and saves", async () => {
-    mockCommonHooks({ members: [{ userId: "user-1", role: "owner" }, { userId: "user-2", role: "member" }] });
-    const setReminderTargetsMock = jest.fn().mockResolvedValue(true);
-    (useSetReminderTargets as jest.Mock).mockReturnValue({
-      setReminderTargets: setReminderTargetsMock,
+  it("shows the timed reminder options for a timed event, with none checked by default when no reminders exist yet", async () => {
+    mockCommonHooks({ event: FUTURE_EVENT, reminders: [] });
+
+    const { getByText, queryByTestId } = await render(<EventDetailScreen />);
+
+    expect(getByText("開始時")).toBeTruthy();
+    expect(getByText("10分前")).toBeTruthy();
+    expect(getByText("1時間前")).toBeTruthy();
+    expect(queryByTestId("event-reminder-option-before_10m-checked")).toBeNull();
+  });
+
+  it("adds a reminder and refetches when an unchecked option is pressed", async () => {
+    const { refetchReminders } = mockCommonHooks({ event: FUTURE_EVENT, reminders: [] });
+    const addEventReminderMock = jest.fn().mockResolvedValue(true);
+    (useAddEventReminder as jest.Mock).mockReturnValue({
+      addEventReminder: addEventReminderMock,
       isSubmitting: false,
       error: null,
     });
 
     const { getByTestId } = await render(<EventDetailScreen />);
 
-    await fireEvent.press(getByTestId("reminder-target-member-user-2"));
-    await fireEvent.press(getByTestId("event-reminder-targets-save"));
+    await fireEvent.press(getByTestId("event-reminder-option-before_10m"));
 
-    await waitFor(() => expect(setReminderTargetsMock).toHaveBeenCalledWith("event-1", ["user-2"]));
+    await waitFor(() => expect(addEventReminderMock).toHaveBeenCalledWith("event-1", "before_10m", undefined));
+    await waitFor(() => expect(refetchReminders).toHaveBeenCalled());
+  });
+
+  it("removes a reminder and refetches when an already-checked option is pressed", async () => {
+    const reminder = { id: "r1", eventId: "event-1", userId: "user-1", kind: "before_10m", customValue: null, customUnit: null, remindAt: "2026-01-01T00:00:00.000Z" };
+    const { refetchReminders } = mockCommonHooks({ event: FUTURE_EVENT, reminders: [reminder] });
+    const removeEventReminderMock = jest.fn().mockResolvedValue(true);
+    (useRemoveEventReminder as jest.Mock).mockReturnValue({
+      removeEventReminder: removeEventReminderMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    expect(getByTestId("event-reminder-option-before_10m-checked")).toBeTruthy();
+    await fireEvent.press(getByTestId("event-reminder-option-before_10m"));
+
+    await waitFor(() => expect(removeEventReminderMock).toHaveBeenCalledWith("r1"));
+    await waitFor(() => expect(refetchReminders).toHaveBeenCalled());
+  });
+
+  it("adds a custom reminder via the value/unit picker and refetches", async () => {
+    const { refetchReminders } = mockCommonHooks({ event: FUTURE_EVENT, reminders: [] });
+    const addEventReminderMock = jest.fn().mockResolvedValue(true);
+    (useAddEventReminder as jest.Mock).mockReturnValue({
+      addEventReminder: addEventReminderMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-reminder-option-custom"));
+    await fireEvent.press(getByTestId("event-reminder-custom-value-picker-option-3"));
+    await fireEvent.press(getByTestId("event-reminder-custom-unit-picker-option-hour"));
+    await fireEvent.press(getByTestId("event-reminder-custom-picker-confirm"));
+
+    await waitFor(() =>
+      expect(addEventReminderMock).toHaveBeenCalledWith("event-1", "custom", { value: 3, unit: "hour" })
+    );
+    await waitFor(() => expect(refetchReminders).toHaveBeenCalled());
+  });
+
+  it("shows multiple existing custom reminders and removes just the one pressed", async () => {
+    const customA = { id: "r-custom-a", eventId: "event-1", userId: "user-1", kind: "custom", customValue: 30, customUnit: "minute", remindAt: "2026-01-01T00:00:00.000Z" };
+    const customB = { id: "r-custom-b", eventId: "event-1", userId: "user-1", kind: "custom", customValue: 2, customUnit: "day", remindAt: "2026-01-01T00:00:00.000Z" };
+    mockCommonHooks({ event: FUTURE_EVENT, reminders: [customA, customB] });
+    const removeEventReminderMock = jest.fn().mockResolvedValue(true);
+    (useRemoveEventReminder as jest.Mock).mockReturnValue({
+      removeEventReminder: removeEventReminderMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByText, getByTestId } = await render(<EventDetailScreen />);
+
+    expect(getByText("30分前")).toBeTruthy();
+    expect(getByText("2日前")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("event-reminder-custom-r-custom-a"));
+
+    await waitFor(() => expect(removeEventReminderMock).toHaveBeenCalledWith("r-custom-a"));
+  });
+
+  it("hides the reminder section for a past event, since reminders no longer make sense for it", async () => {
+    mockCommonHooks({ event: PAST_EVENT, reminders: [] });
+
+    const { queryByTestId, queryByText } = await render(<EventDetailScreen />);
+
+    expect(queryByTestId("event-reminder-option-custom")).toBeNull();
+    expect(queryByText("リマインド")).toBeNull();
   });
 
   it("does not show the memory section for a future event", async () => {
     mockCommonHooks({ event: FUTURE_EVENT });
 
-    const { queryByTestId } = await render(<EventDetailScreen />);
+    const { queryByText } = await render(<EventDetailScreen />);
 
-    expect(queryByTestId("event-reflection-input")).toBeNull();
+    expect(queryByText("思い出")).toBeNull();
   });
 
-  it("shows the memory section and adds a reflection for a past event", async () => {
-    const { refetchComments } = mockCommonHooks({ event: PAST_EVENT });
-    const addReflectionMock = jest.fn().mockResolvedValue(true);
-    (useAddReflection as jest.Mock).mockReturnValue({
-      addReflection: addReflectionMock,
+  it("shows the memory section for a past event", async () => {
+    mockCommonHooks({ event: PAST_EVENT });
+
+    const { getByText } = await render(<EventDetailScreen />);
+
+    expect(getByText("思い出")).toBeTruthy();
+  });
+
+  it("shows the add-photo button when I have not added my own photo yet, and hides it once I have", async () => {
+    mockCommonHooks({ event: PAST_EVENT, photos: [] });
+    const { getByTestId, rerender } = await render(<EventDetailScreen />);
+    expect(getByTestId("event-photo-add")).toBeTruthy();
+
+    mockCommonHooks({
+      event: PAST_EVENT,
+      photos: [
+        { id: "photo-1", eventId: "event-1", storagePath: "event-1/a.jpg", uploadedBy: "user-1", isThumbnail: false, createdAt: "2026-01-01", url: "https://example.com/a.jpg" },
+      ],
+    });
+    await rerender(<EventDetailScreen />);
+
+    expect(() => getByTestId("event-photo-add")).toThrow();
+  });
+
+  it("picks a photo and attaches it, then refetches", async () => {
+    const { refetchPhotos } = mockCommonHooks({ event: PAST_EVENT, photos: [] });
+    const attachPhotoMock = jest.fn().mockResolvedValue(true);
+    (useAttachPhoto as jest.Mock).mockReturnValue({ attachPhoto: attachPhotoMock, isSubmitting: false, error: null });
+    (pickPhotoFromLibrary as jest.Mock).mockResolvedValue({
+      fileName: "a.jpg",
+      contentType: "image/jpeg",
+      data: "blob",
+    });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-photo-add"));
+
+    await waitFor(() =>
+      expect(attachPhotoMock).toHaveBeenCalledWith("event-1", {
+        fileName: "a.jpg",
+        contentType: "image/jpeg",
+        data: "blob",
+      })
+    );
+    await waitFor(() => expect(refetchPhotos).toHaveBeenCalled());
+  });
+
+  it("does not attach anything when the photo picker is cancelled", async () => {
+    mockCommonHooks({ event: PAST_EVENT, photos: [] });
+    const attachPhotoMock = jest.fn().mockResolvedValue(true);
+    (useAttachPhoto as jest.Mock).mockReturnValue({ attachPhoto: attachPhotoMock, isSubmitting: false, error: null });
+    (pickPhotoFromLibrary as jest.Mock).mockResolvedValue(null);
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-photo-add"));
+
+    expect(attachPhotoMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes my own photo and refetches when its delete button is pressed", async () => {
+    const myPhoto = { id: "photo-1", eventId: "event-1", storagePath: "event-1/a.jpg", uploadedBy: "user-1", isThumbnail: false, createdAt: "2026-01-01", url: "https://example.com/a.jpg" };
+    const { refetchPhotos } = mockCommonHooks({ event: PAST_EVENT, photos: [myPhoto] });
+    const detachPhotoMock = jest.fn().mockResolvedValue(true);
+    (useDetachPhoto as jest.Mock).mockReturnValue({ detachPhoto: detachPhotoMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-photo-photo-1-delete"));
+
+    await waitFor(() => expect(detachPhotoMock).toHaveBeenCalledWith("photo-1", "event-1/a.jpg"));
+    await waitFor(() => expect(refetchPhotos).toHaveBeenCalled());
+  });
+
+  it("sets the pressed photo as the thumbnail and refetches", async () => {
+    const otherPhoto = { id: "photo-2", eventId: "event-1", storagePath: "event-1/b.jpg", uploadedBy: "user-2", isThumbnail: false, createdAt: "2026-01-01", url: "https://example.com/b.jpg" };
+    const { refetchPhotos } = mockCommonHooks({ event: PAST_EVENT, photos: [otherPhoto] });
+    const setPhotoThumbnailMock = jest.fn().mockResolvedValue(true);
+    (useSetPhotoThumbnail as jest.Mock).mockReturnValue({
+      setPhotoThumbnail: setPhotoThumbnailMock,
       isSubmitting: false,
       error: null,
     });
 
     const { getByTestId } = await render(<EventDetailScreen />);
 
-    await fireEvent.changeText(getByTestId("event-reflection-input"), "楽しかった");
-    await fireEvent.press(getByTestId("event-reflection-submit"));
+    await fireEvent.press(getByTestId("event-photo-photo-2"));
 
-    await waitFor(() => expect(addReflectionMock).toHaveBeenCalledWith("event-1", "楽しかった"));
-    await waitFor(() => expect(refetchComments).toHaveBeenCalled());
+    await waitFor(() => expect(setPhotoThumbnailMock).toHaveBeenCalledWith("event-1", "photo-2"));
+    await waitFor(() => expect(refetchPhotos).toHaveBeenCalled());
   });
 
   it("opens the delete confirmation modal and deletes the event on confirm", async () => {
@@ -589,6 +930,22 @@ describe("EventDetailScreen", () => {
     expect(getByText(/https:\/\/example\.com/)).toBeTruthy();
   });
 
+  it("uses icons instead of text for the 編集/追加 buttons (title edit, tag edit, ToDo add, photo add)", async () => {
+    mockCommonHooks({ event: PAST_EVENT }); // past event, so the photo-add button also renders
+
+    const { queryByText, getByTestId } = await render(<EventDetailScreen />);
+
+    // No plain-text "編集"/"追加" labels anywhere in the detail view.
+    expect(queryByText("編集")).toBeNull();
+    expect(queryByText("追加")).toBeNull();
+
+    // The buttons themselves are still there, driven by an icon.
+    expect(getByTestId("event-edit-button")).toBeTruthy();
+    expect(getByTestId("event-tags-edit-button")).toBeTruthy();
+    expect(getByTestId("event-todo-add")).toBeTruthy();
+    expect(getByTestId("event-photo-add")).toBeTruthy();
+  });
+
   it("opens the edit modal pre-filled with the current event values and submits the update", async () => {
     const { refetchEvent } = mockCommonHooks({
       event: { ...FUTURE_EVENT, location: "渋谷", url: "https://example.com" },
@@ -615,11 +972,23 @@ describe("EventDetailScreen", () => {
           location: "渋谷",
           url: "https://example.com",
           isAllDay: false,
-          categoryColor: "#2f6fed",
         })
       )
     );
     await waitFor(() => expect(refetchEvent).toHaveBeenCalled());
+  });
+
+  it("uses icons instead of text for the edit modal's cancel/save buttons", async () => {
+    mockCommonHooks();
+
+    const { getByTestId, queryByText } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-edit-button"));
+
+    expect(queryByText("キャンセル")).toBeNull();
+    expect(queryByText("保存")).toBeNull();
+    expect(getByTestId("event-edit-cancel")).toBeTruthy();
+    expect(getByTestId("event-edit-submit")).toBeTruthy();
   });
 
   it("closes the edit modal without saving when cancelled", async () => {
@@ -638,6 +1007,31 @@ describe("EventDetailScreen", () => {
     expect(queryByTestId("event-edit-title-input")).toBeNull();
   });
 
+  it("closes the edit modal without saving when tapping outside it, on the backdrop", async () => {
+    mockCommonHooks();
+    const updateEventMock = jest.fn().mockResolvedValue(true);
+    (useUpdateEvent as jest.Mock).mockReturnValue({ updateEvent: updateEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-edit-button"));
+    await fireEvent.press(getByTestId("event-edit-backdrop"));
+
+    expect(updateEventMock).not.toHaveBeenCalled();
+    expect(queryByTestId("event-edit-title-input")).toBeNull();
+  });
+
+  it("never shows a personal-only badge in the edit modal, since it now only covers shared fields (tags moved out)", async () => {
+    mockCommonHooks({ calendarKind: "group" });
+
+    const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-edit-button"));
+
+    expect(getByTestId("event-edit-title-input")).toBeTruthy();
+    expect(queryByTestId("event-edit-personal-group-label")).toBeNull();
+  });
+
   it("shows the commenter's display name instead of their raw user id", async () => {
     mockCommonHooks({
       comments: [{ id: "comment-1", eventId: "event-1", userId: "user-2", body: "hi", createdAt: "2026-08-01T00:00:00.000Z" }],
@@ -653,17 +1047,4 @@ describe("EventDetailScreen", () => {
     expect(queryByText("user-2")).toBeNull();
   });
 
-  it("shows reminder target members' display names instead of their raw user ids", async () => {
-    mockCommonHooks({
-      members: [
-        { userId: "user-1", role: "owner", displayName: "たろう" },
-        { userId: "user-2", role: "member", displayName: "はなこ" },
-      ],
-    });
-
-    const { getByText, queryByText } = await render(<EventDetailScreen />);
-
-    expect(getByText("はなこ")).toBeTruthy();
-    expect(queryByText("user-2")).toBeNull();
-  });
 });

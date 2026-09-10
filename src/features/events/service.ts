@@ -8,15 +8,31 @@ import type {
   EditScope,
   Event,
   EventError,
+  EventReminder,
+  EventReminderCustomOffset,
+  EventReminderKind,
+  EventReminderUnit,
   EventWithTagColor,
-  ReminderTargetsInput,
   UpdateEventInput,
 } from "./types";
+
+const DEFAULT_ALL_DAY_REMINDER_KINDS: EventReminderKind[] = ["on_day", "day_before_1"];
+const DEFAULT_TIMED_REMINDER_KINDS: EventReminderKind[] = ["before_10m"];
 
 const TAG_LEVEL_PRIORITY = ["major", "mid", "minor"];
 
 interface EventTagJoinRow {
   tags: { color: string; level: string } | null;
+}
+
+/** PostgRESTの埋め込みリソースに`count`を付けると`[{ count: N }]`という
+ * 1要素配列で返ってくる(実データではなく件数だけを取りたい時の書き方)。 */
+interface CountJoinRow {
+  count: number;
+}
+
+function extractCount(rows: CountJoinRow[] | null | undefined): number {
+  return rows?.[0]?.count ?? 0;
 }
 
 function pickPrimaryTagColor(eventTags: EventTagJoinRow[]): string | null {
@@ -259,33 +275,136 @@ export async function createRecurringSeries(
   return ok((data as EventRow[]).map(mapEventRow));
 }
 
-export async function setReminderTargets(
+interface EventReminderRow {
+  id: string;
+  event_id: string;
+  user_id: string;
+  kind: EventReminderKind;
+  custom_value: number | null;
+  custom_unit: EventReminderUnit | null;
+  remind_at: string;
+}
+
+function mapEventReminderRow(row: EventReminderRow): EventReminder {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    userId: row.user_id,
+    kind: row.kind,
+    customValue: row.custom_value,
+    customUnit: row.custom_unit,
+    remindAt: row.remind_at,
+  };
+}
+
+/** Lists the CURRENT user's own reminder settings for an event (RLS already
+ * scopes rows to the caller - reminders are entirely personal, other
+ * members' settings are never visible). */
+export async function listEventReminders(
+  client: SupabaseClient,
+  eventId: string
+): Promise<Result<EventReminder[], EventError>> {
+  const { data, error } = await client.from("event_reminders").select("*").eq("event_id", eventId);
+
+  if (error || !data) {
+    return err(mapEventError(error as PostgrestError));
+  }
+
+  return ok((data as EventReminderRow[]).map(mapEventReminderRow));
+}
+
+/** Adds one of the caller's own reminders for an event. Non-custom kinds are
+ * limited to one row per user per event, so any existing row of the same
+ * kind is cleared first (a re-check effectively replaces it). "custom"
+ * (an arbitrary N分/時間/日/週間前 offset) has no such limit - several can
+ * coexist - so it is inserted directly without clearing anything. */
+export async function addEventReminder(
   client: SupabaseClient,
   eventId: string,
-  userIds: ReminderTargetsInput
+  kind: EventReminderKind,
+  custom?: EventReminderCustomOffset
 ): Promise<Result<void, EventError>> {
-  const { error: deleteError } = await client
-    .from("event_reminder_targets")
-    .delete()
-    .eq("event_id", eventId);
+  if (kind !== "custom") {
+    const { error: deleteError } = await client
+      .from("event_reminders")
+      .delete()
+      .eq("event_id", eventId)
+      .eq("kind", kind);
 
-  if (deleteError) {
-    return err(mapEventError(deleteError));
+    if (deleteError) {
+      return err(mapEventError(deleteError));
+    }
   }
 
-  if (userIds === "all" || userIds.length === 0) {
-    return ok(undefined);
-  }
-
-  const { error: insertError } = await client
-    .from("event_reminder_targets")
-    .insert(userIds.map((userId) => ({ event_id: eventId, user_id: userId })));
+  const { error: insertError } = await client.from("event_reminders").insert({
+    event_id: eventId,
+    kind,
+    custom_value: kind === "custom" ? (custom?.value ?? null) : null,
+    custom_unit: kind === "custom" ? (custom?.unit ?? null) : null,
+  });
 
   if (insertError) {
     return err(mapEventError(insertError));
   }
 
   return ok(undefined);
+}
+
+/** Removes a single reminder by its own row id - needed (rather than by
+ * event+kind) because several "custom" reminders can exist for the same
+ * event/user, so kind alone can't identify which one to remove. */
+export async function removeEventReminder(
+  client: SupabaseClient,
+  reminderId: string
+): Promise<Result<void, EventError>> {
+  const { error } = await client.from("event_reminders").delete().eq("id", reminderId);
+
+  if (error) {
+    return err(mapEventError(error));
+  }
+
+  return ok(undefined);
+}
+
+/** Seeds the caller's default reminders right after creating an event, so a
+ * reminder fires even if they never open the event again to configure one
+ * (当日+1日前 for all-day events, 10分前 for timed events). */
+export async function createDefaultEventReminders(
+  client: SupabaseClient,
+  eventId: string,
+  isAllDay: boolean
+): Promise<Result<void, EventError>> {
+  const kinds = isAllDay ? DEFAULT_ALL_DAY_REMINDER_KINDS : DEFAULT_TIMED_REMINDER_KINDS;
+
+  const { error } = await client
+    .from("event_reminders")
+    .insert(kinds.map((kind) => ({ event_id: eventId, kind })));
+
+  if (error) {
+    return err(mapEventError(error));
+  }
+
+  return ok(undefined);
+}
+
+// 一覧系クエリで毎回使う埋め込みセレクト - タグ色に加えて、写真/コメントの
+// 件数バッジ用に件数だけをそれぞれ埋め込む(中身は取らない、軽量な集計)。
+const EVENT_LIST_SELECT =
+  "*, event_tags(tags(color, level)), event_photos(count), event_comments(count)";
+
+interface EventListRow extends EventRow {
+  event_tags: EventTagJoinRow[];
+  event_photos: CountJoinRow[];
+  event_comments: CountJoinRow[];
+}
+
+function mapEventRowsWithTagColor(data: EventListRow[]): EventWithTagColor[] {
+  return data.map((row) => ({
+    ...mapEventRow(row),
+    tagColor: pickPrimaryTagColor(row.event_tags ?? []),
+    photoCount: extractCount(row.event_photos),
+    commentCount: extractCount(row.event_comments),
+  }));
 }
 
 export async function listEventsInRange(
@@ -295,7 +414,7 @@ export async function listEventsInRange(
 ): Promise<Result<EventWithTagColor[], EventError>> {
   const { data, error } = await client
     .from("events")
-    .select("*, event_tags(tags(color, level))")
+    .select(EVENT_LIST_SELECT)
     .eq("calendar_id", calendarId)
     .lte("start_at", range.end)
     .gte("end_at", range.start)
@@ -305,12 +424,33 @@ export async function listEventsInRange(
     return err(mapEventError(error as PostgrestError));
   }
 
-  return ok(
-    (data as (EventRow & { event_tags: EventTagJoinRow[] })[]).map((row) => ({
-      ...mapEventRow(row),
-      tagColor: pickPrimaryTagColor(row.event_tags ?? []),
-    }))
-  );
+  return ok(mapEventRowsWithTagColor(data as EventListRow[]));
+}
+
+/** Same as listEventsInRange but overlays events from several calendars at once
+ * (e.g. the Calendar tab's multi-select view), merged into one ordered list. */
+export async function listEventsInRangeForCalendars(
+  client: SupabaseClient,
+  calendarIds: string[],
+  range: DateRange
+): Promise<Result<EventWithTagColor[], EventError>> {
+  if (calendarIds.length === 0) {
+    return ok([]);
+  }
+
+  const { data, error } = await client
+    .from("events")
+    .select(EVENT_LIST_SELECT)
+    .in("calendar_id", calendarIds)
+    .lte("start_at", range.end)
+    .gte("end_at", range.start)
+    .order("start_at", { ascending: true });
+
+  if (error || !data) {
+    return err(mapEventError(error as PostgrestError));
+  }
+
+  return ok(mapEventRowsWithTagColor(data as EventListRow[]));
 }
 
 export async function getEvent(

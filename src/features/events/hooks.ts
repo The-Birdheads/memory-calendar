@@ -2,15 +2,28 @@ import { useCallback, useEffect, useState } from "react";
 
 import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
-import { createEvent, deleteEvent, getEvent, listEventsInRange, setReminderTargets, updateEvent } from "./service";
+import {
+  addEventReminder,
+  createDefaultEventReminders,
+  createEvent,
+  deleteEvent,
+  getEvent,
+  listEventReminders,
+  listEventsInRange,
+  listEventsInRangeForCalendars,
+  removeEventReminder,
+  updateEvent,
+} from "./service";
 import type {
   CreateEventInput,
   DateRange,
   EditScope,
   Event,
   EventError,
+  EventReminder,
+  EventReminderCustomOffset,
+  EventReminderKind,
   EventWithTagColor,
-  ReminderTargetsInput,
   UpdateEventInput,
 } from "./types";
 
@@ -134,20 +147,126 @@ export function useEventsInRange(calendarId: string, range: DateRange): UseEvent
   return { events, isLoading, error, refetch };
 }
 
-export interface UseSetReminderTargetsResult {
-  setReminderTargets: (eventId: string, userIds: ReminderTargetsInput) => Promise<boolean>;
+/** Same as useEventsInRange but overlays events from several calendars at once
+ * (e.g. the Calendar tab's multi-select view). */
+export function useEventsInRangeForCalendars(calendarIds: string[], range: DateRange): UseEventsInRangeResult {
+  const [events, setEvents] = useState<EventWithTagColor[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<EventError | null>(null);
+  const calendarIdsKey = calendarIds.join(",");
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const result = await listEventsInRangeForCalendars(getSupabaseClient(), calendarIds, range);
+    if (result.ok) {
+      setEvents(result.value);
+      setError(null);
+    } else {
+      setEvents([]);
+      setError(result.error);
+    }
+    setIsLoading(false);
+  }, [calendarIdsKey, range.start, range.end]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  useEffect(() => {
+    if (calendarIds.length === 0) return;
+    const unsubscribers = calendarIds.map((calendarId) =>
+      subscribeToTableChanges(
+        getSupabaseClient(),
+        `events-overlay-${calendarId}`,
+        "events",
+        refetch,
+        `calendar_id=eq.${calendarId}`
+      )
+    );
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [calendarIdsKey, refetch]);
+
+  return { events, isLoading, error, refetch };
+}
+
+export interface UseEventRemindersResult {
+  reminders: EventReminder[];
+  isLoading: boolean;
+  error: EventError | null;
+  refetch: () => Promise<void>;
+}
+
+/** The current user's own reminder settings for an event - entirely
+ * personal, other members' settings are never fetched or shown. */
+export function useEventReminders(eventId: string): UseEventRemindersResult {
+  const [reminders, setReminders] = useState<EventReminder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<EventError | null>(null);
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const result = await listEventReminders(getSupabaseClient(), eventId);
+    if (result.ok) {
+      setReminders(result.value);
+      setError(null);
+    } else {
+      setReminders([]);
+      setError(result.error);
+    }
+    setIsLoading(false);
+  }, [eventId]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { reminders, isLoading, error, refetch };
+}
+
+export interface UseAddEventReminderResult {
+  addEventReminder: (eventId: string, kind: EventReminderKind, custom?: EventReminderCustomOffset) => Promise<boolean>;
   isSubmitting: boolean;
   error: EventError | null;
 }
 
-export function useSetReminderTargets(): UseSetReminderTargetsResult {
+export function useAddEventReminder(): UseAddEventReminderResult {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<EventError | null>(null);
 
-  const runSetReminderTargets = useCallback(async (eventId: string, userIds: ReminderTargetsInput) => {
+  const runAddEventReminder = useCallback(
+    async (eventId: string, kind: EventReminderKind, custom?: EventReminderCustomOffset) => {
+      setIsSubmitting(true);
+      setError(null);
+      const result = await addEventReminder(getSupabaseClient(), eventId, kind, custom);
+      setIsSubmitting(false);
+      if (!result.ok) {
+        setError(result.error);
+        return false;
+      }
+      return true;
+    },
+    []
+  );
+
+  return { addEventReminder: runAddEventReminder, isSubmitting, error };
+}
+
+export interface UseRemoveEventReminderResult {
+  removeEventReminder: (reminderId: string) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: EventError | null;
+}
+
+export function useRemoveEventReminder(): UseRemoveEventReminderResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<EventError | null>(null);
+
+  const runRemoveEventReminder = useCallback(async (reminderId: string) => {
     setIsSubmitting(true);
     setError(null);
-    const result = await setReminderTargets(getSupabaseClient(), eventId, userIds);
+    const result = await removeEventReminder(getSupabaseClient(), reminderId);
     setIsSubmitting(false);
     if (!result.ok) {
       setError(result.error);
@@ -156,7 +275,34 @@ export function useSetReminderTargets(): UseSetReminderTargetsResult {
     return true;
   }, []);
 
-  return { setReminderTargets: runSetReminderTargets, isSubmitting, error };
+  return { removeEventReminder: runRemoveEventReminder, isSubmitting, error };
+}
+
+export interface UseCreateDefaultEventRemindersResult {
+  createDefaultEventReminders: (eventId: string, isAllDay: boolean) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: EventError | null;
+}
+
+/** Seeds the caller's default reminders right after creating an event (see
+ * service.ts createDefaultEventReminders for the default kinds chosen). */
+export function useCreateDefaultEventReminders(): UseCreateDefaultEventRemindersResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<EventError | null>(null);
+
+  const runCreateDefaultEventReminders = useCallback(async (eventId: string, isAllDay: boolean) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await createDefaultEventReminders(getSupabaseClient(), eventId, isAllDay);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { createDefaultEventReminders: runCreateDefaultEventReminders, isSubmitting, error };
 }
 
 export interface UseEventResult {
