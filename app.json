@@ -31,7 +31,13 @@
       "expo-splash-screen",
       "expo-notifications",
       "@react-native-community/datetimepicker",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "予定の思い出として写真を追加するために使用します。"
+        }
+      ]
     ],
     "extra": {
       "router": {},
