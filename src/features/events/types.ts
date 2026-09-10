@@ -11,8 +11,9 @@ export interface Event {
   endAt: string;
   isAllDay: boolean;
   reminderAt: string | null;
-  createdBy: string;
-  updatedBy: string;
+  // 作成者/最終更新者が退会した後も予定自体は残るため(アカウント削除時にNULL化される)、nullを許容する
+  createdBy: string | null;
+  updatedBy: string | null;
   createdAt: string;
   updatedAt: string;
 }

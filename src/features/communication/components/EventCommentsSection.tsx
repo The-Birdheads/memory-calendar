@@ -11,7 +11,7 @@ export interface EventCommentsSectionProps {
   isSubmittingComment?: boolean;
   currentUserId?: string;
   onDeleteComment?: (commentId: string) => void;
-  resolveAuthorName?: (userId: string) => string;
+  resolveAuthorName?: (userId: string | null) => string;
 }
 
 /**

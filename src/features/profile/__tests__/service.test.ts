@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { getMyProfile, getProfileErrorMessageJa, updateDisplayName } from "../service";
+import { deleteOwnAccount, getMyProfile, getProfileErrorMessageJa, updateDisplayName } from "../service";
 
 describe("getMyProfile", () => {
   it("returns the caller's profile", async () => {
@@ -105,6 +105,28 @@ describe("updateDisplayName", () => {
   });
 });
 
+describe("deleteOwnAccount", () => {
+  it("calls the delete_own_account RPC and returns ok on success", async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    const result = await deleteOwnAccount(client);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(rpc).toHaveBeenCalledWith("delete_own_account");
+  });
+
+  it("maps an RPC failure to DeleteFailed", async () => {
+    const client = {
+      rpc: jest.fn().mockResolvedValue({ data: null, error: { message: "boom" } }),
+    } as unknown as SupabaseClient;
+
+    const result = await deleteOwnAccount(client);
+
+    expect(result).toEqual({ ok: false, error: { type: "DeleteFailed" } });
+  });
+});
+
 describe("getProfileErrorMessageJa", () => {
   it("returns a Japanese message for each known error type", () => {
     expect(getProfileErrorMessageJa({ type: "NotFound" })).toContain("見つかりません");
@@ -112,5 +134,6 @@ describe("getProfileErrorMessageJa", () => {
     expect(getProfileErrorMessageJa({ type: "ValidationError", field: "displayName" })).toContain(
       "ユーザー名"
     );
+    expect(getProfileErrorMessageJa({ type: "DeleteFailed" })).toContain("削除");
   });
 });

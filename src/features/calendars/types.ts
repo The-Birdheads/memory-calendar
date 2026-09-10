@@ -9,7 +9,8 @@ export interface Calendar {
   kind: CalendarKind;
   /** タグが付いていない予定をこの色で表示する(タグが付いていればタグの色が優先)。 */
   color: string;
-  createdBy: string;
+  // 作成者が退会した後もカレンダー自体は残るため(アカウント削除時にNULL化される)、nullを許容する
+  createdBy: string | null;
   createdAt: string;
 }
 
@@ -36,7 +37,7 @@ export interface CalendarInvite {
   calendarId: string;
   code: string;
   expiresAt: string;
-  createdBy: string;
+  createdBy: string | null;
   createdAt: string;
 }
 

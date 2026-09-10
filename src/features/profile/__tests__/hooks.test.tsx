@@ -1,8 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
-import { getMyProfile, updateDisplayName } from "../service";
-import { useMyProfile, useUpdateDisplayName } from "../hooks";
+import { deleteOwnAccount, getMyProfile, updateDisplayName } from "../service";
+import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
   getSupabaseClient: jest.fn(),
@@ -11,6 +11,7 @@ jest.mock("../../../shared/api/supabaseClient", () => ({
 jest.mock("../service", () => ({
   getMyProfile: jest.fn(),
   updateDisplayName: jest.fn(),
+  deleteOwnAccount: jest.fn(),
 }));
 
 describe("useMyProfile", () => {
@@ -78,5 +79,40 @@ describe("useUpdateDisplayName", () => {
 
     expect(updated).toBeNull();
     expect(result.current.error).toEqual({ type: "ValidationError", field: "displayName" });
+  });
+});
+
+describe("useDeleteAccount", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error on success", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (deleteOwnAccount as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    const { result } = await renderHook(() => useDeleteAccount());
+    let succeeded: boolean | undefined = undefined;
+    await act(async () => {
+      succeeded = await result.current.deleteAccount();
+    });
+
+    expect(succeeded).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(deleteOwnAccount).toHaveBeenCalledWith({});
+  });
+
+  it("returns false and sets the error on failure", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (deleteOwnAccount as jest.Mock).mockResolvedValue({ ok: false, error: { type: "DeleteFailed" } });
+
+    const { result } = await renderHook(() => useDeleteAccount());
+    let succeeded: boolean | undefined = undefined;
+    await act(async () => {
+      succeeded = await result.current.deleteAccount();
+    });
+
+    expect(succeeded).toBe(false);
+    expect(result.current.error).toEqual({ type: "DeleteFailed" });
   });
 });

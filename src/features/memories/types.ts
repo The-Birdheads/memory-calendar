@@ -4,7 +4,8 @@ export interface EventPhoto {
   id: string;
   eventId: string;
   storagePath: string;
-  uploadedBy: string;
+  // アップロード者が退会した後も写真自体は残るため(アカウント削除時にNULL化される)、nullを許容する
+  uploadedBy: string | null;
   /** この予定の思い出タイムライン上でサムネイルとして使われる1枚かどうか(1予定につき最大1枚)。 */
   isThumbnail: boolean;
   createdAt: string;

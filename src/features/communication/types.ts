@@ -1,7 +1,8 @@
 export interface EventComment {
   id: string;
   eventId: string;
-  userId: string;
+  // 投稿者が退会した後もコメント自体は残るため(アカウント削除時にNULL化される)、nullを許容する
+  userId: string | null;
   body: string;
   createdAt: string;
 }

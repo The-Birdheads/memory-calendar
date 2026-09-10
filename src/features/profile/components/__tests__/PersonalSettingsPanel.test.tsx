@@ -3,7 +3,7 @@ import { router } from "expo-router";
 
 import { PersonalSettingsPanel } from "../PersonalSettingsPanel";
 import { useAuthActions } from "../../../auth/hooks";
-import { useMyProfile, useUpdateDisplayName } from "../../hooks";
+import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../../hooks";
 
 jest.mock("expo-router", () => ({
   router: { replace: jest.fn(), push: jest.fn() },
@@ -16,6 +16,7 @@ jest.mock("../../../auth/hooks", () => ({
 jest.mock("../../hooks", () => ({
   useMyProfile: jest.fn(),
   useUpdateDisplayName: jest.fn(),
+  useDeleteAccount: jest.fn(),
 }));
 
 function mockHooks(overrides: {
@@ -23,6 +24,8 @@ function mockHooks(overrides: {
   updateDisplayName?: jest.Mock;
   updateError?: unknown;
   signOut?: jest.Mock;
+  deleteAccount?: jest.Mock;
+  deleteError?: unknown;
 } = {}) {
   (useMyProfile as jest.Mock).mockReturnValue({
     profile: { id: "user-1", displayName: overrides.displayName ?? "たろう", avatarUrl: null },
@@ -39,6 +42,11 @@ function mockHooks(overrides: {
     signOut: overrides.signOut ?? jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
+  });
+  (useDeleteAccount as jest.Mock).mockReturnValue({
+    deleteAccount: overrides.deleteAccount ?? jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: overrides.deleteError ?? null,
   });
 }
 
@@ -116,5 +124,63 @@ describe("PersonalSettingsPanel", () => {
 
     await waitFor(() => expect(signOutMock).toHaveBeenCalled());
     expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("opens a confirmation modal before deleting the account", async () => {
+    mockHooks();
+
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-delete-account"));
+
+    expect(getByTestId("delete-account-confirm-button")).toBeTruthy();
+  });
+
+  it("deletes the account, signs out, and navigates to login on confirm", async () => {
+    const deleteAccountMock = jest.fn().mockResolvedValue(true);
+    const signOutMock = jest.fn().mockResolvedValue(true);
+    mockHooks({ deleteAccount: deleteAccountMock, signOut: signOutMock });
+
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-delete-account"));
+    await fireEvent.press(getByTestId("delete-account-confirm-button"));
+
+    await waitFor(() => expect(deleteAccountMock).toHaveBeenCalled());
+    await waitFor(() => expect(signOutMock).toHaveBeenCalled());
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/(auth)/login"));
+  });
+
+  it("cancels deletion without calling deleteAccount when the confirmation is dismissed", async () => {
+    const deleteAccountMock = jest.fn();
+    mockHooks({ deleteAccount: deleteAccountMock });
+
+    const { getByTestId, queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-delete-account"));
+    await fireEvent.press(getByTestId("delete-account-cancel-button"));
+
+    expect(deleteAccountMock).not.toHaveBeenCalled();
+    expect(queryByTestId("delete-account-confirm-button")).toBeNull();
+  });
+
+  it("does not sign out or navigate away when account deletion fails", async () => {
+    const deleteAccountMock = jest.fn().mockResolvedValue(false);
+    const signOutMock = jest.fn();
+    mockHooks({
+      deleteAccount: deleteAccountMock,
+      signOut: signOutMock,
+      deleteError: { type: "DeleteFailed" },
+    });
+
+    const { getByTestId, getByText } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-delete-account"));
+    await fireEvent.press(getByTestId("delete-account-confirm-button"));
+
+    await waitFor(() => expect(deleteAccountMock).toHaveBeenCalled());
+    expect(signOutMock).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(getByText("アカウントの削除に失敗しました。時間をおいて再度お試しください")).toBeTruthy();
   });
 });

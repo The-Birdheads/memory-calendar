@@ -6,7 +6,7 @@ import type { CommunicationError, EventComment, EventReaction } from "./types";
 interface EventCommentRow {
   id: string;
   event_id: string;
-  user_id: string;
+  user_id: string | null;
   body: string;
   created_at: string;
 }

@@ -16,7 +16,7 @@ interface CalendarRow {
   name: string;
   kind: string;
   color: string;
-  created_by: string;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -36,7 +36,7 @@ interface CalendarInviteRow {
   calendar_id: string;
   code: string;
   expires_at: string;
-  created_by: string;
+  created_by: string | null;
   created_at: string;
 }
 

@@ -14,7 +14,7 @@ describe("EventCommentsSection", () => {
         comments={COMMENTS}
         currentUserId="user-1"
         onSubmitComment={jest.fn()}
-        resolveAuthorName={(id) => (id === "user-1" ? "たろう" : id)}
+        resolveAuthorName={(id) => (id === "user-1" ? "たろう" : (id ?? "元メンバー"))}
       />
     );
 
@@ -30,7 +30,7 @@ describe("EventCommentsSection", () => {
         comments={COMMENTS}
         currentUserId="user-1"
         onSubmitComment={jest.fn()}
-        resolveAuthorName={(id) => (id === "user-1" ? "たろう" : id)}
+        resolveAuthorName={(id) => (id === "user-1" ? "たろう" : (id ?? "元メンバー"))}
       />
     );
 

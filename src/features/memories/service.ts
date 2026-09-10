@@ -9,7 +9,7 @@ interface EventPhotoRow {
   id: string;
   event_id: string;
   storage_path: string;
-  uploaded_by: string;
+  uploaded_by: string | null;
   is_thumbnail: boolean;
   created_at: string;
 }

@@ -9,7 +9,8 @@ export interface MealRecord {
   rating: number | null;
   url: string | null;
   memo: string | null;
-  createdBy: string;
+  // 作成者が退会した後も献立記録自体は残るため(アカウント削除時にNULL化される)、nullを許容する
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
 }

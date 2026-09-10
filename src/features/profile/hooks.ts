@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
-import { getMyProfile, updateDisplayName } from "./service";
+import { deleteOwnAccount, getMyProfile, updateDisplayName } from "./service";
 import type { Profile, ProfileError } from "./types";
 
 export interface UseMyProfileResult {
@@ -59,4 +59,29 @@ export function useUpdateDisplayName(): UseUpdateDisplayNameResult {
   }, []);
 
   return { updateDisplayName: runUpdateDisplayName, isSubmitting, error };
+}
+
+export interface UseDeleteAccountResult {
+  deleteAccount: () => Promise<boolean>;
+  isSubmitting: boolean;
+  error: ProfileError | null;
+}
+
+export function useDeleteAccount(): UseDeleteAccountResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<ProfileError | null>(null);
+
+  const runDeleteAccount = useCallback(async () => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await deleteOwnAccount(getSupabaseClient());
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { deleteAccount: runDeleteAccount, isSubmitting, error };
 }

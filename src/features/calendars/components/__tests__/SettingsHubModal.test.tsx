@@ -13,7 +13,7 @@ import {
 } from "../../hooks";
 import { useCreateTag, useDeleteTag, useTagTree, useUpdateTag } from "../../../tags/hooks";
 import { useAuthActions } from "../../../auth/hooks";
-import { useMyProfile, useUpdateDisplayName } from "../../../profile/hooks";
+import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../../../profile/hooks";
 import type { TagTreeNode } from "../../../tags/types";
 
 jest.mock("../../hooks", () => ({
@@ -40,6 +40,7 @@ jest.mock("../../../auth/hooks", () => ({
 jest.mock("../../../profile/hooks", () => ({
   useMyProfile: jest.fn(),
   useUpdateDisplayName: jest.fn(),
+  useDeleteAccount: jest.fn(),
 }));
 
 jest.mock("expo-router", () => ({
@@ -135,6 +136,11 @@ function mockHooks(
     refetch: jest.fn(),
   });
   (useUpdateDisplayName as jest.Mock).mockReturnValue({ updateDisplayName: jest.fn(), isSubmitting: false, error: null });
+  (useDeleteAccount as jest.Mock).mockReturnValue({
+    deleteAccount: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
 
   return { refetchMembers, refetchTags };
 }

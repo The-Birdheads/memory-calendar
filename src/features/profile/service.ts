@@ -58,6 +58,16 @@ export async function updateDisplayName(
   return ok(mapProfileRow(data as ProfileRow));
 }
 
+export async function deleteOwnAccount(client: SupabaseClient): Promise<Result<void, ProfileError>> {
+  const { error } = await client.rpc("delete_own_account");
+
+  if (error) {
+    return err({ type: "DeleteFailed" });
+  }
+
+  return ok(undefined);
+}
+
 export function getProfileErrorMessageJa(error: ProfileError): string {
   switch (error.type) {
     case "NotFound":
@@ -66,5 +76,7 @@ export function getProfileErrorMessageJa(error: ProfileError): string {
       return "この操作を行う権限がありません";
     case "ValidationError":
       return "ユーザー名を入力してください";
+    case "DeleteFailed":
+      return "アカウントの削除に失敗しました。時間をおいて再度お試しください";
   }
 }

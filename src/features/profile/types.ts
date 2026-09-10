@@ -7,4 +7,5 @@ export interface Profile {
 export type ProfileError =
   | { type: "NotFound" }
   | { type: "Forbidden" }
-  | { type: "ValidationError"; field: "displayName" };
+  | { type: "ValidationError"; field: "displayName" }
+  | { type: "DeleteFailed" };

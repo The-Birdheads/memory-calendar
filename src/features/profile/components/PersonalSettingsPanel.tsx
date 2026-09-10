@@ -3,7 +3,8 @@ import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 
 import { router } from "expo-router";
 
 import { useAuthActions } from "../../auth/hooks";
-import { useMyProfile, useUpdateDisplayName } from "../hooks";
+import { DeleteAccountConfirmModal } from "./DeleteAccountConfirmModal";
+import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../hooks";
 import { getProfileErrorMessageJa } from "../service";
 
 export interface PersonalSettingsPanelProps {
@@ -14,8 +15,10 @@ export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
   const { profile, isLoading } = useMyProfile(userId);
   const { updateDisplayName, error: updateError } = useUpdateDisplayName();
   const { signOut, isSubmitting: isSigningOut } = useAuthActions();
+  const { deleteAccount, isSubmitting: isDeletingAccount, error: deleteError } = useDeleteAccount();
   const [nameDraft, setNameDraft] = useState("");
   const [isSaved, setIsSaved] = useState(false);
+  const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -42,40 +45,70 @@ export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
     }
   };
 
-  return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.sectionLabel}>ユーザー名</Text>
-      <TextInput
-        testID="personal-settings-name-input"
-        style={styles.input}
-        value={nameDraft}
-        onChangeText={handleChangeName}
-        editable={!isLoading}
-      />
-      {updateError ? <Text style={styles.errorText}>{getProfileErrorMessageJa(updateError)}</Text> : null}
-      {isSaved ? (
-        <Text testID="personal-settings-saved" style={styles.savedText}>
-          保存しました
-        </Text>
-      ) : null}
-      <TouchableOpacity
-        testID="personal-settings-save"
-        style={styles.saveButton}
-        onPress={handleSave}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Text style={styles.saveButtonText}>✓</Text>
-      </TouchableOpacity>
+  const handleConfirmDeleteAccount = async () => {
+    const success = await deleteAccount();
+    if (!success) {
+      return;
+    }
+    setIsDeleteConfirmVisible(false);
+    // アカウントは既に削除済みのため、signOut自体が失敗しても(サーバー側のセッションが
+    // 見つからない等)ローカルの状態は必ずクリアしてログイン画面へ戻す
+    await signOut();
+    router.replace("/(auth)/login");
+  };
 
-      <TouchableOpacity
-        testID="personal-settings-logout"
-        style={styles.logoutButton}
-        onPress={handleSignOut}
-        disabled={isSigningOut}
-      >
-        <Text style={styles.logoutButtonText}>ログアウト</Text>
-      </TouchableOpacity>
-    </ScrollView>
+  return (
+    <>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.sectionLabel}>ユーザー名</Text>
+        <TextInput
+          testID="personal-settings-name-input"
+          style={styles.input}
+          value={nameDraft}
+          onChangeText={handleChangeName}
+          editable={!isLoading}
+        />
+        {updateError ? <Text style={styles.errorText}>{getProfileErrorMessageJa(updateError)}</Text> : null}
+        {isSaved ? (
+          <Text testID="personal-settings-saved" style={styles.savedText}>
+            保存しました
+          </Text>
+        ) : null}
+        <TouchableOpacity
+          testID="personal-settings-save"
+          style={styles.saveButton}
+          onPress={handleSave}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={styles.saveButtonText}>✓</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          testID="personal-settings-logout"
+          style={styles.logoutButton}
+          onPress={handleSignOut}
+          disabled={isSigningOut}
+        >
+          <Text style={styles.logoutButtonText}>ログアウト</Text>
+        </TouchableOpacity>
+
+        {deleteError ? <Text style={styles.errorText}>{getProfileErrorMessageJa(deleteError)}</Text> : null}
+        <TouchableOpacity
+          testID="personal-settings-delete-account"
+          style={styles.deleteAccountButton}
+          onPress={() => setIsDeleteConfirmVisible(true)}
+          disabled={isDeletingAccount}
+        >
+          <Text style={styles.deleteAccountButtonText}>アカウントを削除</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      <DeleteAccountConfirmModal
+        visible={isDeleteConfirmVisible}
+        onConfirm={handleConfirmDeleteAccount}
+        onCancel={() => setIsDeleteConfirmVisible(false)}
+      />
+    </>
   );
 }
 
@@ -123,5 +156,14 @@ const styles = StyleSheet.create({
   logoutButtonText: {
     color: "#d32f2f",
     fontWeight: "700",
+  },
+  deleteAccountButton: {
+    alignSelf: "flex-start",
+    marginTop: 24,
+  },
+  deleteAccountButtonText: {
+    color: "#999",
+    fontSize: 13,
+    textDecorationLine: "underline",
   },
 });
