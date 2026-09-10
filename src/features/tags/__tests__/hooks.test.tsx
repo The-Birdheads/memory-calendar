@@ -7,6 +7,7 @@ import {
   deleteTag,
   detachTagFromEvent,
   listTagsForEvent,
+  listTagsForEvents,
   listTagTree,
   updateTag,
 } from "../service";
@@ -16,6 +17,7 @@ import {
   useDeleteTag,
   useDetachTagFromEvent,
   useEventTags,
+  useEventTagsByEvents,
   useTagTree,
   useUpdateTag,
 } from "../hooks";
@@ -30,6 +32,7 @@ jest.mock("../service", () => ({
   attachTagsToEvent: jest.fn(),
   detachTagFromEvent: jest.fn(),
   listTagsForEvent: jest.fn(),
+  listTagsForEvents: jest.fn(),
   updateTag: jest.fn(),
   deleteTag: jest.fn(),
 }));
@@ -39,12 +42,11 @@ describe("useTagTree", () => {
     jest.clearAllMocks();
   });
 
-  it("loads the tag tree for the given calendar on mount", async () => {
+  it("loads the caller's tag tree on mount, independent of any calendar", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
     const tree = [
       {
         id: "tag-1",
-        calendarId: "cal-1",
         parentId: null,
         level: "major",
         name: "行事",
@@ -55,18 +57,18 @@ describe("useTagTree", () => {
     ];
     (listTagTree as jest.Mock).mockResolvedValue({ ok: true, value: tree });
 
-    const { result } = await renderHook(() => useTagTree("cal-1"));
+    const { result } = await renderHook(() => useTagTree());
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.tagTree).toEqual(tree);
-    expect(listTagTree).toHaveBeenCalledWith({}, "cal-1");
+    expect(listTagTree).toHaveBeenCalledWith({});
   });
 
   it("keeps an empty list and sets the error when loading fails", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
     (listTagTree as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
 
-    const { result } = await renderHook(() => useTagTree("cal-1"));
+    const { result } = await renderHook(() => useTagTree());
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.tagTree).toEqual([]);
@@ -81,12 +83,12 @@ describe("useTagTree", () => {
     (getSupabaseClient as jest.Mock).mockReturnValue(client);
     (listTagTree as jest.Mock).mockResolvedValue({ ok: true, value: [] });
 
-    await renderHook(() => useTagTree("cal-1"));
+    await renderHook(() => useTagTree());
 
-    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^tags-cal-1-/)));
+    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^tags-mine-/)));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
-      { event: "*", schema: "public", table: "tags", filter: "calendar_id=eq.cal-1" },
+      { event: "*", schema: "public", table: "tags" },
       expect.any(Function)
     );
 
@@ -114,7 +116,6 @@ describe("useCreateTag", () => {
     let success = false;
     await act(async () => {
       success = await result.current.createTag({
-        calendarId: "cal-1",
         name: "行事",
         color: "#ff0000",
         level: "major",
@@ -124,7 +125,6 @@ describe("useCreateTag", () => {
     expect(success).toBe(true);
     expect(result.current.error).toBeNull();
     expect(createTag).toHaveBeenCalledWith({}, {
-      calendarId: "cal-1",
       name: "行事",
       color: "#ff0000",
       level: "major",
@@ -140,7 +140,6 @@ describe("useCreateTag", () => {
     let success = true;
     await act(async () => {
       success = await result.current.createTag({
-        calendarId: "cal-1",
         name: "誕生日",
         color: "#00ff00",
         level: "mid",
@@ -160,7 +159,7 @@ describe("useEventTags", () => {
   it("loads the tags attached to the given event on mount", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
     const tags = [
-      { id: "tag-1", calendarId: "cal-1", parentId: null, level: "major", name: "行事", color: "#ff0000", createdAt: "2026-08-18" },
+      { id: "tag-1", parentId: null, level: "major", name: "行事", color: "#ff0000", createdAt: "2026-08-18" },
     ];
     (listTagsForEvent as jest.Mock).mockResolvedValue({ ok: true, value: tags });
 
@@ -180,6 +179,49 @@ describe("useEventTags", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.tags).toEqual([]);
     expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useEventTagsByEvents", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("loads the tags for every given event, grouped by event id, on mount", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const tagsByEventId = {
+      "event-1": [
+        { id: "tag-1", parentId: null, level: "major", name: "行事", color: "#ff0000", createdAt: "2026-08-18" },
+      ],
+    };
+    (listTagsForEvents as jest.Mock).mockResolvedValue({ ok: true, value: tagsByEventId });
+
+    const { result } = await renderHook(() => useEventTagsByEvents(["event-1", "event-2"]));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.tagsByEventId).toEqual(tagsByEventId);
+    expect(listTagsForEvents).toHaveBeenCalledWith({}, ["event-1", "event-2"]);
+  });
+
+  it("keeps an empty map and sets the error when loading fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (listTagsForEvents as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useEventTagsByEvents(["event-1"]));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.tagsByEventId).toEqual({});
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+
+  it("skips fetching (and stays not-loading, with an empty map) when given no event ids", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+
+    const { result } = await renderHook(() => useEventTagsByEvents([]));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.tagsByEventId).toEqual({});
+    expect(listTagsForEvents).not.toHaveBeenCalled();
   });
 });
 

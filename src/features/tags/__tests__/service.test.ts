@@ -6,6 +6,7 @@ import {
   deleteTag,
   detachTagFromEvent,
   listTagsForEvent,
+  listTagsForEvents,
   listTagTree,
   updateTag,
 } from "../service";
@@ -14,7 +15,6 @@ describe("createTag", () => {
   it("creates a major tag and returns it on success", async () => {
     const row = {
       id: "tag-1",
-      calendar_id: "cal-1",
       parent_id: null,
       level: "major",
       name: "行事",
@@ -29,7 +29,6 @@ describe("createTag", () => {
     } as unknown as SupabaseClient;
 
     const result = await createTag(client, {
-      calendarId: "cal-1",
       name: "行事",
       color: "#ff0000",
       level: "major",
@@ -39,7 +38,6 @@ describe("createTag", () => {
       ok: true,
       value: {
         id: "tag-1",
-        calendarId: "cal-1",
         parentId: null,
         level: "major",
         name: "行事",
@@ -49,7 +47,6 @@ describe("createTag", () => {
     });
     expect(client.from).toHaveBeenCalledWith("tags");
     expect(insert).toHaveBeenCalledWith({
-      calendar_id: "cal-1",
       name: "行事",
       color: "#ff0000",
       level: "major",
@@ -60,7 +57,6 @@ describe("createTag", () => {
   it("creates a mid tag with a parent and returns it on success", async () => {
     const row = {
       id: "tag-2",
-      calendar_id: "cal-1",
       parent_id: "tag-1",
       level: "mid",
       name: "誕生日",
@@ -75,7 +71,6 @@ describe("createTag", () => {
     } as unknown as SupabaseClient;
 
     const result = await createTag(client, {
-      calendarId: "cal-1",
       name: "誕生日",
       color: "#00ff00",
       level: "mid",
@@ -86,7 +81,6 @@ describe("createTag", () => {
       ok: true,
       value: {
         id: "tag-2",
-        calendarId: "cal-1",
         parentId: "tag-1",
         level: "mid",
         name: "誕生日",
@@ -95,7 +89,6 @@ describe("createTag", () => {
       },
     });
     expect(insert).toHaveBeenCalledWith({
-      calendar_id: "cal-1",
       name: "誕生日",
       color: "#00ff00",
       level: "mid",
@@ -107,7 +100,6 @@ describe("createTag", () => {
     const client = { from: jest.fn() } as unknown as SupabaseClient;
 
     const result = await createTag(client, {
-      calendarId: "cal-1",
       name: "行事",
       color: "#ff0000",
       level: "major",
@@ -122,7 +114,6 @@ describe("createTag", () => {
     const client = { from: jest.fn() } as unknown as SupabaseClient;
 
     const result = await createTag(client, {
-      calendarId: "cal-1",
       name: "誕生日",
       color: "#00ff00",
       level: "mid",
@@ -144,7 +135,6 @@ describe("createTag", () => {
     } as unknown as SupabaseClient;
 
     const result = await createTag(client, {
-      calendarId: "cal-1",
       name: "誕生日",
       color: "#00ff00",
       level: "mid",
@@ -166,7 +156,6 @@ describe("createTag", () => {
     } as unknown as SupabaseClient;
 
     const result = await createTag(client, {
-      calendarId: "cal-1",
       name: "行事",
       color: "#ff0000",
       level: "major",
@@ -177,27 +166,25 @@ describe("createTag", () => {
 });
 
 describe("listTagTree", () => {
-  it("assembles flat rows into a major/mid/minor tree", async () => {
+  it("assembles flat rows into a major/mid/minor tree, independent of any calendar", async () => {
     const rows = [
-      { id: "tag-1", calendar_id: "cal-1", parent_id: null, level: "major", name: "行事", color: "#ff0000", created_at: "2026-08-18T00:00:00.000Z" },
-      { id: "tag-2", calendar_id: "cal-1", parent_id: "tag-1", level: "mid", name: "誕生日", color: "#00ff00", created_at: "2026-08-18T00:01:00.000Z" },
-      { id: "tag-3", calendar_id: "cal-1", parent_id: "tag-2", level: "minor", name: "家族の誕生日", color: "#0000ff", created_at: "2026-08-18T00:02:00.000Z" },
+      { id: "tag-1", parent_id: null, level: "major", name: "行事", color: "#ff0000", created_at: "2026-08-18T00:00:00.000Z" },
+      { id: "tag-2", parent_id: "tag-1", level: "mid", name: "誕生日", color: "#00ff00", created_at: "2026-08-18T00:01:00.000Z" },
+      { id: "tag-3", parent_id: "tag-2", level: "minor", name: "家族の誕生日", color: "#0000ff", created_at: "2026-08-18T00:02:00.000Z" },
     ];
     const select = jest.fn().mockReturnThis();
-    const eq = jest.fn().mockReturnThis();
     const order = jest.fn().mockResolvedValue({ data: rows, error: null });
     const client = {
-      from: jest.fn().mockReturnValue({ select, eq, order }),
+      from: jest.fn().mockReturnValue({ select, order }),
     } as unknown as SupabaseClient;
 
-    const result = await listTagTree(client, "cal-1");
+    const result = await listTagTree(client);
 
     expect(result).toEqual({
       ok: true,
       value: [
         {
           id: "tag-1",
-          calendarId: "cal-1",
           parentId: null,
           level: "major",
           name: "行事",
@@ -206,7 +193,6 @@ describe("listTagTree", () => {
           children: [
             {
               id: "tag-2",
-              calendarId: "cal-1",
               parentId: "tag-1",
               level: "mid",
               name: "誕生日",
@@ -215,7 +201,6 @@ describe("listTagTree", () => {
               children: [
                 {
                   id: "tag-3",
-                  calendarId: "cal-1",
                   parentId: "tag-2",
                   level: "minor",
                   name: "家族の誕生日",
@@ -230,21 +215,19 @@ describe("listTagTree", () => {
       ],
     });
     expect(client.from).toHaveBeenCalledWith("tags");
-    expect(eq).toHaveBeenCalledWith("calendar_id", "cal-1");
   });
 
   it("maps a Supabase error to Forbidden", async () => {
     const select = jest.fn().mockReturnThis();
-    const eq = jest.fn().mockReturnThis();
     const order = jest.fn().mockResolvedValue({
       data: null,
       error: { message: "permission denied", code: "42501" },
     });
     const client = {
-      from: jest.fn().mockReturnValue({ select, eq, order }),
+      from: jest.fn().mockReturnValue({ select, order }),
     } as unknown as SupabaseClient;
 
-    const result = await listTagTree(client, "cal-1");
+    const result = await listTagTree(client);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });
@@ -327,7 +310,6 @@ describe("listTagsForEvent", () => {
       {
         tags: {
           id: "tag-1",
-          calendar_id: "cal-1",
           parent_id: null,
           level: "major",
           name: "行事",
@@ -338,7 +320,6 @@ describe("listTagsForEvent", () => {
       {
         tags: {
           id: "tag-2",
-          calendar_id: "cal-1",
           parent_id: "tag-1",
           level: "mid",
           name: "誕生日",
@@ -360,7 +341,6 @@ describe("listTagsForEvent", () => {
       value: [
         {
           id: "tag-1",
-          calendarId: "cal-1",
           parentId: null,
           level: "major",
           name: "行事",
@@ -369,7 +349,6 @@ describe("listTagsForEvent", () => {
         },
         {
           id: "tag-2",
-          calendarId: "cal-1",
           parentId: "tag-1",
           level: "mid",
           name: "誕生日",
@@ -399,11 +378,120 @@ describe("listTagsForEvent", () => {
   });
 });
 
+describe("listTagsForEvents", () => {
+  it("groups the tags attached to each of the given events by event id", async () => {
+    const rows = [
+      {
+        event_id: "event-1",
+        tags: {
+          id: "tag-1",
+          parent_id: null,
+          level: "major",
+          name: "行事",
+          color: "#ff0000",
+          created_at: "2026-08-18T00:00:00.000Z",
+        },
+      },
+      {
+        event_id: "event-1",
+        tags: {
+          id: "tag-2",
+          parent_id: "tag-1",
+          level: "mid",
+          name: "誕生日",
+          color: "#00ff00",
+          created_at: "2026-08-18T00:01:00.000Z",
+        },
+      },
+      {
+        event_id: "event-2",
+        tags: {
+          id: "tag-3",
+          parent_id: null,
+          level: "major",
+          name: "旅行",
+          color: "#0000ff",
+          created_at: "2026-08-18T00:02:00.000Z",
+        },
+      },
+    ];
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn }),
+    } as unknown as SupabaseClient;
+
+    const result = await listTagsForEvents(client, ["event-1", "event-2"]);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        "event-1": [
+          {
+            id: "tag-1",
+            parentId: null,
+            level: "major",
+            name: "行事",
+            color: "#ff0000",
+            createdAt: "2026-08-18T00:00:00.000Z",
+          },
+          {
+            id: "tag-2",
+            parentId: "tag-1",
+            level: "mid",
+            name: "誕生日",
+            color: "#00ff00",
+            createdAt: "2026-08-18T00:01:00.000Z",
+          },
+        ],
+        "event-2": [
+          {
+            id: "tag-3",
+            parentId: null,
+            level: "major",
+            name: "旅行",
+            color: "#0000ff",
+            createdAt: "2026-08-18T00:02:00.000Z",
+          },
+        ],
+      },
+    });
+    expect(client.from).toHaveBeenCalledWith("event_tags");
+    expect(select).toHaveBeenCalledWith("event_id, tags(*)");
+    expect(inFn).toHaveBeenCalledWith("event_id", ["event-1", "event-2"]);
+  });
+
+  it("returns an empty map without querying when given no event ids", async () => {
+    const client = {
+      from: jest.fn(),
+    } as unknown as SupabaseClient;
+
+    const result = await listTagsForEvents(client, []);
+
+    expect(result).toEqual({ ok: true, value: {} });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("maps a Supabase error to Forbidden", async () => {
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: "permission denied", code: "42501" },
+    });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn }),
+    } as unknown as SupabaseClient;
+
+    const result = await listTagsForEvents(client, ["event-1"]);
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
 describe("updateTag", () => {
   it("updates a tag's name and color and returns it on success", async () => {
     const row = {
       id: "tag-1",
-      calendar_id: "cal-1",
       parent_id: null,
       level: "major",
       name: "行事(変更後)",
@@ -424,7 +512,6 @@ describe("updateTag", () => {
       ok: true,
       value: {
         id: "tag-1",
-        calendarId: "cal-1",
         parentId: null,
         level: "major",
         name: "行事(変更後)",
@@ -440,7 +527,6 @@ describe("updateTag", () => {
   it("updates the level and parent together", async () => {
     const row = {
       id: "tag-2",
-      calendar_id: "cal-1",
       parent_id: "tag-1",
       level: "mid",
       name: "誕生日",

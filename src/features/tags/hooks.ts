@@ -8,6 +8,7 @@ import {
   deleteTag,
   detachTagFromEvent,
   listTagsForEvent,
+  listTagsForEvents,
   listTagTree,
   updateTag,
 } from "./service";
@@ -20,14 +21,14 @@ export interface UseTagTreeResult {
   refetch: () => Promise<void>;
 }
 
-export function useTagTree(calendarId: string): UseTagTreeResult {
+export function useTagTree(): UseTagTreeResult {
   const [tagTree, setTagTree] = useState<TagTreeNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<TagError | null>(null);
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
-    const result = await listTagTree(getSupabaseClient(), calendarId);
+    const result = await listTagTree(getSupabaseClient());
     if (result.ok) {
       setTagTree(result.value);
       setError(null);
@@ -36,21 +37,15 @@ export function useTagTree(calendarId: string): UseTagTreeResult {
       setError(result.error);
     }
     setIsLoading(false);
-  }, [calendarId]);
+  }, []);
 
   useEffect(() => {
     refetch();
   }, [refetch]);
 
   useEffect(() => {
-    return subscribeToTableChanges(
-      getSupabaseClient(),
-      `tags-${calendarId}`,
-      "tags",
-      refetch,
-      `calendar_id=eq.${calendarId}`
-    );
-  }, [calendarId, refetch]);
+    return subscribeToTableChanges(getSupabaseClient(), "tags-mine", "tags", refetch);
+  }, [refetch]);
 
   return { tagTree, isLoading, error, refetch };
 }
@@ -110,6 +105,55 @@ export function useEventTags(eventId: string): UseEventTagsResult {
   }, [refetch]);
 
   return { tags, isLoading, error, refetch };
+}
+
+export interface UseEventTagsByEventsResult {
+  tagsByEventId: Record<string, Tag[]>;
+  isLoading: boolean;
+  error: TagError | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Batched version of useEventTags, for list screens (e.g. the ToDo tab) that
+ * show many events at once - one query for all of them instead of one hook
+ * instance (and one query) per event.
+ */
+export function useEventTagsByEvents(eventIds: string[]): UseEventTagsByEventsResult {
+  const [tagsByEventId, setTagsByEventId] = useState<Record<string, Tag[]>>({});
+  const [isLoading, setIsLoading] = useState(eventIds.length > 0);
+  const [error, setError] = useState<TagError | null>(null);
+  // Depend on a stable, order-sensitive key derived from the ids rather than
+  // the array reference itself, since callers typically pass a freshly
+  // mapped array each render - keying on the array identity would refetch
+  // (and re-run this effect) every single render.
+  const eventIdsKey = eventIds.join(",");
+
+  const refetch = useCallback(async () => {
+    if (eventIds.length === 0) {
+      setTagsByEventId({});
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    const result = await listTagsForEvents(getSupabaseClient(), eventIds);
+    if (result.ok) {
+      setTagsByEventId(result.value);
+      setError(null);
+    } else {
+      setTagsByEventId({});
+      setError(result.error);
+    }
+    setIsLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventIdsKey]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { tagsByEventId, isLoading, error, refetch };
 }
 
 export interface UseAttachTagsToEventResult {

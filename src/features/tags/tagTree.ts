@@ -1,5 +1,13 @@
 import type { Tag, TagTreeNode } from "./types";
 
+/** Flattens a tag tree into a flat list of every tag (major/mid/minor alike),
+ * in depth-first order - used wherever code needs "all of the caller's tags"
+ * rather than the nested tree shape (parent lookups, color-collision checks,
+ * etc.). */
+export function flattenTagTree(nodes: TagTreeNode[]): Tag[] {
+  return nodes.flatMap((node) => [node, ...flattenTagTree(node.children)]);
+}
+
 /**
  * Flattens a tag tree into a display list where a node's children are only
  * included when the node itself is "expanded" (its id is in `expandedIds`).

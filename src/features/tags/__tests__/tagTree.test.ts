@@ -3,7 +3,6 @@ import { flattenVisibleTagTree, getAncestorChainIds } from "../tagTree";
 const TREE = [
   {
     id: "major-1",
-    calendarId: "cal-1",
     parentId: null,
     level: "major" as const,
     name: "旅行",
@@ -12,7 +11,6 @@ const TREE = [
     children: [
       {
         id: "mid-1",
-        calendarId: "cal-1",
         parentId: "major-1",
         level: "mid" as const,
         name: "国内",
@@ -21,7 +19,6 @@ const TREE = [
         children: [
           {
             id: "minor-1",
-            calendarId: "cal-1",
             parentId: "mid-1",
             level: "minor" as const,
             name: "温泉",
@@ -35,7 +32,6 @@ const TREE = [
   },
   {
     id: "major-2",
-    calendarId: "cal-1",
     parentId: null,
     level: "major" as const,
     name: "仕事",
@@ -72,9 +68,9 @@ describe("flattenVisibleTagTree", () => {
 });
 
 const FLAT_TAGS = [
-  { id: "major-1", calendarId: "cal-1", parentId: null, level: "major" as const, name: "旅行", color: "#ff0000", createdAt: "2026-08-01T00:00:00.000Z" },
-  { id: "mid-1", calendarId: "cal-1", parentId: "major-1", level: "mid" as const, name: "国内", color: "#ff8888", createdAt: "2026-08-01T00:00:00.000Z" },
-  { id: "minor-1", calendarId: "cal-1", parentId: "mid-1", level: "minor" as const, name: "温泉", color: "#ffcccc", createdAt: "2026-08-01T00:00:00.000Z" },
+  { id: "major-1", parentId: null, level: "major" as const, name: "旅行", color: "#ff0000", createdAt: "2026-08-01T00:00:00.000Z" },
+  { id: "mid-1", parentId: "major-1", level: "mid" as const, name: "国内", color: "#ff8888", createdAt: "2026-08-01T00:00:00.000Z" },
+  { id: "minor-1", parentId: "mid-1", level: "minor" as const, name: "温泉", color: "#ffcccc", createdAt: "2026-08-01T00:00:00.000Z" },
 ];
 
 describe("getAncestorChainIds", () => {

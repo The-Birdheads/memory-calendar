@@ -73,4 +73,21 @@ describe("TagPickerRow", () => {
 
     expect(onToggle).toHaveBeenCalledWith("tag-a");
   });
+
+  it("shows its own 「タグ」 label by default", async () => {
+    const { getByText } = await render(
+      <TagPickerRow testIDPrefix="event-create" tagTree={TREE} selectedTagIds={[]} onToggle={jest.fn()} />
+    );
+
+    expect(getByText("タグ")).toBeTruthy();
+  });
+
+  it("omits its own 「タグ」 label when hideLabel is set, for embedding under a caller-supplied heading", async () => {
+    const { queryByText, getByTestId } = await render(
+      <TagPickerRow testIDPrefix="event-create" tagTree={TREE} selectedTagIds={[]} onToggle={jest.fn()} hideLabel />
+    );
+
+    expect(queryByText("タグ")).toBeNull();
+    expect(getByTestId("event-create-tag-tag-a")).toBeTruthy();
+  });
 });

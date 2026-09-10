@@ -4,7 +4,7 @@ import { StyleSheet } from "react-native";
 import { TagLevelIcon } from "../TagLevelIcon";
 
 function flatStyle(style: unknown) {
-  return StyleSheet.flatten(style) as Record<string, unknown>;
+  return StyleSheet.flatten(style as Parameters<typeof StyleSheet.flatten>[0]) as Record<string, unknown>;
 }
 
 describe("TagLevelIcon", () => {

@@ -8,6 +8,8 @@ export interface TagPickerRowProps {
   tagTree: TagTreeNode[];
   selectedTagIds: string[];
   onToggle: (tagId: string) => void;
+  /** Omits the picker's own 「タグ」 label - for embedding under a caller-supplied heading that already says so. */
+  hideLabel?: boolean;
 }
 
 /**
@@ -17,7 +19,7 @@ export interface TagPickerRowProps {
  * so the picker drills down one level at a time instead of dumping every
  * tag in the calendar into one flat list.
  */
-export function TagPickerRow({ testIDPrefix, tagTree, selectedTagIds, onToggle }: TagPickerRowProps) {
+export function TagPickerRow({ testIDPrefix, tagTree, selectedTagIds, onToggle, hideLabel }: TagPickerRowProps) {
   const visibleTags = flattenVisibleTagTree(tagTree, selectedTagIds);
 
   if (visibleTags.length === 0) {
@@ -26,7 +28,7 @@ export function TagPickerRow({ testIDPrefix, tagTree, selectedTagIds, onToggle }
 
   return (
     <View style={styles.section}>
-      <Text style={styles.label}>タグ</Text>
+      {hideLabel ? null : <Text style={styles.label}>タグ</Text>}
       <View style={styles.row}>
         {visibleTags.map((tag) => {
           const selected = selectedTagIds.includes(tag.id);
@@ -60,6 +62,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
+    backgroundColor: "#fff",
     borderWidth: 1,
     borderRadius: 16,
     paddingHorizontal: 12,

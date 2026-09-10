@@ -2,6 +2,11 @@ import { fireEvent, render } from "@testing-library/react-native";
 
 import { EditTagForm, TAG_COLORS } from "../EditTagForm";
 import { lightenHexColor } from "../../../../shared/utils/color";
+import type { Calendar } from "../../../calendars/types";
+
+const CALENDARS: Calendar[] = [
+  { id: "cal-1", name: "我が家", kind: "group", color: "#2f6fed", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
+];
 
 const MAJOR_TAG = {
   id: "tag-1",
@@ -26,7 +31,8 @@ const OTHER_MAJOR_TAG = {
 describe("EditTagForm", () => {
   it("pre-fills the form with the tag's current name and highlights its current color swatch", async () => {
     const { getByTestId } = await render(
-      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} onSave={jest.fn()} />
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS}
+        onSave={jest.fn()} />
     );
 
     expect(getByTestId("edit-tag-name-input").props.value).toBe("行事");
@@ -35,7 +41,8 @@ describe("EditTagForm", () => {
   it("saves the edited name and a newly picked swatch color, keeping the level and parent unchanged", async () => {
     const onSave = jest.fn();
     const { getByTestId } = await render(
-      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} onSave={onSave} />
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS}
+        onSave={onSave} />
     );
 
     await fireEvent.changeText(getByTestId("edit-tag-name-input"), "行楽");
@@ -50,18 +57,58 @@ describe("EditTagForm", () => {
     });
   });
 
+  it("uses a ✓ icon instead of the 保存 text label for the save button", async () => {
+    const { queryByText, getByTestId } = await render(
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS}
+        onSave={jest.fn()} />
+    );
+
+    expect(queryByText("保存")).toBeNull();
+    expect(getByTestId("edit-tag-save-button")).toBeTruthy();
+  });
+
   it("does not show a color picker for a major tag's own color once color-picking is disabled by level", async () => {
     // sanity check: a major tag shows pickable swatches
     const { getByTestId } = await render(
-      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} onSave={jest.fn()} />
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS}
+        onSave={jest.fn()} />
     );
     expect(getByTestId("edit-tag-color-blue")).toBeTruthy();
+  });
+
+  it("marks a color already used by a calendar, and explains which one once it's picked", async () => {
+    const { getByTestId, queryByTestId } = await render(
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS} onSave={jest.fn()} />
+    );
+
+    // CALENDARS has cal-1 "我が家" using blue (#2f6fed).
+    expect(getByTestId("edit-tag-color-blue-used-mark")).toBeTruthy();
+    expect(queryByTestId("edit-tag-color-usage-message")).toBeNull();
+
+    await fireEvent.press(getByTestId("edit-tag-color-blue"));
+
+    expect(getByTestId("edit-tag-color-usage-message").props.children).toBe(
+      "この色は共有カレンダー「我が家」で使用中です"
+    );
+  });
+
+  it("does not flag the tag's own current color as 'used' against itself", async () => {
+    // MAJOR_TAG's own recorded color is an exact palette color here (blue),
+    // and it's the only tag in allTags - without self-exclusion this would
+    // incorrectly show the blue swatch as "used by 行事" (itself).
+    const tagOnBlue = { ...MAJOR_TAG, color: "#2f6fed" };
+    const { queryByTestId } = await render(
+      <EditTagForm tag={tagOnBlue} allTags={[tagOnBlue]} calendars={[]} onSave={jest.fn()} />
+    );
+
+    expect(queryByTestId("edit-tag-color-blue-used-mark")).toBeNull();
   });
 
   it("auto-derives a lighter shade of the parent's color for a mid tag instead of showing swatches", async () => {
     const onSave = jest.fn();
     const { getByTestId, queryByTestId } = await render(
-      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, OTHER_MAJOR_TAG]} onSave={onSave} />
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, OTHER_MAJOR_TAG]} calendars={CALENDARS}
+        onSave={onSave} />
     );
 
     await fireEvent.press(getByTestId("edit-tag-level-mid"));
@@ -83,7 +130,8 @@ describe("EditTagForm", () => {
   it("excludes the tag itself from its own eligible parent options", async () => {
     const midTag = { ...MAJOR_TAG, id: "tag-3", level: "mid" as const, parentId: "tag-1" };
     const { queryByTestId } = await render(
-      <EditTagForm tag={midTag} allTags={[MAJOR_TAG, midTag]} onSave={jest.fn()} />
+      <EditTagForm tag={midTag} allTags={[MAJOR_TAG, midTag]} calendars={CALENDARS}
+        onSave={jest.fn()} />
     );
 
     await fireEvent.press(queryByTestId("edit-tag-level-mid")!);
@@ -94,7 +142,8 @@ describe("EditTagForm", () => {
   it("disables the mid and minor level buttons when no eligible parent tags exist", async () => {
     const onSave = jest.fn();
     const { getByTestId } = await render(
-      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} onSave={onSave} />
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS}
+        onSave={onSave} />
     );
 
     expect(getByTestId("edit-tag-level-mid").props.accessibilityState.disabled).toBe(true);
@@ -108,7 +157,8 @@ describe("EditTagForm", () => {
   it("enables the minor level button once a mid tag exists to parent it", async () => {
     const midTag = { ...MAJOR_TAG, id: "tag-4", level: "mid" as const, parentId: "tag-1", name: "誕生日" };
     const { getByTestId } = await render(
-      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, midTag]} onSave={jest.fn()} />
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, midTag]} calendars={CALENDARS}
+        onSave={jest.fn()} />
     );
 
     expect(getByTestId("edit-tag-level-minor").props.accessibilityState.disabled).toBe(false);
@@ -133,6 +183,7 @@ describe("EditTagForm", () => {
       <EditTagForm
         tag={MAJOR_TAG}
         allTags={[MAJOR_TAG, OTHER_MAJOR_TAG, midOfTag1, midOfTag2]}
+        calendars={CALENDARS}
         onSave={onSave}
       />
     );
@@ -163,7 +214,8 @@ describe("EditTagForm", () => {
   it("resets the chosen 大分類/中分類 when switching away from and back to 小分類", async () => {
     const midOfTag1 = { ...MAJOR_TAG, id: "tag-4", level: "mid" as const, parentId: "tag-1", name: "誕生日" };
     const { getByTestId, queryByTestId } = await render(
-      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, midOfTag1]} onSave={jest.fn()} />
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, midOfTag1]} calendars={CALENDARS}
+        onSave={jest.fn()} />
     );
 
     await fireEvent.press(getByTestId("edit-tag-level-minor"));

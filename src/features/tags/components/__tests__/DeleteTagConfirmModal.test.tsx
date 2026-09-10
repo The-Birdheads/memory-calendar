@@ -50,4 +50,28 @@ describe("DeleteTagConfirmModal", () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it("uses icons instead of text for the cancel/delete buttons", async () => {
+    const { queryByText, getByTestId } = await render(
+      <DeleteTagConfirmModal visible onConfirm={jest.fn()} onCancel={jest.fn()} />
+    );
+
+    expect(queryByText("キャンセル")).toBeNull();
+    expect(queryByText("削除する")).toBeNull();
+    expect(getByTestId("delete-tag-cancel-button")).toBeTruthy();
+    expect(getByTestId("delete-tag-confirm-button")).toBeTruthy();
+  });
+
+  it("calls onCancel (not onConfirm) when tapping outside the card, on the backdrop", async () => {
+    const onCancel = jest.fn();
+    const onConfirm = jest.fn();
+    const { getByTestId } = await render(
+      <DeleteTagConfirmModal visible onConfirm={onConfirm} onCancel={onCancel} />
+    );
+
+    await fireEvent.press(getByTestId("delete-tag-backdrop"));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
 });

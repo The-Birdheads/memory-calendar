@@ -5,7 +5,6 @@ import type { CreateTagInput, Tag, TagError, TagTreeNode, UpdateTagInput } from 
 
 interface TagRow {
   id: string;
-  calendar_id: string;
   parent_id: string | null;
   level: Tag["level"];
   name: string;
@@ -16,7 +15,6 @@ interface TagRow {
 function mapTagRow(row: TagRow): Tag {
   return {
     id: row.id,
-    calendarId: row.calendar_id,
     parentId: row.parent_id,
     level: row.level,
     name: row.name,
@@ -66,7 +64,6 @@ export async function createTag(
   const { data, error } = await client
     .from("tags")
     .insert({
-      calendar_id: input.calendarId,
       name: input.name,
       color: input.color,
       level: input.level,
@@ -117,13 +114,11 @@ export async function updateTag(
 }
 
 export async function listTagTree(
-  client: SupabaseClient,
-  calendarId: string
+  client: SupabaseClient
 ): Promise<Result<TagTreeNode[], TagError>> {
   const { data, error } = await client
     .from("tags")
     .select()
-    .eq("calendar_id", calendarId)
     .order("created_at", { ascending: true });
 
   if (error || !data) {
@@ -178,6 +173,37 @@ export async function listTagsForEvent(
   }
 
   return ok((data as unknown as { tags: TagRow }[]).map((row) => mapTagRow(row.tags)));
+}
+
+/**
+ * Batched version of listTagsForEvent - fetches the tags for many events in
+ * one query and groups them by event id, for list screens (e.g. the ToDo
+ * tab) that show many events at once instead of one detail screen.
+ */
+export async function listTagsForEvents(
+  client: SupabaseClient,
+  eventIds: string[]
+): Promise<Result<Record<string, Tag[]>, TagError>> {
+  if (eventIds.length === 0) {
+    return ok({});
+  }
+
+  const { data, error } = await client
+    .from("event_tags")
+    .select("event_id, tags(*)")
+    .in("event_id", eventIds);
+
+  if (error || !data) {
+    return err(mapTagError(error as PostgrestError));
+  }
+
+  const tagsByEventId: Record<string, Tag[]> = {};
+  for (const row of data as unknown as { event_id: string; tags: TagRow }[]) {
+    const tags = tagsByEventId[row.event_id] ?? (tagsByEventId[row.event_id] = []);
+    tags.push(mapTagRow(row.tags));
+  }
+
+  return ok(tagsByEventId);
 }
 
 export async function deleteTag(

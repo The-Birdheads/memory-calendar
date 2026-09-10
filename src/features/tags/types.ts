@@ -2,7 +2,6 @@ export type TagLevel = "major" | "mid" | "minor";
 
 export interface Tag {
   id: string;
-  calendarId: string;
   parentId: string | null;
   level: TagLevel;
   name: string;
@@ -15,7 +14,6 @@ export interface TagTreeNode extends Tag {
 }
 
 export interface CreateTagInput {
-  calendarId: string;
   name: string;
   color: string;
   level: TagLevel;

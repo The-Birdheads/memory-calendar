@@ -1,24 +1,22 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
+import { ColorSwatchPicker } from "../../../shared/components/ColorSwatchPicker";
+import { COLOR_PALETTE } from "../../../shared/constants/colorPalette";
 import { lightenHexColor } from "../../../shared/utils/color";
+import { findColorUsage, type ColorUsageEntry } from "../../../shared/utils/colorUsage";
+import type { Calendar } from "../../calendars/types";
 import type { Tag, TagLevel, UpdateTagInput } from "../types";
 
 export interface EditTagFormProps {
   tag: Tag;
   allTags: Tag[];
+  /** 大分類の色選択で、既に他のカレンダー/タグが使っている色を教えるために使う。 */
+  calendars: Calendar[];
   onSave: (input: UpdateTagInput) => void;
 }
 
-export const TAG_COLORS: { name: string; hex: string }[] = [
-  { name: "blue", hex: "#2f6fed" },
-  { name: "red", hex: "#e53935" },
-  { name: "green", hex: "#43a047" },
-  { name: "orange", hex: "#fb8c00" },
-  { name: "purple", hex: "#8e24aa" },
-  { name: "teal", hex: "#00897b" },
-  { name: "pink", hex: "#d81b60" },
-];
+export const TAG_COLORS = COLOR_PALETTE;
 
 // How much lighter each level gets, blended toward white, relative to its own parent's color.
 const AUTO_SHADE_AMOUNT = 0.35;
@@ -33,11 +31,21 @@ function eligibleParentsFor(level: TagLevel, allTags: Tag[], excludeId: string):
   return allTags.filter((candidate) => candidate.level === parentLevel && candidate.id !== excludeId);
 }
 
-export function EditTagForm({ tag, allTags, onSave }: EditTagFormProps) {
+export function EditTagForm({ tag, allTags, calendars, onSave }: EditTagFormProps) {
   const [name, setName] = useState(tag.name);
   const [level, setLevel] = useState<TagLevel>(tag.level);
   const [parentId, setParentId] = useState<string | null>(tag.parentId);
   const [majorColor, setMajorColor] = useState(tag.level === "major" ? tag.color : TAG_COLORS[0].hex);
+  const usageByColor = useMemo<Record<string, ColorUsageEntry>>(
+    () =>
+      Object.fromEntries(
+        COLOR_PALETTE.map((color) => [
+          color.hex,
+          findColorUsage(color.hex, calendars, allTags, { excludeTagId: tag.id }),
+        ])
+      ),
+    [calendars, allTags, tag.id]
+  );
   // For a 小分類 (minor) tag, the parent (中分類) is chosen in two steps: first
   // pick its 大分類, then pick one of that 大分類's 中分類 children as the
   // actual parent. grandparentId tracks the first step.
@@ -81,20 +89,12 @@ export function EditTagForm({ tag, allTags, onSave }: EditTagFormProps) {
       <TextInput testID="edit-tag-name-input" style={styles.input} value={name} onChangeText={setName} />
 
       {level === "major" ? (
-        <View style={styles.colorRow}>
-          {TAG_COLORS.map((color) => (
-            <TouchableOpacity
-              key={color.name}
-              testID={`edit-tag-color-${color.name}`}
-              style={[
-                styles.colorSwatch,
-                { backgroundColor: color.hex },
-                majorColor === color.hex && styles.colorSwatchSelected,
-              ]}
-              onPress={() => setMajorColor(color.hex)}
-            />
-          ))}
-        </View>
+        <ColorSwatchPicker
+          testIDPrefix="edit-tag-color"
+          selected={majorColor}
+          onSelect={setMajorColor}
+          usageByColor={usageByColor}
+        />
       ) : (
         <View style={styles.autoColorRow}>
           <View
@@ -170,8 +170,13 @@ export function EditTagForm({ tag, allTags, onSave }: EditTagFormProps) {
         </View>
       ) : null}
 
-      <TouchableOpacity testID="edit-tag-save-button" style={styles.saveButton} onPress={handleSave}>
-        <Text>保存</Text>
+      <TouchableOpacity
+        testID="edit-tag-save-button"
+        style={styles.saveButton}
+        onPress={handleSave}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Text style={styles.saveButtonText}>✓</Text>
       </TouchableOpacity>
     </View>
   );
@@ -188,20 +193,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  colorRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
   colorSwatch: {
     width: 28,
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
     borderColor: "transparent",
-  },
-  colorSwatchSelected: {
-    borderColor: "#333",
   },
   autoColorRow: {
     flexDirection: "row",
@@ -252,5 +249,10 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     paddingHorizontal: 16,
     paddingVertical: 8,
+  },
+  saveButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2f6fed",
   },
 });
