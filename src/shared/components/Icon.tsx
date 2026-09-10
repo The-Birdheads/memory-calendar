@@ -20,6 +20,15 @@ const ICONS = {
   "chevron-right": require("../../../assets/icons/chevron-right.png"),
   location: require("../../../assets/icons/location.png"),
   clock: require("../../../assets/icons/clock.png"),
+  lock: require("../../../assets/icons/lock.png"),
+  calendar: require("../../../assets/icons/calendar.png"),
+  checklist: require("../../../assets/icons/checklist.png"),
+  photo: require("../../../assets/icons/photo.png"),
+  meal: require("../../../assets/icons/meal.png"),
+  grid: require("../../../assets/icons/grid.png"),
+  list: require("../../../assets/icons/list.png"),
+  edit: require("../../../assets/icons/edit.png"),
+  comment: require("../../../assets/icons/comment.png"),
 } as const;
 
 export type IconName = keyof typeof ICONS;

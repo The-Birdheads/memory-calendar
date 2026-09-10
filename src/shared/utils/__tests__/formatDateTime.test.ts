@@ -1,4 +1,12 @@
-import { formatDateOnly, formatDateTime, formatDateTimeRange, formatTime, jstNow, toJstDateKey } from "../formatDateTime";
+import {
+  formatDateOnly,
+  formatDateTime,
+  formatDateTimeRange,
+  formatTime,
+  jstNow,
+  todayJstDateKey,
+  toJstDateKey,
+} from "../formatDateTime";
 
 describe("formatDateTime", () => {
   it("formats a UTC ISO string as zero-padded YYYY/MM/DD hh:mm in JST (+9h)", () => {
@@ -64,6 +72,20 @@ describe("jstNow", () => {
     expect(now.getUTCMonth()).toBe(8); // September (0-indexed)
     expect(now.getUTCDate()).toBe(16);
     expect(now.getUTCHours()).toBe(5);
+  });
+});
+
+describe("todayJstDateKey", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("returns today's JST calendar day, rolling over even right around UTC midnight", () => {
+    jest.useFakeTimers();
+    // 2026-09-15T20:00:00.000Z is 2026-09-16 05:00 JST.
+    jest.setSystemTime(new Date("2026-09-15T20:00:00.000Z"));
+
+    expect(todayJstDateKey()).toBe("2026-09-16");
   });
 });
 

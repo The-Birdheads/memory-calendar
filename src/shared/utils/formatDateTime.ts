@@ -32,6 +32,16 @@ export function toJstDateKey(iso: string): string {
 }
 
 /**
+ * Today's "YYYY-MM-DD" JST calendar day. jstNow()'s own UTC-* accessors
+ * already read as JST wall-clock components, so this is a plain slice of
+ * its ISO string - passing it through toJstDateKey (which itself shifts a
+ * RAW UTC instant by +9h) would double-shift it.
+ */
+export function todayJstDateKey(): string {
+  return jstNow().toISOString().slice(0, 10);
+}
+
+/**
  * Formats an ISO date-time string as "YYYY/MM/DD hh:mm" (zero-padded, JST)
  * so dates and times are displayed consistently across the whole app,
  * always in Japan time, instead of raw ISO strings, ad-hoc per-screen
