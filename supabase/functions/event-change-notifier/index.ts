@@ -1,6 +1,6 @@
-// EventChangeNotifier: 予定の追加・変更・コメント投稿・繰り返しシリーズ作成を起点に、
+// EventChangeNotifier: 予定の追加・変更・削除・コメント投稿・繰り返しシリーズ作成を起点に、
 // 操作者本人を除くカレンダーメンバーへ即時プッシュ通知を送るEdge Function。
-// DB Webhook(events INSERT/UPDATE `series_id IS NULL`のみ / event_comments INSERT /
+// DB Webhook(events INSERT/UPDATE `series_id IS NULL`のみ / events DELETE / event_comments INSERT /
 // event_series_creation_events INSERT)から呼び出される。
 // notification_log の部分一意インデックスにより、再送(at-least-once配信)されても重複通知しない。
 
@@ -150,6 +150,18 @@ async function handleEventUpdate(supabase: SupabaseClient, event: EventRecord): 
   });
 }
 
+async function handleEventDelete(supabase: SupabaseClient, event: EventRecord): Promise<void> {
+  // 行は既に削除済みのため、old_recordに含まれるcalendar_idをそのまま使って対象メンバーを解決する
+  await dispatchToOtherMembers(supabase, {
+    notificationType: "event_deleted",
+    calendarId: event.calendar_id,
+    eventId: event.id,
+    actingUserId: event.updated_by,
+    title: "予定が削除されました",
+    body: event.title,
+  });
+}
+
 async function handleCommentInsert(supabase: SupabaseClient, comment: CommentRecord): Promise<void> {
   const { data: event } = await supabase
     .from("events")
@@ -194,6 +206,8 @@ Deno.serve(async (req) => {
     await handleEventInsert(supabase, payload.record as unknown as EventRecord);
   } else if (payload.table === "events" && payload.type === "UPDATE" && payload.record) {
     await handleEventUpdate(supabase, payload.record as unknown as EventRecord);
+  } else if (payload.table === "events" && payload.type === "DELETE" && payload.old_record) {
+    await handleEventDelete(supabase, payload.old_record as unknown as EventRecord);
   } else if (payload.table === "event_comments" && payload.type === "INSERT" && payload.record) {
     await handleCommentInsert(supabase, payload.record as unknown as CommentRecord);
   } else if (payload.table === "event_series_creation_events" && payload.type === "INSERT" && payload.record) {

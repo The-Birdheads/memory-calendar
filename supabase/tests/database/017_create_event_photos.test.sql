@@ -15,7 +15,12 @@ select is(
 );
 select policies_are(
   'public', 'event_photos',
-  array['event_photos_insert_member', 'event_photos_select_member'],
+  array[
+    'event_photos_delete_own',
+    'event_photos_insert_member',
+    'event_photos_select_member',
+    'event_photos_update_thumbnail_member'
+  ],
   'event_photos に想定通りのRLSポリシーが定義されていること'
 );
 select ok(

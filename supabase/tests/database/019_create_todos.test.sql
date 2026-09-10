@@ -1,4 +1,4 @@
--- タスク9.1: todosスキーマと予定へのToDo追加を検証する
+-- タスク9.1 (タスク16.1/16.2で個人所有・紐付け解除モデルへ変更): todosスキーマと予定へのToDo追加を検証する
 
 begin;
 select plan(14);
@@ -12,8 +12,8 @@ select col_is_pk('public', 'todos', 'id', 'todos.id が主キーであること'
 select is(
   (select attnotnull from pg_attribute
      where attrelid = 'public.todos'::regclass and attname = 'event_id'),
-  true,
-  'todos.event_id が NOT NULL であること'
+  false,
+  'todos.event_id はNULLABLEであること(予定削除時の紐付け解除のため)'
 );
 select is(
   (select relrowsecurity from pg_class where oid = 'public.todos'::regclass),
@@ -24,16 +24,16 @@ select is(
 select ok(
   exists(
     select 1 from pg_policies
-    where schemaname = 'public' and tablename = 'todos' and policyname = 'todos_insert_member'
+    where schemaname = 'public' and tablename = 'todos' and policyname = 'todos_insert_own'
   ),
-  'todos_insert_member ポリシーが定義されていること'
+  'todos_insert_own ポリシーが定義されていること'
 );
 select ok(
   exists(
     select 1 from pg_policies
-    where schemaname = 'public' and tablename = 'todos' and policyname = 'todos_select_member'
+    where schemaname = 'public' and tablename = 'todos' and policyname = 'todos_select_own'
   ),
-  'todos_select_member ポリシーが定義されていること'
+  'todos_select_own ポリシーが定義されていること'
 );
 
 -- セットアップ: owner + viewerが所属するカレンダーと予定
@@ -65,12 +65,12 @@ select is(
   '追加したToDoが該当予定に紐づいて保存されること'
 );
 
--- 他のカレンダーメンバーもToDoを閲覧できる
+-- 同じ予定を共有していても、他のカレンダーメンバーにはToDoが見えない(要件9.2)
 set local request.jwt.claim.sub = '77777777-8888-9999-0000-111111111111';
 select is(
   (select count(*) from public.todos where event_id = :'event17_id'::uuid),
-  1::bigint,
-  '他のカレンダーメンバーもToDoを閲覧できること'
+  0::bigint,
+  '他のカレンダーメンバーにはToDoが見えないこと'
 );
 
 -- 非メンバーは閲覧・追加できない
@@ -84,7 +84,10 @@ select is(
   '非メンバーはToDoを閲覧できないこと'
 );
 select throws_ok(
-  $$ insert into public.todos (event_id, title) values (:'event17_id', '不正な追加') $$,
+  format(
+    $$ insert into public.todos (event_id, title) values (%L, '不正な追加') $$,
+    :'event17_id'::uuid
+  ),
   '42501',
   null,
   '非メンバーはToDoを追加できないこと'

@@ -1,19 +1,19 @@
--- タスク9.3: ToDoの達成状況変更・編集・削除を検証する
+-- タスク9.3 (タスク16.2で個人所有モデルへ変更): ToDoの達成状況変更・編集・削除を検証する
 
 begin;
 select plan(9);
 
 select policies_are(
   'public', 'todos',
-  array['todos_delete_member', 'todos_insert_member', 'todos_select_member', 'todos_update_member'],
+  array['todos_delete_own', 'todos_insert_own', 'todos_select_own', 'todos_update_own'],
   'todos に更新・削除ポリシーを含む想定通りのRLSポリシーが定義されていること'
 );
 
--- セットアップ: owner + viewerが所属するカレンダーと予定・ToDo
+-- セットアップ: owner + viewerが所属するカレンダーと予定・ToDo(ToDoの所有者はowner)
 set local role postgres;
 insert into auth.users (id) values
-  ('88888888-9999-0000-1111-222222222221'), -- owner
-  ('88888888-9999-0000-1111-222222222222'); -- viewer
+  ('88888888-9999-0000-1111-222222222221'), -- owner(ToDo所有者)
+  ('88888888-9999-0000-1111-222222222222'); -- viewer(ToDo非所有者)
 
 set local role authenticated;
 set local request.jwt.claim.sub = '88888888-9999-0000-1111-222222222221';
@@ -29,8 +29,7 @@ insert into public.events (calendar_id, title, start_at, end_at)
   returning id \gset event18_
 insert into public.todos (event_id, title) values (:'event18_id', '飲み物を買う') returning id \gset todo18_
 
--- 別のカレンダーメンバー(viewer)が完了状態にする(completed_atも更新)
-set local request.jwt.claim.sub = '88888888-9999-0000-1111-222222222222';
+-- ToDoの作成者本人が完了状態にする(completed_atも更新)
 update public.todos set is_done = true, completed_at = now() where id = :'todo18_id'::uuid;
 
 select is(
@@ -63,30 +62,32 @@ select is(
   'ToDoのタイトルを編集できること'
 );
 
--- 非メンバーは編集・削除できない
-set local role postgres;
-insert into auth.users (id) values ('88888888-9999-0000-1111-222222222223');
-set local role authenticated;
-set local request.jwt.claim.sub = '88888888-9999-0000-1111-222222222223';
+-- 同じ予定を共有していても、ToDoの所有者本人以外は編集・削除できない(要件9.2)
+set local request.jwt.claim.sub = '88888888-9999-0000-1111-222222222222';
 update public.todos set title = '不正な変更' where id = :'todo18_id'::uuid;
+
+-- 変更されていないことはToDoの所有者本人の視点で確認する(非所有者からはRLSにより行自体が見えないため)
+set local request.jwt.claim.sub = '88888888-9999-0000-1111-222222222221';
 select is(
   (select title from public.todos where id = :'todo18_id'::uuid),
   '飲み物とお菓子を買う',
-  '非メンバーが編集を試みても変更されないこと'
+  'ToDoの所有者本人以外が編集を試みても変更されないこと'
 );
 
+set local request.jwt.claim.sub = '88888888-9999-0000-1111-222222222222';
 delete from public.todos where id = :'todo18_id'::uuid;
+
+set local request.jwt.claim.sub = '88888888-9999-0000-1111-222222222221';
 select ok(
   exists(select 1 from public.todos where id = :'todo18_id'::uuid),
-  '非メンバーが削除を試みても削除されないこと'
+  'ToDoの所有者本人以外が削除を試みても削除されないこと'
 );
 
--- カレンダーメンバーによる削除は成功する
-set local request.jwt.claim.sub = '88888888-9999-0000-1111-222222222221';
+-- ToDoの作成者本人による削除は成功する
 delete from public.todos where id = :'todo18_id'::uuid;
 select ok(
   not exists(select 1 from public.todos where id = :'todo18_id'::uuid),
-  'カレンダーメンバーによる削除は成功すること'
+  'ToDoの作成者本人による削除は成功すること'
 );
 
 select * from finish();
