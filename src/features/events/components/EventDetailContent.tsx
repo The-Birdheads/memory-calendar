@@ -42,8 +42,9 @@ import { EventTagBadges } from "../../tags/components/EventTagBadges";
 import { PersonalOnlyBadge } from "../../../shared/components/PersonalOnlyBadge";
 import { TagPickerRow } from "../../tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useDetachTagFromEvent, useEventTags, useTagTree } from "../../tags/hooks";
-import { useCreateTodo, useDeleteTodo, useToggleDone, useTodosByEvent } from "../../todos/hooks";
+import { useCreateTodo, useDeleteTodo, useToggleDone, useTodosByEvent, useUpdateTodo } from "../../todos/hooks";
 import type { Todo } from "../../todos/types";
+import { EventTodoRow } from "./EventTodoRow";
 import { Icon } from "../../../shared/components/Icon";
 import { formatDateTimeRange, toJstDateKey } from "../../../shared/utils/formatDateTime";
 
@@ -110,6 +111,7 @@ export function EventDetailContent({
   const { createTodo } = useCreateTodo();
   const { toggleDone } = useToggleDone();
   const { deleteTodo } = useDeleteTodo();
+  const { updateTodo } = useUpdateTodo();
   const [newTodoTitle, setNewTodoTitle] = useState("");
 
   const { members } = useCalendarMembers(calendarId);
@@ -138,7 +140,9 @@ export function EventDetailContent({
 
   const isPast = event ? new Date(event.endAt) < new Date() : false;
 
-  const resolveMemberLabel = (userId: string): string => {
+  const resolveMemberLabel = (userId: string | null): string => {
+    // 投稿者が退会してuser_idがNULL化されたコメントも、この汎用フォールバックでカバーされる
+    if (userId === null) return "元メンバー";
     const member = members.find((m) => m.userId === userId);
     if (member?.displayName) return member.displayName;
     if (userId === session?.user.id) return session?.user.email ?? "メンバー";
@@ -237,6 +241,11 @@ export function EventDetailContent({
 
   const handleDeleteTodo = async (todoId: string) => {
     const success = await deleteTodo(todoId);
+    if (success) await refetchTodos();
+  };
+
+  const handleSetTodoReminder = async (todoId: string, reminderAt: string | null) => {
+    const success = await updateTodo(todoId, { reminderAt });
     if (success) await refetchTodos();
   };
 
@@ -442,19 +451,15 @@ export function EventDetailContent({
     <View style={styles.sectionInFrame}>
       <Text style={styles.sectionTitle}>ToDo</Text>
       {todos.map((todo) => (
-        <View key={todo.id} style={styles.todoRow} testID={`event-todo-${todo.id}`}>
-          <TouchableOpacity testID={`event-todo-checkbox-${todo.id}`} onPress={() => handleToggleTodo(todo)}>
-            <Text>{todo.isDone ? "☑" : "☐"}</Text>
-          </TouchableOpacity>
-          <Text style={[styles.todoTitle, todo.isDone && styles.doneText]}>{todo.title}</Text>
-          <TouchableOpacity
-            testID={`event-todo-delete-${todo.id}`}
-            onPress={() => handleDeleteTodo(todo.id)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Icon name="trash" size={16} color="#d32f2f" />
-          </TouchableOpacity>
-        </View>
+        <EventTodoRow
+          key={todo.id}
+          todo={todo}
+          isAllDay={event.isAllDay}
+          eventStartAt={event.startAt}
+          onToggle={handleToggleTodo}
+          onDelete={handleDeleteTodo}
+          onSetReminder={handleSetTodoReminder}
+        />
       ))}
       <View style={styles.todoAddRow}>
         <TextInput
@@ -800,19 +805,6 @@ const styles = StyleSheet.create({
   emptyText: {
     color: "#999",
     fontSize: 13,
-  },
-  todoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 8,
-  },
-  todoTitle: {
-    flex: 1,
-  },
-  doneText: {
-    color: "#999",
-    textDecorationLine: "line-through",
   },
   deleteText: {
     color: "#d32f2f",

@@ -32,6 +32,7 @@ import {
   useDeleteTodo,
   useToggleDone,
   useTodosByEvent,
+  useUpdateTodo,
 } from "../../../src/features/todos/hooks";
 
 jest.mock("expo-router", () => ({
@@ -99,6 +100,7 @@ jest.mock("../../../src/features/todos/hooks", () => ({
   useCreateTodo: jest.fn(),
   useToggleDone: jest.fn(),
   useDeleteTodo: jest.fn(),
+  useUpdateTodo: jest.fn(),
 }));
 
 const FUTURE_EVENT: Event = {
@@ -273,6 +275,11 @@ function mockCommonHooks(
   });
   (useDeleteTodo as jest.Mock).mockReturnValue({
     deleteTodo: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useUpdateTodo as jest.Mock).mockReturnValue({
+    updateTodo: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -690,6 +697,27 @@ describe("EventDetailScreen", () => {
     await fireEvent.press(getByTestId("event-todo-delete-todo-1"));
 
     await waitFor(() => expect(deleteTodoMock).toHaveBeenCalledWith("todo-1"));
+    await waitFor(() => expect(refetchTodos).toHaveBeenCalled());
+  });
+
+  it("shows a reminder bell on each todo and saves a picked reminder via updateTodo", async () => {
+    const { refetchTodos } = mockCommonHooks({
+      event: FUTURE_EVENT,
+      todos: [{ id: "todo-1", eventId: "event-1", title: "飲み物を買う", isDone: false, completedAt: null, reminderAt: null }],
+    });
+    const updateTodoMock = jest.fn().mockResolvedValue(true);
+    (useUpdateTodo as jest.Mock).mockReturnValue({ updateTodo: updateTodoMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    expect(getByTestId("event-todo-reminder-bell-todo-1")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("event-todo-reminder-icon-todo-1"));
+    await fireEvent.press(getByTestId("event-todo-reminder-todo-1-option-before_1h"));
+
+    await waitFor(() =>
+      expect(updateTodoMock).toHaveBeenCalledWith("todo-1", { reminderAt: "2098-12-31T23:00:00.000Z" })
+    );
     await waitFor(() => expect(refetchTodos).toHaveBeenCalled());
   });
 
