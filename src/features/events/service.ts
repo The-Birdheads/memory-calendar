@@ -159,6 +159,7 @@ function buildUpdatePayload(input: UpdateEventInput, scope: EditScope): Record<s
   if (input.url !== undefined) payload.url = input.url;
   if (input.categoryColor !== undefined) payload.category_color = input.categoryColor;
   if (input.reminderAt !== undefined) payload.reminder_at = input.reminderAt;
+  if (input.calendarId !== undefined) payload.calendar_id = input.calendarId;
   return payload;
 }
 

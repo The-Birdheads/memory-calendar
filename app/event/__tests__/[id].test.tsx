@@ -145,12 +145,20 @@ function mockCommonHooks(
     refetchEvent?: jest.Mock;
     refetchReminders?: jest.Mock;
     calendarKind?: "personal" | "group";
+    calendars?: { id: string; name: string; kind: "personal" | "group"; color?: string }[];
   } = {}
 ) {
   (useLocalSearchParams as jest.Mock).mockReturnValue({ id: "event-1" });
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } }, isLoading: false });
   (useMyCalendars as jest.Mock).mockReturnValue({
-    calendars: [{ id: "cal-1", name: "我が家", kind: overrides.calendarKind ?? "group", createdBy: "user-1", createdAt: "2026-08-01T00:00:00.000Z" }],
+    calendars: (
+      overrides.calendars ?? [{ id: "cal-1", name: "我が家", kind: overrides.calendarKind ?? "group" }]
+    ).map((calendar) => ({
+      createdBy: "user-1",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      color: "#2f6fed",
+      ...calendar,
+    })),
     isLoading: false,
     error: null,
     refetch: jest.fn(),
@@ -1096,4 +1104,156 @@ describe("EventDetailScreen", () => {
     expect(queryByText("user-2")).toBeNull();
   });
 
+  describe("switching the event's calendar", () => {
+    it("shows the event's calendar at the top of the header, tappable to open the picker", async () => {
+      mockCommonHooks({
+        calendars: [
+          { id: "cal-1", name: "我が家", kind: "group" },
+          { id: "cal-2", name: "Myカレンダー", kind: "personal" },
+        ],
+      });
+
+      const { getByTestId, getByText } = await render(<EventDetailScreen />);
+
+      expect(getByTestId("event-calendar-switch-button")).toBeTruthy();
+      expect(getByText("我が家")).toBeTruthy();
+    });
+
+    it("opens the calendar picker showing all of the caller's calendars, with the current one checked", async () => {
+      mockCommonHooks({
+        calendars: [
+          { id: "cal-1", name: "我が家", kind: "group" },
+          { id: "cal-2", name: "友人グループ", kind: "group" },
+        ],
+      });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+      await fireEvent.press(getByTestId("event-calendar-switch-button"));
+
+      expect(getByTestId("event-calendar-picker-option-cal-1-checked")).toBeTruthy();
+      expect(queryByTestId("event-calendar-picker-option-cal-2-checked")).toBeNull();
+    });
+
+    it("selecting the same (current) calendar and confirming does nothing - no warning, no update", async () => {
+      mockCommonHooks({
+        calendars: [
+          { id: "cal-1", name: "我が家", kind: "group" },
+          { id: "cal-2", name: "友人グループ", kind: "group" },
+        ],
+      });
+      const updateEventMock = jest.fn();
+      (useUpdateEvent as jest.Mock).mockReturnValue({ updateEvent: updateEventMock, isSubmitting: false, error: null });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+      await fireEvent.press(getByTestId("event-calendar-switch-button"));
+      await fireEvent.press(getByTestId("event-calendar-picker-confirm"));
+
+      expect(queryByTestId("event-calendar-picker-backdrop")).toBeNull();
+      expect(queryByTestId("event-calendar-switch-warning-confirm")).toBeNull();
+      expect(updateEventMock).not.toHaveBeenCalled();
+    });
+
+    it("personal -> shared: warns which items become shared, and switches on OK", async () => {
+      const refetchEvent = jest.fn();
+      mockCommonHooks({
+        calendars: [
+          { id: "cal-1", name: "Myカレンダー", kind: "personal" },
+          { id: "cal-2", name: "我が家", kind: "group" },
+        ],
+        refetchEvent,
+      });
+      const updateEventMock = jest.fn().mockResolvedValue(true);
+      (useUpdateEvent as jest.Mock).mockReturnValue({ updateEvent: updateEventMock, isSubmitting: false, error: null });
+
+      const { getByTestId, getByText } = await render(<EventDetailScreen />);
+
+      await fireEvent.press(getByTestId("event-calendar-switch-button"));
+      await fireEvent.press(getByTestId("event-calendar-picker-option-cal-2"));
+      await fireEvent.press(getByTestId("event-calendar-picker-confirm"));
+
+      expect(getByText("カレンダーを変更しますか?")).toBeTruthy();
+      expect(getByText(/「我が家」のメンバーに共有されます/)).toBeTruthy();
+
+      await fireEvent.press(getByTestId("event-calendar-switch-warning-confirm"));
+
+      await waitFor(() => expect(updateEventMock).toHaveBeenCalledWith("event-1", { calendarId: "cal-2" }));
+      await waitFor(() => expect(refetchEvent).toHaveBeenCalled());
+    });
+
+    it("shared -> personal: warns that the original calendar's members lose access", async () => {
+      mockCommonHooks({
+        calendars: [
+          { id: "cal-1", name: "我が家", kind: "group" },
+          { id: "cal-2", name: "Myカレンダー", kind: "personal" },
+        ],
+      });
+
+      const { getByTestId, getByText } = await render(<EventDetailScreen />);
+
+      await fireEvent.press(getByTestId("event-calendar-switch-button"));
+      await fireEvent.press(getByTestId("event-calendar-picker-option-cal-2"));
+      await fireEvent.press(getByTestId("event-calendar-picker-confirm"));
+
+      expect(getByText(/「我が家」のメンバーは、移動後この予定を見られなくなります/)).toBeTruthy();
+    });
+
+    it("shared -> a different shared calendar: shows both warnings", async () => {
+      mockCommonHooks({
+        calendars: [
+          { id: "cal-1", name: "我が家", kind: "group" },
+          { id: "cal-2", name: "友人グループ", kind: "group" },
+        ],
+      });
+
+      const { getByTestId, getByText } = await render(<EventDetailScreen />);
+
+      await fireEvent.press(getByTestId("event-calendar-switch-button"));
+      await fireEvent.press(getByTestId("event-calendar-picker-option-cal-2"));
+      await fireEvent.press(getByTestId("event-calendar-picker-confirm"));
+
+      expect(getByText(/「友人グループ」のメンバーに共有されます/)).toBeTruthy();
+      expect(getByText(/「我が家」のメンバーは、移動後この予定を見られなくなります/)).toBeTruthy();
+    });
+
+    it("cancels the warning without switching the calendar", async () => {
+      mockCommonHooks({
+        calendars: [
+          { id: "cal-1", name: "我が家", kind: "group" },
+          { id: "cal-2", name: "友人グループ", kind: "group" },
+        ],
+      });
+      const updateEventMock = jest.fn();
+      (useUpdateEvent as jest.Mock).mockReturnValue({ updateEvent: updateEventMock, isSubmitting: false, error: null });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+      await fireEvent.press(getByTestId("event-calendar-switch-button"));
+      await fireEvent.press(getByTestId("event-calendar-picker-option-cal-2"));
+      await fireEvent.press(getByTestId("event-calendar-picker-confirm"));
+      await fireEvent.press(getByTestId("event-calendar-switch-warning-cancel"));
+
+      expect(updateEventMock).not.toHaveBeenCalled();
+      expect(queryByTestId("event-calendar-switch-warning-confirm")).toBeNull();
+    });
+
+    it("cancels the picker via the backdrop without opening the warning", async () => {
+      mockCommonHooks({
+        calendars: [
+          { id: "cal-1", name: "我が家", kind: "group" },
+          { id: "cal-2", name: "友人グループ", kind: "group" },
+        ],
+      });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+
+      await fireEvent.press(getByTestId("event-calendar-switch-button"));
+      await fireEvent.press(getByTestId("event-calendar-picker-option-cal-2"));
+      await fireEvent.press(getByTestId("event-calendar-picker-backdrop"));
+
+      expect(queryByTestId("event-calendar-switch-warning-confirm")).toBeNull();
+      expect(queryByTestId("event-calendar-picker-backdrop")).toBeNull();
+    });
+  });
 });

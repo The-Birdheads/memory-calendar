@@ -52,6 +52,9 @@ export interface UpdateEventInput {
   url?: string | null;
   categoryColor?: string | null;
   reminderAt?: string | null;
+  /** 所属カレンダーの切り替え。RLSのWITH CHECKにより、切り替え先も呼び出しユーザーが
+   * メンバーであるカレンダーでなければ拒否される。 */
+  calendarId?: string;
 }
 
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly";

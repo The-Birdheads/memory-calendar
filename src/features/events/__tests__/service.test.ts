@@ -268,6 +268,37 @@ describe("updateEvent", () => {
     expect(eq).toHaveBeenCalledWith("id", "event-1");
   });
 
+  it("maps calendarId to calendar_id, for switching the event to a different calendar", async () => {
+    const row = {
+      id: "event-1",
+      calendar_id: "cal-2",
+      title: "誕生日会",
+      location: null,
+      memo: null,
+      category_color: null,
+      start_at: "2026-09-01T10:00:00.000Z",
+      end_at: "2026-09-01T11:00:00.000Z",
+      is_all_day: false,
+      reminder_at: null,
+      created_by: "user-1",
+      updated_by: "user-1",
+      created_at: "2026-08-17T00:00:00.000Z",
+      updated_at: "2026-08-18T00:00:00.000Z",
+    };
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await updateEvent(client, "event-1", { calendarId: "cal-2" });
+
+    expect(update).toHaveBeenCalledWith({ calendar_id: "cal-2" });
+    expect(result).toEqual({ ok: true, value: expect.objectContaining({ calendarId: "cal-2" }) });
+  });
+
   it("returns InvalidDateRange without calling Supabase when both dates are given and endAt is before startAt", async () => {
     const client = {
       from: jest.fn(),

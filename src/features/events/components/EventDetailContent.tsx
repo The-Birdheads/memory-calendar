@@ -14,10 +14,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { useAuthSession } from "../../auth/hooks";
+import { CalendarLabel } from "../../calendars/components/CalendarLabel";
 import { useCalendarMembers, useMyCalendars } from "../../calendars/hooks";
+import type { Calendar } from "../../calendars/types";
 import { EventCommentsSection } from "../../communication/components/EventCommentsSection";
 import { useComments, useDeleteComment, usePostComment } from "../../communication/hooks";
+import { CalendarSwitchWarningModal } from "./CalendarSwitchWarningModal";
 import { DeleteEventConfirmModal } from "./DeleteEventConfirmModal";
+import { EventCalendarPickerModal } from "./EventCalendarPickerModal";
 import { EventFormFields, type EventFormValue } from "./EventFormFields";
 import { EventReminderPicker } from "./EventReminderPicker";
 import {
@@ -90,9 +94,16 @@ export function EventDetailContent({
   const calendarId = event?.calendarId ?? "";
 
   const { calendars } = useMyCalendars();
+  const currentCalendar = calendars.find((calendar) => calendar.id === calendarId) ?? null;
   // 個人用カレンダーの予定には「メンバーと共有」ラベルを出さない(共有相手が
   // いないカレンダーのため)。
-  const isPersonalCalendar = calendars.find((calendar) => calendar.id === calendarId)?.kind === "personal";
+  const isPersonalCalendar = currentCalendar?.kind === "personal";
+
+  // 所属カレンダーの切り替え: 選択画面(1歩目)→切り替え内容の注意モーダル(2歩目)の
+  // 2段階。pendingCalendarSwitch は「選択画面で✓が押され、注意モーダルの表示待ち」の
+  // 切り替え先カレンダーを保持する(nullの間は注意モーダルを出さない)。
+  const [isCalendarPickerVisible, setIsCalendarPickerVisible] = useState(false);
+  const [pendingCalendarSwitch, setPendingCalendarSwitch] = useState<Calendar | null>(null);
 
   const { comments, refetch: refetchComments } = useComments(eventId);
   const { postComment } = usePostComment();
@@ -300,6 +311,21 @@ export function EventDetailContent({
     }
   };
 
+  // カレンダー選択画面(1歩目)で✓が押された時点ではまだ切り替えず、注意モーダル
+  // (2歩目)の表示に委ねる。ここで即座に切り替えると、注意文を読む前に確定して
+  // しまうため。
+  const handleSelectCalendar = (calendar: Calendar) => {
+    setIsCalendarPickerVisible(false);
+    setPendingCalendarSwitch(calendar);
+  };
+
+  const handleConfirmCalendarSwitch = async () => {
+    if (!pendingCalendarSwitch) return;
+    const success = await updateEvent(eventId, { calendarId: pendingCalendarSwitch.id });
+    setPendingCalendarSwitch(null);
+    if (success) await refetchEvent();
+  };
+
   const handleAddPhoto = async () => {
     const picked = await pickPhotoFromLibrary();
     if (!picked) return;
@@ -497,6 +523,19 @@ export function EventDetailContent({
       keyboardShouldPersistTaps="handled"
     >
     <View style={styles.headerCard}>
+      {currentCalendar ? (
+        <TouchableOpacity
+          testID="event-calendar-switch-button"
+          style={styles.calendarSwitchRow}
+          onPress={() => setIsCalendarPickerVisible(true)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <View style={[styles.calendarSwitchColorDot, { backgroundColor: currentCalendar.color }]} />
+          <CalendarLabel calendar={currentCalendar} textStyle={styles.calendarSwitchText} iconSize={11} />
+          <Icon name="chevron-right" size={12} color="#999" />
+        </TouchableOpacity>
+      ) : null}
+
       <View style={styles.titleRow}>
         <Text style={styles.title}>{event.title}</Text>
         <TouchableOpacity
@@ -586,6 +625,26 @@ export function EventDetailContent({
       onCancel={() => setIsDeleteModalVisible(false)}
     />
 
+    <EventCalendarPickerModal
+      visible={isCalendarPickerVisible}
+      calendars={calendars}
+      currentCalendarId={calendarId}
+      onConfirm={handleSelectCalendar}
+      onCancel={() => setIsCalendarPickerVisible(false)}
+    />
+
+    {currentCalendar && pendingCalendarSwitch ? (
+      <CalendarSwitchWarningModal
+        visible
+        fromKind={currentCalendar.kind}
+        fromName={currentCalendar.name}
+        toKind={pendingCalendarSwitch.kind}
+        toName={pendingCalendarSwitch.name}
+        onConfirm={handleConfirmCalendarSwitch}
+        onCancel={() => setPendingCalendarSwitch(null)}
+      />
+    ) : null}
+
     <Modal visible={isEditModalVisible} transparent animationType="slide" onRequestClose={() => setIsEditModalVisible(false)}>
       <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <TouchableOpacity
@@ -668,6 +727,24 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     marginBottom: 10,
     overflow: "hidden",
+  },
+  calendarSwitchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#f2f3f5",
+  },
+  calendarSwitchColorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  calendarSwitchText: {
+    fontSize: 12,
+    color: "#555",
+    fontWeight: "600",
   },
   titleRow: {
     flexDirection: "row",
