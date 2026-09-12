@@ -12,6 +12,10 @@ module.exports = defineConfig([
       // Deno製のEdge Functions。URLインポートなどランタイム/モジュール系が
       // React Native / Node 用のこの設定とは別物なので対象外にする。
       "supabase/functions/**",
+      // アプリ本体とは別に手元で叩くNode製の管理スクリプト(テストデータ
+      // 生成など)。React Native向けのグローバル/ルール前提が合わないため
+      // 対象外にする(理由は上のEdge Functionsと同じ)。
+      "scripts/**",
     ],
   },
   expoConfig,

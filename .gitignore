@@ -38,3 +38,6 @@ coverage/
 
 # eslint
 .eslintcache
+
+# scripts/seedTestAccount.mjs working files (generated SQL, cached sample images)
+.seed-scratch/
