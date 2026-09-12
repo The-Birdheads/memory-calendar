@@ -21,9 +21,11 @@ import {
 } from "../../../src/features/events/hooks";
 import {
   useAttachTagsToEvent,
+  useAttachTagsToEvents,
   useCreateTag,
   useDeleteTag,
   useEventTagsByEvents,
+  useRemoveAllTagsFromEvents,
   useTagTree,
   useUpdateTag,
 } from "../../../src/features/tags/hooks";
@@ -76,14 +78,24 @@ jest.mock("../../../src/features/todos/hooks", () => ({
   useCreateTodo: jest.fn(),
 }));
 
-jest.mock("../../../src/features/tags/hooks", () => ({
-  useTagTree: jest.fn(),
-  useCreateTag: jest.fn(),
-  useUpdateTag: jest.fn(),
-  useDeleteTag: jest.fn(),
-  useAttachTagsToEvent: jest.fn(),
-  useEventTagsByEvents: jest.fn(),
-}));
+jest.mock("../../../src/features/tags/hooks", () => {
+  const actual = jest.requireActual("../../../src/features/tags/hooks");
+  return {
+    useTagTree: jest.fn(),
+    useCreateTag: jest.fn(),
+    useUpdateTag: jest.fn(),
+    useDeleteTag: jest.fn(),
+    useAttachTagsToEvent: jest.fn(),
+    useAttachTagsToEvents: jest.fn(),
+    useRemoveAllTagsFromEvents: jest.fn(),
+    useEventTagsByEvents: jest.fn(),
+    // useBulkTagSelection is pure client-side selection state (no Supabase
+    // calls) and already has its own dedicated test suite - using the real
+    // implementation here lets these integration tests exercise the actual
+    // bulk-mode UI flow instead of re-mocking that state machine.
+    useBulkTagSelection: actual.useBulkTagSelection,
+  };
+});
 
 jest.mock("@react-native-community/datetimepicker", () => {
   const React = require("react");
@@ -214,6 +226,16 @@ function mockCommonHooks() {
   });
   (useAttachTagsToEvent as jest.Mock).mockReturnValue({
     attachTagsToEvent: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useAttachTagsToEvents as jest.Mock).mockReturnValue({
+    attachTagsToEvents: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useRemoveAllTagsFromEvents as jest.Mock).mockReturnValue({
+    removeAllTagsFromEvents: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -1486,6 +1508,127 @@ describe("CalendarScreen", () => {
 
       expect(getByTestId("calendar-grid-container")).toBeTruthy();
       expect(queryByTestId("calendar-month-list")).toBeNull();
+    });
+
+    describe("まとめてタグ付与/削除", () => {
+      it("only shows the header tag icon while in list view", async () => {
+        mockCommonHooks();
+        (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+          events: [TODAY_EVENT, OTHER_DAY_EVENT],
+          isLoading: false,
+          error: null,
+          refetch: jest.fn(),
+        });
+
+        const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+        expect(queryByTestId("calendar-bulk-tag-button")).toBeNull();
+
+        await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+        expect(getByTestId("calendar-bulk-tag-button")).toBeTruthy();
+      });
+
+      it("shows the bulk-assign panel, tag badges, and selection circles once the tag icon is pressed, selecting a row instead of navigating", async () => {
+        mockCommonHooks();
+        (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+          events: [TODAY_EVENT, OTHER_DAY_EVENT],
+          isLoading: false,
+          error: null,
+          refetch: jest.fn(),
+        });
+        (useEventTagsByEvents as jest.Mock).mockReturnValue({
+          tagsByEventId: { "event-1": [{ id: "tag-a", name: "旅行", color: "#ff0000" }] },
+          isLoading: false,
+          error: null,
+          refetch: jest.fn(),
+        });
+
+        const { getByTestId, getByText, queryByTestId } = await render(<CalendarScreen />);
+        await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+        // タグが設定中の予定は、一覧の各行の下に表示される。
+        expect(getByText("旅行")).toBeTruthy();
+
+        await fireEvent.press(getByTestId("calendar-bulk-tag-button"));
+
+        expect(getByTestId("calendar-bulk-tag-panel")).toBeTruthy();
+        expect(getByTestId("calendar-list-event-select-event-1")).toBeTruthy();
+
+        await fireEvent.press(getByTestId("calendar-list-event-event-1"));
+
+        expect(router.push).not.toHaveBeenCalled();
+        expect(getByText("✓")).toBeTruthy();
+      });
+
+      it("assigns the selected tags to the selected events on confirm, then refetches and leaves bulk mode", async () => {
+        mockCommonHooks();
+        const refetchEvents = jest.fn();
+        const refetchTags = jest.fn();
+        (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+          events: [TODAY_EVENT, OTHER_DAY_EVENT],
+          isLoading: false,
+          error: null,
+          refetch: refetchEvents,
+        });
+        (useEventTagsByEvents as jest.Mock).mockReturnValue({
+          tagsByEventId: {},
+          isLoading: false,
+          error: null,
+          refetch: refetchTags,
+        });
+        const attachTagsToEventsMock = jest.fn().mockResolvedValue(true);
+        (useAttachTagsToEvents as jest.Mock).mockReturnValue({
+          attachTagsToEvents: attachTagsToEventsMock,
+          isSubmitting: false,
+          error: null,
+        });
+
+        const { getByTestId, getByText, queryByTestId } = await render(<CalendarScreen />);
+        await fireEvent.press(getByTestId("calendar-view-mode-list"));
+        await fireEvent.press(getByTestId("calendar-bulk-tag-button"));
+
+        await fireEvent.press(getByTestId("calendar-bulk-tag-tag-picker-tag-tag-a"));
+        await fireEvent.press(getByTestId("calendar-list-event-select-event-1"));
+
+        await fireEvent.press(getByTestId("calendar-bulk-tag-confirm"));
+        expect(getByText("選択された予定にタグ「旅行」を設定してよろしいですか？")).toBeTruthy();
+        await fireEvent.press(getByTestId("calendar-bulk-tag-confirm-ok"));
+
+        await waitFor(() => expect(attachTagsToEventsMock).toHaveBeenCalledWith(["tag-a"], ["event-1"]));
+        await waitFor(() => expect(refetchTags).toHaveBeenCalled());
+        await waitFor(() => expect(refetchEvents).toHaveBeenCalled());
+        expect(queryByTestId("calendar-bulk-tag-panel")).toBeNull();
+      });
+
+      it("switches to remove mode via 'まとめて削除' and removes all tags from the selected events on confirm", async () => {
+        mockCommonHooks();
+        (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+          events: [TODAY_EVENT, OTHER_DAY_EVENT],
+          isLoading: false,
+          error: null,
+          refetch: jest.fn(),
+        });
+        const removeAllTagsFromEventsMock = jest.fn().mockResolvedValue(true);
+        (useRemoveAllTagsFromEvents as jest.Mock).mockReturnValue({
+          removeAllTagsFromEvents: removeAllTagsFromEventsMock,
+          isSubmitting: false,
+          error: null,
+        });
+
+        const { getByTestId, getByText } = await render(<CalendarScreen />);
+        await fireEvent.press(getByTestId("calendar-view-mode-list"));
+        await fireEvent.press(getByTestId("calendar-bulk-tag-button"));
+
+        await fireEvent.press(getByTestId("calendar-bulk-tag-switch-to-remove"));
+        await fireEvent.press(getByTestId("calendar-list-event-select-event-1"));
+
+        await fireEvent.press(getByTestId("calendar-bulk-tag-confirm"));
+        expect(getByText("選択された予定の全てのタグを削除してよろしいですか？")).toBeTruthy();
+        await fireEvent.press(getByTestId("calendar-bulk-tag-confirm-ok"));
+
+        await waitFor(() => expect(removeAllTagsFromEventsMock).toHaveBeenCalledWith(["event-1"]));
+      });
     });
   });
 

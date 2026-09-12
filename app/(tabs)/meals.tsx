@@ -14,8 +14,10 @@ import {
 import { MealFormModal, type MealFormTarget, type MealFormValues } from "../../src/features/meals/components/MealFormModal";
 import { MealRow } from "../../src/features/meals/components/MealRow";
 import type { MealRecord, MealSlot } from "../../src/features/meals/types";
+import { DateRangeFilterSection } from "../../src/shared/components/DateRangeFilterSection";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
+import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
 import { todayJstDateKey } from "../../src/shared/utils/formatDateTime";
 
 type MealsMode = "plan" | "log";
@@ -270,22 +272,48 @@ function PlanPanel() {
 }
 
 function LogPanel() {
-  const { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter } =
-    useCalendarFilter();
+  const {
+    calendars,
+    activeCalendarIds,
+    createTargetCalendarId,
+    isFilterActive: isCalendarFilterActive,
+    handleToggleCalendar,
+    handleResetFilter: handleResetCalendarFilter,
+  } = useCalendarFilter();
   const { mealRecords, refetch } = useMealRecordsByCalendars(activeCalendarIds);
   const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete } = useMealFormController(
     createTargetCalendarId,
     refetch
   );
 
+  const [periodStart, setPeriodStart] = useState<string | null>(null);
+  const [periodEnd, setPeriodEnd] = useState<string | null>(null);
+  const handleResetPeriod = useCallback(() => {
+    setPeriodStart(null);
+    setPeriodEnd(null);
+  }, []);
+  // カレンダー絞り込みと同じ「パネルを離れたらリセット」の決まりに従う -
+  // useCalendarFilter自身のuseFocusEffectとは独立に、期間だけの専用effectを持つ。
+  useFocusEffect(useCallback(() => handleResetPeriod, [handleResetPeriod]));
+
+  const isFilterActive = isCalendarFilterActive || periodStart !== null || periodEnd !== null;
+  const handleResetFilter = () => {
+    handleResetCalendarFilter();
+    handleResetPeriod();
+  };
+
   const today = todayJstDateKey();
   // 振り返りは直近から遡って眺めたいので新しい順に並べ替えてから月ごとに
   // まとめ、月の中はさらに日付ごとに小見出しを立てる(振り返りタブの
   // 年表と同じ「月見出し＋日付ラベル」の2段構成)。
   const monthGroups = useMemo(() => {
-    const pastRecordsDescending = mealRecords.filter((record) => record.mealDate < today).slice().reverse();
+    const pastRecordsDescending = mealRecords
+      .filter((record) => record.mealDate < today)
+      .filter((record) => isDateKeyInRange(record.mealDate, periodStart, periodEnd))
+      .slice()
+      .reverse();
     return groupMealsByMonth(pastRecordsDescending);
-  }, [mealRecords, today]);
+  }, [mealRecords, today, periodStart, periodEnd]);
 
   return (
     <View style={styles.panel}>
@@ -304,6 +332,17 @@ function LogPanel() {
                       onPress={() => handleToggleCalendar(calendar.id)}
                     />
                   ))}
+                </FilterSection>
+                <FilterSection title="期間">
+                  <DateRangeFilterSection
+                    testIDPrefix="meals-period"
+                    startDate={periodStart}
+                    endDate={periodEnd}
+                    onChange={({ startDate, endDate }) => {
+                      setPeriodStart(startDate);
+                      setPeriodEnd(endDate);
+                    }}
+                  />
                 </FilterSection>
               </FilterButton>
               <TouchableOpacity

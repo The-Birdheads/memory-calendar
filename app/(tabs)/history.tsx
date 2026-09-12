@@ -11,17 +11,38 @@ import { usePastEventsByTag } from "../../src/features/history/hooks";
 import { groupMemoriesByYearMonth } from "../../src/features/memories/groupByYearMonth";
 import { useEventIdsWithPhotos, useMemoriesTimeline } from "../../src/features/memories/hooks";
 import { selectOnThisDayEntries } from "../../src/features/memories/onThisDay";
+import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
+import { BulkTagAssignPanel } from "../../src/features/tags/components/BulkTagAssignPanel";
 import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
-import { useEventTagsByEvents, useTagTree } from "../../src/features/tags/hooks";
+import { SelectionCircle } from "../../src/features/tags/components/SelectionCircle";
+import { TagIcon } from "../../src/features/tags/components/TagIcon";
+import {
+  useAttachTagsToEvents,
+  useBulkTagSelection,
+  useEventTagsByEvents,
+  useRemoveAllTagsFromEvents,
+  useTagTree,
+} from "../../src/features/tags/hooks";
 import { flattenVisibleTagTree, getAncestorChainIds } from "../../src/features/tags/tagTree";
 import type { TagTreeNode } from "../../src/features/tags/types";
+import { DateRangeFilterSection } from "../../src/shared/components/DateRangeFilterSection";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
+import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
 import { jstNow, todayJstDateKey, toJstDateKey } from "../../src/shared/utils/formatDateTime";
 
 function flattenTags(nodes: TagTreeNode[]): TagTreeNode[] {
   return nodes.flatMap((node) => [node, ...flattenTags(node.children)]);
 }
+
+/**
+ * タグ絞り込みの「未設定」を表す特別な値。実在のタグid(uuid)とは衝突しない。
+ * RPC(list_past_events_by_tag)はこの値を知らないので、選択中はp_tag_idに
+ * undefined(絞り込みなし)を渡して全件取得し、取得済みのタグ一覧
+ * (tagsByEventId、バッジ表示にどのみち使う)を使ってクライアント側で
+ * 「タグが1件も付いていない予定」だけに絞り込む。
+ */
+const UNTAGGED_TAG_FILTER = "__untagged__";
 
 /** "2年前"/"1年前" - どちらもJST日付キー("YYYY-MM-DD")なので年の部分の文字列比較だけで済む。 */
 function yearsAgoLabel(entryJstDateKey: string, todayKey: string): string {
@@ -88,10 +109,18 @@ function TimelinePanel() {
 
   const { tagTree } = useTagTree();
   const [selectedTagId, setSelectedTagId] = useState<string | undefined>(undefined);
+  const [periodStart, setPeriodStart] = useState<string | null>(null);
+  const [periodEnd, setPeriodEnd] = useState<string | null>(null);
+
+  const bulk = useBulkTagSelection();
+  const { attachTagsToEvents } = useAttachTagsToEvents();
+  const { removeAllTagsFromEvents } = useRemoveAllTagsFromEvents();
 
   const handleResetFilters = useCallback(() => {
     setSelectedCalendarIds(null);
     setSelectedTagId(undefined);
+    setPeriodStart(null);
+    setPeriodEnd(null);
   }, []);
 
   // カレンダー名の変更はCalendarタブ自身のuseMyCalendarsしか再取得しないため、
@@ -99,15 +128,26 @@ function TimelinePanel() {
   // パネルを離れるたびに(戻ってきたときは常にまっさらな状態から絞り込み直せる
   // ように)リセットする - useFocusEffectのクリーンアップはフォーカスが
   // 外れた時、および(画像パネルへの切り替えで)アンマウントされた時に呼ばれる
-  // ので、ここでリセットする。
+  // ので、ここでリセットする。まとめて付与/削除モードも同じ扱いでリセットする。
   useFocusEffect(
     useCallback(() => {
       refetchCalendars();
-      return handleResetFilters;
+      return () => {
+        handleResetFilters();
+        bulk.deactivate();
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refetchCalendars, handleResetFilters])
   );
 
-  const { events } = usePastEventsByTag(selectedTagId, activeCalendarIds);
+  const { events: eventsByTag, refetch: refetchEventsByTag } = usePastEventsByTag(
+    selectedTagId === UNTAGGED_TAG_FILTER ? undefined : selectedTagId,
+    activeCalendarIds
+  );
+  const periodFilteredEvents = useMemo(
+    () => eventsByTag.filter((event) => isDateKeyInRange(toJstDateKey(event.startAt), periodStart, periodEnd)),
+    [eventsByTag, periodStart, periodEnd]
+  );
 
   // 大分類 → 中分類 → 小分類 の順にドリルダウンして選択肢を表示する。
   const allTagsFlat = useMemo(() => flattenTags(tagTree), [tagTree]);
@@ -120,20 +160,63 @@ function TimelinePanel() {
     [tagTree, expandedTagIds]
   );
 
+  const periodFilteredEventIds = useMemo(
+    () => periodFilteredEvents.map((event) => event.id),
+    [periodFilteredEvents]
+  );
+  const { tagsByEventId, refetch: refetchEventTags } = useEventTagsByEvents(periodFilteredEventIds);
+  const events = useMemo(() => {
+    if (selectedTagId !== UNTAGGED_TAG_FILTER) return periodFilteredEvents;
+    return periodFilteredEvents.filter((event) => (tagsByEventId[event.id] ?? []).length === 0);
+  }, [periodFilteredEvents, selectedTagId, tagsByEventId]);
+
   const eventIds = useMemo(() => events.map((event) => event.id), [events]);
-  const { tagsByEventId } = useEventTagsByEvents(eventIds);
   const { eventIdsWithPhotos } = useEventIdsWithPhotos(eventIds);
   const timelineGroups = useMemo(() => groupEventsByYearMonth(events), [events]);
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const handleCloseDetail = () => setSelectedEventId(null);
 
-  const isFilterActive = selectedCalendarIds !== null || selectedTagId !== undefined;
+  const isFilterActive =
+    selectedCalendarIds !== null || selectedTagId !== undefined || periodStart !== null || periodEnd !== null;
+
+  const selectedTagNames = useMemo(
+    () => bulk.selectedTagIds.flatMap((tagId) => allTagsFlat.find((tag) => tag.id === tagId)?.name ?? []),
+    [bulk.selectedTagIds, allTagsFlat]
+  );
+
+  const handleConfirmBulkAction = async () => {
+    if (bulk.mode === "assign") {
+      await attachTagsToEvents(bulk.selectedTagIds, bulk.selectedEventIds);
+    } else {
+      await removeAllTagsFromEvents(bulk.selectedEventIds);
+    }
+    bulk.deactivate();
+    await refetchEventTags();
+    await refetchEventsByTag();
+  };
+
+  const handleEventRowPress = (eventId: string) => {
+    if (bulk.isActive) {
+      bulk.toggleEvent(eventId);
+    } else {
+      setSelectedEventId(eventId);
+    }
+  };
 
   return (
     <>
       <Tabs.Screen
         options={{
+          headerLeft: () => (
+            <TouchableOpacity
+              testID="history-bulk-tag-button"
+              onPress={() => (bulk.isActive ? bulk.deactivate() : bulk.activate())}
+              style={styles.headerTagButton}
+            >
+              <TagIcon size={18} color={bulk.isActive ? "#2f6fed" : "#444"} />
+            </TouchableOpacity>
+          ),
           headerRight: () => (
             <FilterButton testID="history-filter" isActive={isFilterActive} onReset={handleResetFilters}>
               <FilterSection title="カレンダー">
@@ -157,6 +240,19 @@ function TimelinePanel() {
                     すべて
                   </Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  testID="history-tag-filter-untagged"
+                  onPress={() => setSelectedTagId(UNTAGGED_TAG_FILTER)}
+                  style={[styles.filterChip, selectedTagId === UNTAGGED_TAG_FILTER && styles.filterChipActive]}
+                >
+                  <Text
+                    style={
+                      selectedTagId === UNTAGGED_TAG_FILTER ? styles.filterChipTextActive : styles.filterChipText
+                    }
+                  >
+                    未設定
+                  </Text>
+                </TouchableOpacity>
                 {visibleTags.map((tag) => (
                   <TouchableOpacity
                     key={tag.id}
@@ -170,10 +266,33 @@ function TimelinePanel() {
                   </TouchableOpacity>
                 ))}
               </FilterSection>
+              <FilterSection title="期間">
+                <DateRangeFilterSection
+                  testIDPrefix="history-period"
+                  startDate={periodStart}
+                  endDate={periodEnd}
+                  onChange={({ startDate, endDate }) => {
+                    setPeriodStart(startDate);
+                    setPeriodEnd(endDate);
+                  }}
+                />
+              </FilterSection>
             </FilterButton>
           ),
         }}
       />
+
+      {bulk.isActive ? (
+        <BulkTagAssignPanel
+          testIDPrefix="history-bulk-tag"
+          tagTree={tagTree}
+          mode={bulk.mode}
+          selectedTagIds={bulk.selectedTagIds}
+          onToggleTag={bulk.toggleTag}
+          onSwitchToRemoveMode={bulk.switchToRemoveMode}
+          onSwitchToAssignMode={bulk.switchToAssignMode}
+        />
+      ) : null}
 
       {events.length === 0 ? (
         <View style={styles.emptyState}>
@@ -198,12 +317,20 @@ function TimelinePanel() {
                     key={event.id}
                     testID={`history-event-${event.id}`}
                     style={styles.timelineRow}
-                    onPress={() => setSelectedEventId(event.id)}
+                    onPress={() => handleEventRowPress(event.id)}
                   >
-                    <View style={styles.timelineRail}>
-                      <View style={styles.timelineDot} />
-                      {isLastInGroup ? null : <View style={styles.timelineLine} />}
-                    </View>
+                    {bulk.isActive ? (
+                      <SelectionCircle
+                        testID={`history-event-select-${event.id}`}
+                        isSelected={bulk.selectedEventIds.includes(event.id)}
+                        onPress={() => bulk.toggleEvent(event.id)}
+                      />
+                    ) : (
+                      <View style={styles.timelineRail}>
+                        <View style={styles.timelineDot} />
+                        {isLastInGroup ? null : <View style={styles.timelineLine} />}
+                      </View>
+                    )}
                     <View style={styles.timelineCardWrap}>
                       <Text style={styles.timelineDate}>
                         {formatDayHeaderLabel(toJstDateKey(event.startAt))}
@@ -232,6 +359,17 @@ function TimelinePanel() {
           )}
         />
       )}
+
+      {bulk.isActive ? (
+        <BulkSelectionActionBar
+          testIDPrefix="history-bulk-tag"
+          mode={bulk.mode}
+          selectedEventCount={bulk.selectedEventIds.length}
+          selectedTagNames={selectedTagNames}
+          onClearSelection={bulk.clearSelectedEvents}
+          onConfirm={handleConfirmBulkAction}
+        />
+      ) : null}
 
       <EventDetailModal eventId={selectedEventId} onClose={handleCloseDetail} />
     </>
@@ -459,6 +597,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fafbfc",
+  },
+  headerTagButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   modeSwitchRow: {
     flexDirection: "row",

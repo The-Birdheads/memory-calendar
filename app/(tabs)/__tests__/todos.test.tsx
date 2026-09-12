@@ -14,6 +14,17 @@ import {
   useUpdateTodo,
 } from "../../../src/features/todos/hooks";
 
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { TextInput } = require("react-native");
+  return function MockDateTimePicker({ testID, onChange }: any) {
+    return React.createElement(TextInput, {
+      testID,
+      onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
+    });
+  };
+});
+
 jest.mock("expo-router", () => {
   const React = require("react");
   return {
@@ -312,6 +323,33 @@ describe("TodosScreen", () => {
     await waitFor(() =>
       expect(useTodosByCalendars).toHaveBeenLastCalledWith(["cal-1", "cal-2"])
     );
+  });
+
+  it("shows a 期間 filter (in the header filter sheet) narrowing todos by the linked event's date", async () => {
+    mockCommonHooks(TODOS_TWO_EVENTS);
+
+    const { getByTestId, getByText, queryByText } = await render(<TodosScreen />);
+    await fireEvent.press(getByTestId("todos-filter"));
+
+    expect(getByText("発表会")).toBeTruthy();
+    expect(getByText("夏祭り")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("todos-period-enable"));
+
+    await fireEvent.press(getByTestId("todos-period-start-button"));
+    await fireEvent.changeText(getByTestId("todos-period-start-picker"), "2026-08-01T00:00:00.000Z");
+    await waitFor(() => expect(getByText("開始 2026-08-01")).toBeTruthy());
+    await fireEvent.press(getByTestId("todos-period-picker-done"));
+
+    await fireEvent.press(getByTestId("todos-period-end-button"));
+    await fireEvent.changeText(getByTestId("todos-period-end-picker"), "2026-08-31T00:00:00.000Z");
+    await waitFor(() => expect(getByText("終了 2026-08-31")).toBeTruthy());
+    await fireEvent.press(getByTestId("todos-period-picker-done"));
+
+    // event-1 (発表会) starts 2026-09-10, outside the selected range - hidden.
+    expect(queryByText("発表会")).toBeNull();
+    // event-2 (夏祭り) starts 2026-08-01, inside the selected range - kept.
+    expect(getByText("夏祭り")).toBeTruthy();
   });
 
   it("keeps a calendar deselected after toggling, even though useTodosByCalendars' own refetch identity changes with the selection (regression: the filter must not silently reset itself on every toggle)", async () => {

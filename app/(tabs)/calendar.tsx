@@ -35,8 +35,21 @@ import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe
 import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
 import { SettingsHubModal } from "../../src/features/calendars/components/SettingsHubModal";
+import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
+import { BulkTagAssignPanel } from "../../src/features/tags/components/BulkTagAssignPanel";
+import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
+import { SelectionCircle } from "../../src/features/tags/components/SelectionCircle";
+import { TagIcon } from "../../src/features/tags/components/TagIcon";
 import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
-import { useAttachTagsToEvent, useEventTagsByEvents, useTagTree } from "../../src/features/tags/hooks";
+import {
+  useAttachTagsToEvent,
+  useAttachTagsToEvents,
+  useBulkTagSelection,
+  useEventTagsByEvents,
+  useRemoveAllTagsFromEvents,
+  useTagTree,
+} from "../../src/features/tags/hooks";
+import { flattenTagTree } from "../../src/features/tags/tagTree";
 import { useCreateTodo } from "../../src/features/todos/hooks";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
@@ -197,7 +210,7 @@ export default function CalendarScreen() {
   // 色の凡例(タグ名/カレンダー名)用。表示中の予定に付いているタグの実名が
   // 要るので、色だけ持つevent.tagColorとは別にタグ本体を引く。
   const eventIds = useMemo(() => events.map((event) => event.id), [events]);
-  const { tagsByEventId } = useEventTagsByEvents(eventIds);
+  const { tagsByEventId, refetch: refetchEventTags } = useEventTagsByEvents(eventIds);
   const colorLegend = useMemo(
     () => buildEventColorLegend(events, tagsByEventId, calendars),
     [events, tagsByEventId, calendars]
@@ -388,6 +401,27 @@ export default function CalendarScreen() {
     setSelectedCalendarIds(null);
   }, []);
 
+  const bulk = useBulkTagSelection();
+  const { attachTagsToEvents } = useAttachTagsToEvents();
+  const { removeAllTagsFromEvents } = useRemoveAllTagsFromEvents();
+
+  const allTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
+  const bulkSelectedTagNames = useMemo(
+    () => bulk.selectedTagIds.flatMap((tagId) => allTagsFlat.find((tag) => tag.id === tagId)?.name ?? []),
+    [bulk.selectedTagIds, allTagsFlat]
+  );
+
+  const handleConfirmBulkTagAction = async () => {
+    if (bulk.mode === "assign") {
+      await attachTagsToEvents(bulk.selectedTagIds, bulk.selectedEventIds);
+    } else {
+      await removeAllTagsFromEvents(bulk.selectedEventIds);
+    }
+    bulk.deactivate();
+    await refetchEventTags();
+    await refetchEvents();
+  };
+
   // タブに戻るたびに予定を取り直す - 予定詳細画面で削除/編集した直後に
   // このタブへ戻ってきても、消したはずの予定がグリッド/一覧/日別モーダルに
   // 残り続けて見える(実際には削除済みなのに紛らわしい)、という問題への
@@ -411,20 +445,35 @@ export default function CalendarScreen() {
   // (ToDoタブの`useTodosByCalendars`まわりで実際に踏んだ問題と同じ)。
   useFocusEffect(
     useCallback(() => {
-      return handleResetFilter;
+      return () => {
+        handleResetFilter();
+        bulk.deactivate();
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [handleResetFilter])
   );
 
   const headerOptions = useMemo(
     () => ({
       headerLeft: () => (
-        <TouchableOpacity
-          testID="calendar-settings-button"
-          onPress={() => setSettingsModalRequest({})}
-          style={styles.headerTagButton}
-        >
-          <Icon name="gear" size={18} color="#2f6fed" />
-        </TouchableOpacity>
+        <View style={styles.headerLeftRow}>
+          <TouchableOpacity
+            testID="calendar-settings-button"
+            onPress={() => setSettingsModalRequest({})}
+            style={styles.headerTagButton}
+          >
+            <Icon name="gear" size={18} color="#2f6fed" />
+          </TouchableOpacity>
+          {viewMode === "list" ? (
+            <TouchableOpacity
+              testID="calendar-bulk-tag-button"
+              onPress={() => (bulk.isActive ? bulk.deactivate() : bulk.activate())}
+              style={styles.headerTagButton}
+            >
+              <TagIcon size={18} color={bulk.isActive ? "#2f6fed" : "#444"} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ),
       headerRight: () => (
         <FilterButton testID="calendar-filter" isActive={isFilterActive} onReset={handleResetFilter}>
@@ -454,7 +503,8 @@ export default function CalendarScreen() {
         </FilterButton>
       ),
     }),
-    [calendars, activeCalendarIds, isFilterActive, handleResetFilter, colorLegend]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleToggleCalendar is intentionally omitted (pre-existing, not part of this change): it's redefined every render, so including it would make this memo recompute every render too.
+    [calendars, activeCalendarIds, isFilterActive, handleResetFilter, colorLegend, viewMode, bulk]
   );
 
   // 個人用/共有どちらの枠にも同じToDoチェックリストUIを出すので、1度だけ
@@ -678,6 +728,18 @@ export default function CalendarScreen() {
         </View>
       ) : (
         <View style={styles.monthListContainer} testID="calendar-month-list-container" {...monthSwipeResponder.panHandlers}>
+          {bulk.isActive ? (
+            <BulkTagAssignPanel
+              testIDPrefix="calendar-bulk-tag"
+              tagTree={tagTree}
+              mode={bulk.mode}
+              selectedTagIds={bulk.selectedTagIds}
+              onToggleTag={bulk.toggleTag}
+              onSwitchToRemoveMode={bulk.switchToRemoveMode}
+              onSwitchToAssignMode={bulk.switchToAssignMode}
+            />
+          ) : null}
+
           {monthEventGroups.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>この月に予定はありません</Text>
@@ -691,34 +753,64 @@ export default function CalendarScreen() {
               renderItem={({ item: group }) => (
                 <View testID={`calendar-month-list-date-group-${group.dateKey}`}>
                   <Text style={styles.monthListDateHeader}>{group.label}</Text>
-                  {group.events.map((event) => (
-                    <TouchableOpacity
-                      key={event.id}
-                      testID={`calendar-list-event-${event.id}`}
-                      style={styles.eventRow}
-                      onPress={() => router.push(`/event/${event.id}`)}
-                    >
-                      <View style={[styles.categoryDot, { backgroundColor: resolveEventColor(event, calendarColorById) }]} />
-                      {personalCalendarIds.has(event.calendarId) ? (
-                        <Icon
-                          testID={`calendar-list-event-personal-${event.id}`}
-                          name="lock"
-                          size={12}
-                          color="#666"
-                        />
-                      ) : null}
-                      <Text style={styles.eventTime}>
-                        {event.isAllDay ? "終日" : `${formatTime(event.startAt)}〜${formatTime(event.endAt)}`}
-                      </Text>
-                      <Text style={styles.eventTitle} numberOfLines={1}>
-                        {event.title}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {group.events.map((event) => {
+                    const tags = tagsByEventId[event.id] ?? [];
+                    return (
+                      <TouchableOpacity
+                        key={event.id}
+                        testID={`calendar-list-event-${event.id}`}
+                        style={styles.eventRow}
+                        onPress={() =>
+                          bulk.isActive ? bulk.toggleEvent(event.id) : router.push(`/event/${event.id}`)
+                        }
+                      >
+                        {bulk.isActive ? (
+                          <SelectionCircle
+                            testID={`calendar-list-event-select-${event.id}`}
+                            isSelected={bulk.selectedEventIds.includes(event.id)}
+                            onPress={() => bulk.toggleEvent(event.id)}
+                          />
+                        ) : null}
+                        <View style={styles.eventRowContent}>
+                          <View style={styles.eventRowMain}>
+                            <View
+                              style={[styles.categoryDot, { backgroundColor: resolveEventColor(event, calendarColorById) }]}
+                            />
+                            {personalCalendarIds.has(event.calendarId) ? (
+                              <Icon
+                                testID={`calendar-list-event-personal-${event.id}`}
+                                name="lock"
+                                size={12}
+                                color="#666"
+                              />
+                            ) : null}
+                            <Text style={styles.eventTime}>
+                              {event.isAllDay ? "終日" : `${formatTime(event.startAt)}〜${formatTime(event.endAt)}`}
+                            </Text>
+                            <Text style={styles.eventTitle} numberOfLines={1}>
+                              {event.title}
+                            </Text>
+                          </View>
+                          {tags.length > 0 ? <EventTagBadges tags={tags} /> : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               )}
             />
           )}
+
+          {bulk.isActive ? (
+            <BulkSelectionActionBar
+              testIDPrefix="calendar-bulk-tag"
+              mode={bulk.mode}
+              selectedEventCount={bulk.selectedEventIds.length}
+              selectedTagNames={bulkSelectedTagNames}
+              onClearSelection={bulk.clearSelectedEvents}
+              onConfirm={handleConfirmBulkTagAction}
+            />
+          ) : null}
         </View>
       )}
 
@@ -1034,6 +1126,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#2f6fed",
   },
+  headerLeftRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   headerTagButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -1291,6 +1387,15 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
+  },
+  eventRowContent: {
+    flex: 1,
+    gap: 4,
+  },
+  eventRowMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   categoryDot: {
     width: 10,

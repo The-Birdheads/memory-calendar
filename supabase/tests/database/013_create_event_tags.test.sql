@@ -1,7 +1,7 @@
 -- タスク6.2 (タスク15.2でタグ所有権チェックを追加): event_tagsスキーマ(予定への複数タグ付与)を検証する
 
 begin;
-select plan(10);
+select plan(12);
 
 select has_table('public', 'event_tags', 'event_tags テーブルが存在すること');
 select col_is_pk(
@@ -15,7 +15,7 @@ select is(
 );
 select policies_are(
   'public', 'event_tags',
-  array['event_tags_insert_member', 'event_tags_select_member'],
+  array['event_tags_delete_own', 'event_tags_insert_member', 'event_tags_select_member'],
   'event_tags に想定通りのRLSポリシーが定義されていること'
 );
 
@@ -71,8 +71,30 @@ select throws_ok(
   '他人が所有するタグを予定に紐付けることはできないこと'
 );
 
--- 予定を削除するとevent_tagsも連鎖削除される
+-- 他人が所有するタグの紐付けを削除することもできない(見えないので対象0件、エラーにはならない)
+delete from public.event_tags where event_id = :'event11_id'::uuid and tag_id = :'tagA_id'::uuid;
+
+set local role postgres;
+select is(
+  (select count(*) from public.event_tags where event_id = :'event11_id'::uuid and tag_id = :'tagA_id'::uuid),
+  1::bigint,
+  '他人が所有するタグの紐付けはDELETEしても削除されないこと'
+);
+
+-- 所有者本人は自分のタグの紐付けを削除できる(この検証を追加する前は、
+-- event_tagsにDELETEポリシーが一つも定義されておらず、detachTagFromEvent()が
+-- 常に0件のまま何もせず成功してしまう不具合があった)
+set local role authenticated;
 set local request.jwt.claim.sub = '11111111-2222-3333-4444-555555555551';
+delete from public.event_tags where event_id = :'event11_id'::uuid and tag_id = :'tagA_id'::uuid;
+
+select is(
+  (select count(*) from public.event_tags where event_id = :'event11_id'::uuid),
+  1::bigint,
+  '所有者本人は自分のタグの紐付けを削除できること(タグBは残ったまま)'
+);
+
+-- 予定を削除するとevent_tagsも連鎖削除される
 delete from public.events where id = :'event11_id'::uuid;
 
 select is(

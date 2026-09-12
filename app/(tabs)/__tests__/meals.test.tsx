@@ -381,6 +381,34 @@ describe("MealsScreen", () => {
       await waitFor(() => expect(useMealRecordsByCalendars).toHaveBeenLastCalledWith(["cal-1"]));
     });
 
+    it("narrows past records by 期間 (start/end date), applied client-side on top of the already-past records", async () => {
+      const records = [
+        RECORDS[0], // meal-1, 2026-08-10 (past)
+        { ...RECORDS[1], id: "meal-3", mealDate: "2026-07-01" }, // 過去日に変えて記録パネルに出す
+      ];
+      mockCommonHooks(records);
+
+      const { getByTestId, getByText, queryByTestId } = await renderLogPanel();
+      await fireEvent.press(getByTestId("meals-filter"));
+
+      expect(getByTestId("meal-item-meal-1")).toBeTruthy();
+      expect(getByTestId("meal-item-meal-3")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("meals-period-enable"));
+      await fireEvent.press(getByTestId("meals-period-start-button"));
+      await fireEvent.changeText(getByTestId("meals-period-start-picker"), "2026-08-01T00:00:00.000Z");
+      await waitFor(() => expect(getByText("開始 2026-08-01")).toBeTruthy());
+      await fireEvent.press(getByTestId("meals-period-picker-done"));
+
+      await fireEvent.press(getByTestId("meals-period-end-button"));
+      await fireEvent.changeText(getByTestId("meals-period-end-picker"), "2026-08-31T00:00:00.000Z");
+      await waitFor(() => expect(getByText("終了 2026-08-31")).toBeTruthy());
+      await fireEvent.press(getByTestId("meals-period-picker-done"));
+
+      expect(getByTestId("meal-item-meal-1")).toBeTruthy();
+      expect(queryByTestId("meal-item-meal-3")).toBeNull();
+    });
+
     it("splits records into past/future using JST 'today', not a raw UTC slice", async () => {
       // 2026-08-19T00:30:00.000Z is already 2026-08-19 09:30 JST, but the raw
       // UTC date is still "2026-08-18" - a naive `new Date().toISOString()`

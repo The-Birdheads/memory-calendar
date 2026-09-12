@@ -4,12 +4,14 @@ import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import {
   attachTagsToEvent,
+  attachTagsToEvents,
   createTag,
   deleteTag,
   detachTagFromEvent,
   listTagsForEvent,
   listTagsForEvents,
   listTagTree,
+  removeAllTagsFromEvents,
   updateTag,
 } from "./service";
 import type { CreateTagInput, Tag, TagError, TagTreeNode, UpdateTagInput } from "./types";
@@ -204,6 +206,154 @@ export function useDetachTagFromEvent(): UseDetachTagFromEventResult {
   }, []);
 
   return { detachTagFromEvent: runDetachTagFromEvent, isSubmitting, error };
+}
+
+export interface UseAttachTagsToEventsResult {
+  attachTagsToEvents: (tagIds: string[], eventIds: string[]) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TagError | null;
+}
+
+/** まとめて付与 - 動線①(振り返り年表)②(カレンダー一覧)共通で使う一括付与。 */
+export function useAttachTagsToEvents(): UseAttachTagsToEventsResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const runAttachTagsToEvents = useCallback(async (tagIds: string[], eventIds: string[]) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await attachTagsToEvents(getSupabaseClient(), tagIds, eventIds);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { attachTagsToEvents: runAttachTagsToEvents, isSubmitting, error };
+}
+
+export interface UseRemoveAllTagsFromEventsResult {
+  removeAllTagsFromEvents: (eventIds: string[]) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TagError | null;
+}
+
+/** まとめて削除 - 動線①②共通で使う、選択された予定からタグを全て外す一括削除。 */
+export function useRemoveAllTagsFromEvents(): UseRemoveAllTagsFromEventsResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TagError | null>(null);
+
+  const runRemoveAllTagsFromEvents = useCallback(async (eventIds: string[]) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await removeAllTagsFromEvents(getSupabaseClient(), eventIds);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { removeAllTagsFromEvents: runRemoveAllTagsFromEvents, isSubmitting, error };
+}
+
+export type BulkTagSelectionMode = "assign" | "remove";
+
+export interface UseBulkTagSelectionResult {
+  isActive: boolean;
+  mode: BulkTagSelectionMode;
+  selectedTagIds: string[];
+  selectedEventIds: string[];
+  activate: () => void;
+  deactivate: () => void;
+  switchToRemoveMode: () => void;
+  switchToAssignMode: () => void;
+  toggleTag: (tagId: string) => void;
+  toggleEvent: (eventId: string) => void;
+  clearSelectedEvents: () => void;
+}
+
+/**
+ * まとめてタグ付与/削除の選択状態一式。振り返り(年表)・カレンダー(一覧)
+ * どちらのタグアイコンからも同じ流れ(モード切り替え・タグ/予定の複数選択)
+ * になるので、画面側の実装を共通化するためにここに切り出す。
+ */
+export function useBulkTagSelection(): UseBulkTagSelectionResult {
+  const [isActive, setIsActive] = useState(false);
+  const [mode, setMode] = useState<BulkTagSelectionMode>("assign");
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
+
+  const activate = useCallback(() => {
+    setMode("assign");
+    setSelectedTagIds(new Set());
+    setSelectedEventIds(new Set());
+    setIsActive(true);
+  }, []);
+
+  const deactivate = useCallback(() => {
+    setIsActive(false);
+    setMode("assign");
+    setSelectedTagIds(new Set());
+    setSelectedEventIds(new Set());
+  }, []);
+
+  // 「まとめて削除」モードはタグを選ばない操作なので、切り替え時にタグの
+  // 選択はクリアする(逆方向は残しておいて構わない - 誤操作防止のため
+  // 「まとめて削除」に切り替えた後で戻ってきた場合のみ選び直させる)。
+  const switchToRemoveMode = useCallback(() => {
+    setMode("remove");
+    setSelectedTagIds(new Set());
+  }, []);
+
+  const switchToAssignMode = useCallback(() => {
+    setMode("assign");
+  }, []);
+
+  const toggleTag = useCallback((tagId: string) => {
+    setSelectedTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) {
+        next.delete(tagId);
+      } else {
+        next.add(tagId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleEvent = useCallback((eventId: string) => {
+    setSelectedEventIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearSelectedEvents = useCallback(() => {
+    setSelectedEventIds(new Set());
+  }, []);
+
+  return {
+    isActive,
+    mode,
+    selectedTagIds: Array.from(selectedTagIds),
+    selectedEventIds: Array.from(selectedEventIds),
+    activate,
+    deactivate,
+    switchToRemoveMode,
+    switchToAssignMode,
+    toggleTag,
+    toggleEvent,
+    clearSelectedEvents,
+  };
 }
 
 export interface UseUpdateTagResult {

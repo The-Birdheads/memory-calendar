@@ -2,12 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   attachTagsToEvent,
+  attachTagsToEvents,
   createTag,
   deleteTag,
   detachTagFromEvent,
   listTagsForEvent,
   listTagsForEvents,
   listTagTree,
+  removeAllTagsFromEvents,
   updateTag,
 } from "../service";
 
@@ -299,6 +301,87 @@ describe("detachTagFromEvent", () => {
     } as unknown as SupabaseClient;
 
     const result = await detachTagFromEvent(client, "event-1", "tag-1");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("attachTagsToEvents", () => {
+  it("upserts an event_tags row for every (event, tag) combination, ignoring duplicates", async () => {
+    const upsert = jest.fn().mockResolvedValue({ error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ upsert }),
+    } as unknown as SupabaseClient;
+
+    const result = await attachTagsToEvents(client, ["tag-1", "tag-2"], ["event-1", "event-2"]);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(client.from).toHaveBeenCalledWith("event_tags");
+    expect(upsert).toHaveBeenCalledWith(
+      [
+        { event_id: "event-1", tag_id: "tag-1" },
+        { event_id: "event-1", tag_id: "tag-2" },
+        { event_id: "event-2", tag_id: "tag-1" },
+        { event_id: "event-2", tag_id: "tag-2" },
+      ],
+      { onConflict: "event_id,tag_id", ignoreDuplicates: true }
+    );
+  });
+
+  it("does nothing without calling Supabase when there are no tags or no events", async () => {
+    const client = { from: jest.fn() } as unknown as SupabaseClient;
+
+    expect(await attachTagsToEvents(client, [], ["event-1"])).toEqual({ ok: true, value: undefined });
+    expect(await attachTagsToEvents(client, ["tag-1"], [])).toEqual({ ok: true, value: undefined });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("maps an RLS/permission error to Forbidden", async () => {
+    const upsert = jest.fn().mockResolvedValue({
+      error: { message: "permission denied", code: "42501" },
+    });
+    const client = {
+      from: jest.fn().mockReturnValue({ upsert }),
+    } as unknown as SupabaseClient;
+
+    const result = await attachTagsToEvents(client, ["tag-1"], ["event-1"]);
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("removeAllTagsFromEvents", () => {
+  it("deletes every event_tags row for the given events", async () => {
+    const inFn = jest.fn().mockResolvedValue({ error: null });
+    const del = jest.fn().mockReturnValue({ in: inFn });
+    const client = {
+      from: jest.fn().mockReturnValue({ delete: del }),
+    } as unknown as SupabaseClient;
+
+    const result = await removeAllTagsFromEvents(client, ["event-1", "event-2"]);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(client.from).toHaveBeenCalledWith("event_tags");
+    expect(inFn).toHaveBeenCalledWith("event_id", ["event-1", "event-2"]);
+  });
+
+  it("does nothing without calling Supabase when the event id list is empty", async () => {
+    const client = { from: jest.fn() } as unknown as SupabaseClient;
+
+    const result = await removeAllTagsFromEvents(client, []);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("maps an RLS/permission error to Forbidden", async () => {
+    const inFn = jest.fn().mockResolvedValue({ error: { message: "permission denied", code: "42501" } });
+    const del = jest.fn().mockReturnValue({ in: inFn });
+    const client = {
+      from: jest.fn().mockReturnValue({ delete: del }),
+    } as unknown as SupabaseClient;
+
+    const result = await removeAllTagsFromEvents(client, ["event-1"]);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

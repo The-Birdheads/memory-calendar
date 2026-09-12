@@ -4,13 +4,30 @@ import HistoryScreen from "../history";
 import { useMyCalendars } from "../../../src/features/calendars/hooks";
 import { usePastEventsByTag } from "../../../src/features/history/hooks";
 import { useEventIdsWithPhotos, useMemoriesTimeline } from "../../../src/features/memories/hooks";
-import { useEventTagsByEvents, useTagTree } from "../../../src/features/tags/hooks";
+import {
+  useAttachTagsToEvents,
+  useEventTagsByEvents,
+  useRemoveAllTagsFromEvents,
+  useTagTree,
+} from "../../../src/features/tags/hooks";
+
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { TextInput } = require("react-native");
+  return function MockDateTimePicker({ testID, onChange }: any) {
+    return React.createElement(TextInput, {
+      testID,
+      onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
+    });
+  };
+});
 
 jest.mock("expo-router", () => {
   const React = require("react");
   return {
     Tabs: {
-      Screen: ({ options }: any) => React.createElement(React.Fragment, null, options?.headerRight?.()),
+      Screen: ({ options }: any) =>
+        React.createElement(React.Fragment, null, options?.headerLeft?.(), options?.headerRight?.()),
     },
     // Treats "focus" as "mount" and "blur" as "unmount" for testing purposes,
     // since there's no real navigation container here to fire actual
@@ -27,10 +44,20 @@ jest.mock("../../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
 }));
 
-jest.mock("../../../src/features/tags/hooks", () => ({
-  useTagTree: jest.fn(),
-  useEventTagsByEvents: jest.fn(),
-}));
+jest.mock("../../../src/features/tags/hooks", () => {
+  const actual = jest.requireActual("../../../src/features/tags/hooks");
+  return {
+    useTagTree: jest.fn(),
+    useEventTagsByEvents: jest.fn(),
+    useAttachTagsToEvents: jest.fn(),
+    useRemoveAllTagsFromEvents: jest.fn(),
+    // useBulkTagSelection is pure client-side selection state (no Supabase
+    // calls) and already has its own dedicated test suite - using the real
+    // implementation here lets these integration tests exercise the actual
+    // bulk-mode UI flow instead of re-mocking that state machine.
+    useBulkTagSelection: actual.useBulkTagSelection,
+  };
+});
 
 jest.mock("../../../src/features/history/hooks", () => ({
   usePastEventsByTag: jest.fn(),
@@ -120,8 +147,18 @@ function mockCommonHooks() {
     error: null,
     refetch: jest.fn(),
   });
-  (usePastEventsByTag as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null });
+  (usePastEventsByTag as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
   (useMemoriesTimeline as jest.Mock).mockReturnValue({ entries: [], isLoading: false, error: null, refetch: jest.fn() });
+  (useAttachTagsToEvents as jest.Mock).mockReturnValue({
+    attachTagsToEvents: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useRemoveAllTagsFromEvents as jest.Mock).mockReturnValue({
+    removeAllTagsFromEvents: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
 }
 
 describe("HistoryScreen", () => {
@@ -275,6 +312,39 @@ describe("HistoryScreen", () => {
       );
     });
 
+    it("filters to events with no tags at all when 未設定 is selected, fetching unfiltered and narrowing client-side", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({
+        events: [
+          { id: "event-1", calendarId: "cal-1", title: "タグ無し予定", startAt: "2026-08-10T10:00:00.000Z" },
+          { id: "event-2", calendarId: "cal-1", title: "タグ有り予定", startAt: "2026-08-11T10:00:00.000Z" },
+        ],
+        isLoading: false,
+        error: null,
+      });
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        // event-1 has no entry at all (no tags) - event-2 has one.
+        tagsByEventId: { "event-2": [{ id: "tag-1", name: "行事", color: "#ff0000" }] },
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, getByText, queryByText } = await render(<HistoryScreen />);
+      await fireEvent.press(getByTestId("history-filter"));
+
+      expect(getByText("タグ無し予定")).toBeTruthy();
+      expect(getByText("タグ有り予定")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("history-tag-filter-untagged"));
+
+      // usePastEventsByTag is still called with undefined (no server-side tag
+      // filter) - "未設定" narrows client-side using the already-fetched tags.
+      await waitFor(() => expect(usePastEventsByTag).toHaveBeenLastCalledWith(undefined, ["cal-1", "cal-2"]));
+      expect(getByText("タグ無し予定")).toBeTruthy();
+      expect(queryByText("タグ有り予定")).toBeNull();
+    });
+
     it("shows an empty state message when no events match", async () => {
       mockCommonHooks();
 
@@ -352,6 +422,38 @@ describe("HistoryScreen", () => {
       );
     });
 
+    it("narrows the timeline by 期間 (start/end date), applied client-side on top of the tag-filtered events", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({
+        events: [
+          { id: "event-1", calendarId: "cal-1", title: "夏祭り", startAt: "2026-08-01T10:00:00.000Z" },
+          { id: "event-2", calendarId: "cal-1", title: "発表会", startAt: "2026-09-10T10:00:00.000Z" },
+        ],
+        isLoading: false,
+        error: null,
+      });
+
+      const { getByTestId, getByText, queryByText } = await render(<HistoryScreen />);
+      await fireEvent.press(getByTestId("history-filter"));
+
+      expect(getByText("夏祭り")).toBeTruthy();
+      expect(getByText("発表会")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("history-period-enable"));
+      await fireEvent.press(getByTestId("history-period-start-button"));
+      await fireEvent.changeText(getByTestId("history-period-start-picker"), "2026-08-01T00:00:00.000Z");
+      await waitFor(() => expect(getByText("開始 2026-08-01")).toBeTruthy());
+      await fireEvent.press(getByTestId("history-period-picker-done"));
+
+      await fireEvent.press(getByTestId("history-period-end-button"));
+      await fireEvent.changeText(getByTestId("history-period-end-picker"), "2026-08-31T00:00:00.000Z");
+      await waitFor(() => expect(getByText("終了 2026-08-31")).toBeTruthy());
+      await fireEvent.press(getByTestId("history-period-picker-done"));
+
+      expect(getByText("夏祭り")).toBeTruthy();
+      expect(queryByText("発表会")).toBeNull();
+    });
+
     it("opens the event detail in an in-tab modal (not navigation) when a past event row is pressed, showing its own go-to-calendar button, and closes it via onBack", async () => {
       mockCommonHooks();
       (usePastEventsByTag as jest.Mock).mockReturnValue({ events: PAST_EVENTS, isLoading: false, error: null });
@@ -372,6 +474,127 @@ describe("HistoryScreen", () => {
       await fireEvent.press(getByTestId("mock-event-detail-content"));
 
       expect(queryByTestId("mock-event-detail-content")).toBeNull();
+    });
+
+    describe("まとめてタグ付与/削除", () => {
+      const BULK_EVENTS = [
+        { id: "event-1", calendarId: "cal-1", title: "夏祭り", startAt: "2026-08-01T10:00:00.000Z" },
+        { id: "event-2", calendarId: "cal-1", title: "発表会", startAt: "2026-08-10T10:00:00.000Z" },
+      ];
+
+      it("shows the bulk-assign panel and selection circles once the header tag icon is pressed, instead of opening the event detail on row tap", async () => {
+        mockCommonHooks();
+        (usePastEventsByTag as jest.Mock).mockReturnValue({
+          events: BULK_EVENTS,
+          isLoading: false,
+          error: null,
+          refetch: jest.fn(),
+        });
+
+        const { getByTestId, getByText, queryByTestId } = await render(<HistoryScreen />);
+
+        expect(queryByTestId("history-bulk-tag-panel")).toBeNull();
+
+        await fireEvent.press(getByTestId("history-bulk-tag-button"));
+
+        expect(getByTestId("history-bulk-tag-panel")).toBeTruthy();
+        expect(getByTestId("history-event-select-event-1")).toBeTruthy();
+
+        // While bulk mode is active, tapping the row selects it instead of
+        // opening the event detail modal.
+        await fireEvent.press(getByTestId("history-event-event-1"));
+        expect(queryByTestId("mock-event-detail-content")).toBeNull();
+        expect(getByText("✓")).toBeTruthy(); // the row's selection circle is now checked
+      });
+
+      it("assigns the selected tags to the selected events on confirm, then refetches and leaves bulk mode", async () => {
+        mockCommonHooks();
+        const refetchEvents = jest.fn();
+        const refetchTags = jest.fn();
+        (usePastEventsByTag as jest.Mock).mockReturnValue({
+          events: BULK_EVENTS,
+          isLoading: false,
+          error: null,
+          refetch: refetchEvents,
+        });
+        (useEventTagsByEvents as jest.Mock).mockReturnValue({
+          tagsByEventId: {},
+          isLoading: false,
+          error: null,
+          refetch: refetchTags,
+        });
+        const attachTagsToEventsMock = jest.fn().mockResolvedValue(true);
+        (useAttachTagsToEvents as jest.Mock).mockReturnValue({
+          attachTagsToEvents: attachTagsToEventsMock,
+          isSubmitting: false,
+          error: null,
+        });
+
+        const { getByTestId, getByText, queryByTestId } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-bulk-tag-button"));
+
+        await fireEvent.press(getByTestId("history-bulk-tag-tag-picker-tag-tag-1"));
+        await fireEvent.press(getByTestId("history-event-select-event-1"));
+        await fireEvent.press(getByTestId("history-event-select-event-2"));
+
+        await fireEvent.press(getByTestId("history-bulk-tag-confirm"));
+        expect(getByText("選択された予定にタグ「行事」を設定してよろしいですか？")).toBeTruthy();
+        await fireEvent.press(getByTestId("history-bulk-tag-confirm-ok"));
+
+        await waitFor(() =>
+          expect(attachTagsToEventsMock).toHaveBeenCalledWith(["tag-1"], ["event-1", "event-2"])
+        );
+        await waitFor(() => expect(refetchTags).toHaveBeenCalled());
+        await waitFor(() => expect(refetchEvents).toHaveBeenCalled());
+        expect(queryByTestId("history-bulk-tag-panel")).toBeNull();
+      });
+
+      it("switches to remove mode via 'まとめて削除' and removes all tags from the selected events on confirm", async () => {
+        mockCommonHooks();
+        (usePastEventsByTag as jest.Mock).mockReturnValue({
+          events: BULK_EVENTS,
+          isLoading: false,
+          error: null,
+          refetch: jest.fn(),
+        });
+        const removeAllTagsFromEventsMock = jest.fn().mockResolvedValue(true);
+        (useRemoveAllTagsFromEvents as jest.Mock).mockReturnValue({
+          removeAllTagsFromEvents: removeAllTagsFromEventsMock,
+          isSubmitting: false,
+          error: null,
+        });
+
+        const { getByTestId, getByText } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-bulk-tag-button"));
+
+        await fireEvent.press(getByTestId("history-bulk-tag-switch-to-remove"));
+        await fireEvent.press(getByTestId("history-event-select-event-1"));
+
+        await fireEvent.press(getByTestId("history-bulk-tag-confirm"));
+        expect(getByText("選択された予定の全てのタグを削除してよろしいですか？")).toBeTruthy();
+        await fireEvent.press(getByTestId("history-bulk-tag-confirm-ok"));
+
+        await waitFor(() => expect(removeAllTagsFromEventsMock).toHaveBeenCalledWith(["event-1"]));
+      });
+
+      it("closes bulk mode (and its selections) when the header tag icon is pressed again", async () => {
+        mockCommonHooks();
+        (usePastEventsByTag as jest.Mock).mockReturnValue({
+          events: BULK_EVENTS,
+          isLoading: false,
+          error: null,
+          refetch: jest.fn(),
+        });
+
+        const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-bulk-tag-button"));
+        await fireEvent.press(getByTestId("history-event-select-event-1"));
+
+        await fireEvent.press(getByTestId("history-bulk-tag-button"));
+
+        expect(queryByTestId("history-bulk-tag-panel")).toBeNull();
+        expect(queryByTestId("history-bulk-tag-bar")).toBeNull();
+      });
     });
   });
 

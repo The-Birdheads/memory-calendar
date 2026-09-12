@@ -162,6 +162,51 @@ export async function detachTagFromEvent(
   return ok(undefined);
 }
 
+/**
+ * まとめて付与(動線①②の「選択完了」)- 選択された複数タグを選択された
+ * 複数予定すべてに紐付ける。一部の(予定,タグ)組がすでに存在していても
+ * (既存のattachTagsToEventはinsertなのでその場合エラーになるが、こちらは
+ * 複数予定にまたがる一括操作なので)ignoreDuplicatesで無視して成功させる。
+ */
+export async function attachTagsToEvents(
+  client: SupabaseClient,
+  tagIds: string[],
+  eventIds: string[]
+): Promise<Result<void, TagError>> {
+  if (tagIds.length === 0 || eventIds.length === 0) {
+    return ok(undefined);
+  }
+
+  const rows = eventIds.flatMap((eventId) => tagIds.map((tagId) => ({ event_id: eventId, tag_id: tagId })));
+  const { error } = await client
+    .from("event_tags")
+    .upsert(rows, { onConflict: "event_id,tag_id", ignoreDuplicates: true });
+
+  if (error) {
+    return err(mapTagError(error));
+  }
+
+  return ok(undefined);
+}
+
+/** まとめて削除(動線①②の「まとめて削除」モード)- 選択された予定からタグを全て外す。 */
+export async function removeAllTagsFromEvents(
+  client: SupabaseClient,
+  eventIds: string[]
+): Promise<Result<void, TagError>> {
+  if (eventIds.length === 0) {
+    return ok(undefined);
+  }
+
+  const { error } = await client.from("event_tags").delete().in("event_id", eventIds);
+
+  if (error) {
+    return err(mapTagError(error));
+  }
+
+  return ok(undefined);
+}
+
 export async function listTagsForEvent(
   client: SupabaseClient,
   eventId: string

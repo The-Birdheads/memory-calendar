@@ -11,7 +11,14 @@ import {
   useRemoveMember,
 } from "../../src/features/calendars/hooks";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
-import { useAttachTagsToEvent, useCreateTag, useEventTagsByEvents, useTagTree } from "../../src/features/tags/hooks";
+import {
+  useAttachTagsToEvent,
+  useAttachTagsToEvents,
+  useCreateTag,
+  useEventTagsByEvents,
+  useRemoveAllTagsFromEvents,
+  useTagTree,
+} from "../../src/features/tags/hooks";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
 jest.mock("expo-router", () => {
@@ -46,12 +53,18 @@ jest.mock("../../src/features/calendars/hooks", () => ({
   useJoinByInvite: jest.fn(),
 }));
 
-jest.mock("../../src/features/tags/hooks", () => ({
-  useTagTree: jest.fn(),
-  useCreateTag: jest.fn(),
-  useAttachTagsToEvent: jest.fn(),
-  useEventTagsByEvents: jest.fn(),
-}));
+jest.mock("../../src/features/tags/hooks", () => {
+  const actual = jest.requireActual("../../src/features/tags/hooks");
+  return {
+    useTagTree: jest.fn(),
+    useCreateTag: jest.fn(),
+    useAttachTagsToEvent: jest.fn(),
+    useAttachTagsToEvents: jest.fn(),
+    useRemoveAllTagsFromEvents: jest.fn(),
+    useEventTagsByEvents: jest.fn(),
+    useBulkTagSelection: actual.useBulkTagSelection,
+  };
+});
 
 jest.mock("@react-native-community/datetimepicker", () => {
   const React = require("react");
@@ -87,6 +100,16 @@ describe("13.1 予定作成からカレンダー月表示への反映", () => {
     (useCreateTag as jest.Mock).mockReturnValue({ createTag: jest.fn(), isSubmitting: false, error: null });
     (useAttachTagsToEvent as jest.Mock).mockReturnValue({
       attachTagsToEvent: jest.fn(),
+      isSubmitting: false,
+      error: null,
+    });
+    (useAttachTagsToEvents as jest.Mock).mockReturnValue({
+      attachTagsToEvents: jest.fn(),
+      isSubmitting: false,
+      error: null,
+    });
+    (useRemoveAllTagsFromEvents as jest.Mock).mockReturnValue({
+      removeAllTagsFromEvents: jest.fn(),
       isSubmitting: false,
       error: null,
     });

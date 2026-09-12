@@ -3,21 +3,26 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
 import {
   attachTagsToEvent,
+  attachTagsToEvents,
   createTag,
   deleteTag,
   detachTagFromEvent,
   listTagsForEvent,
   listTagsForEvents,
   listTagTree,
+  removeAllTagsFromEvents,
   updateTag,
 } from "../service";
 import {
   useAttachTagsToEvent,
+  useAttachTagsToEvents,
+  useBulkTagSelection,
   useCreateTag,
   useDeleteTag,
   useDetachTagFromEvent,
   useEventTags,
   useEventTagsByEvents,
+  useRemoveAllTagsFromEvents,
   useTagTree,
   useUpdateTag,
 } from "../hooks";
@@ -30,7 +35,9 @@ jest.mock("../service", () => ({
   createTag: jest.fn(),
   listTagTree: jest.fn(),
   attachTagsToEvent: jest.fn(),
+  attachTagsToEvents: jest.fn(),
   detachTagFromEvent: jest.fn(),
+  removeAllTagsFromEvents: jest.fn(),
   listTagsForEvent: jest.fn(),
   listTagsForEvents: jest.fn(),
   updateTag: jest.fn(),
@@ -262,6 +269,80 @@ describe("useAttachTagsToEvent", () => {
   });
 });
 
+describe("useAttachTagsToEvents", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when it succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (attachTagsToEvents as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    const { result } = await renderHook(() => useAttachTagsToEvents());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.attachTagsToEvents(["tag-1"], ["event-1", "event-2"]);
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(attachTagsToEvents).toHaveBeenCalledWith({}, ["tag-1"], ["event-1", "event-2"]);
+  });
+
+  it("returns false and sets the error when it fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (attachTagsToEvents as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useAttachTagsToEvents());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.attachTagsToEvents(["tag-1"], ["event-1"]);
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useRemoveAllTagsFromEvents", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when it succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (removeAllTagsFromEvents as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    const { result } = await renderHook(() => useRemoveAllTagsFromEvents());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.removeAllTagsFromEvents(["event-1", "event-2"]);
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(removeAllTagsFromEvents).toHaveBeenCalledWith({}, ["event-1", "event-2"]);
+  });
+
+  it("returns false and sets the error when it fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (removeAllTagsFromEvents as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useRemoveAllTagsFromEvents());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.removeAllTagsFromEvents(["event-1"]);
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
 describe("useDetachTagFromEvent", () => {
   afterEach(() => {
     jest.clearAllMocks();
@@ -370,5 +451,95 @@ describe("useDeleteTag", () => {
 
     expect(success).toBe(false);
     expect(result.current.error).toEqual({ type: "Forbidden" });
+  });
+});
+
+describe("useBulkTagSelection", () => {
+  it("starts inactive, in assign mode, with nothing selected", async () => {
+    const { result } = await renderHook(() => useBulkTagSelection());
+
+    expect(result.current.isActive).toBe(false);
+    expect(result.current.mode).toBe("assign");
+    expect(result.current.selectedTagIds).toEqual([]);
+    expect(result.current.selectedEventIds).toEqual([]);
+  });
+
+  it("activate() turns bulk mode on, starting fresh in assign mode", async () => {
+    const { result } = await renderHook(() => useBulkTagSelection());
+
+    await act(async () => result.current.activate());
+
+    expect(result.current.isActive).toBe(true);
+    expect(result.current.mode).toBe("assign");
+  });
+
+  it("toggleTag()/toggleEvent() add and remove ids from their own selections", async () => {
+    const { result } = await renderHook(() => useBulkTagSelection());
+    await act(async () => result.current.activate());
+
+    await act(async () => result.current.toggleTag("tag-1"));
+    await act(async () => result.current.toggleEvent("event-1"));
+    await act(async () => result.current.toggleEvent("event-2"));
+
+    expect(result.current.selectedTagIds).toEqual(["tag-1"]);
+    expect(result.current.selectedEventIds).toEqual(["event-1", "event-2"]);
+
+    await act(async () => result.current.toggleTag("tag-1"));
+    await act(async () => result.current.toggleEvent("event-1"));
+
+    expect(result.current.selectedTagIds).toEqual([]);
+    expect(result.current.selectedEventIds).toEqual(["event-2"]);
+  });
+
+  it("switchToRemoveMode() switches the mode and clears any selected tags (a removal doesn't pick tags)", async () => {
+    const { result } = await renderHook(() => useBulkTagSelection());
+    await act(async () => result.current.activate());
+    await act(async () => result.current.toggleTag("tag-1"));
+    await act(async () => result.current.toggleEvent("event-1"));
+
+    await act(async () => result.current.switchToRemoveMode());
+
+    expect(result.current.mode).toBe("remove");
+    expect(result.current.selectedTagIds).toEqual([]);
+    // Switching modes doesn't lose which events were already selected.
+    expect(result.current.selectedEventIds).toEqual(["event-1"]);
+  });
+
+  it("switchToAssignMode() switches back without touching the event selection", async () => {
+    const { result } = await renderHook(() => useBulkTagSelection());
+    await act(async () => result.current.activate());
+    await act(async () => result.current.toggleEvent("event-1"));
+    await act(async () => result.current.switchToRemoveMode());
+
+    await act(async () => result.current.switchToAssignMode());
+
+    expect(result.current.mode).toBe("assign");
+    expect(result.current.selectedEventIds).toEqual(["event-1"]);
+  });
+
+  it("clearSelectedEvents() empties the event selection without leaving bulk mode", async () => {
+    const { result } = await renderHook(() => useBulkTagSelection());
+    await act(async () => result.current.activate());
+    await act(async () => result.current.toggleEvent("event-1"));
+
+    await act(async () => result.current.clearSelectedEvents());
+
+    expect(result.current.isActive).toBe(true);
+    expect(result.current.selectedEventIds).toEqual([]);
+  });
+
+  it("deactivate() turns bulk mode off and resets mode/selections", async () => {
+    const { result } = await renderHook(() => useBulkTagSelection());
+    await act(async () => result.current.activate());
+    await act(async () => result.current.toggleTag("tag-1"));
+    await act(async () => result.current.toggleEvent("event-1"));
+    await act(async () => result.current.switchToRemoveMode());
+
+    await act(async () => result.current.deactivate());
+
+    expect(result.current.isActive).toBe(false);
+    expect(result.current.mode).toBe("assign");
+    expect(result.current.selectedTagIds).toEqual([]);
+    expect(result.current.selectedEventIds).toEqual([]);
   });
 });

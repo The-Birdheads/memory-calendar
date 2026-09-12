@@ -5,6 +5,7 @@ import { Tabs, useFocusEffect } from "expo-router";
 import { useMyCalendars } from "../../src/features/calendars/hooks";
 import { CalendarSwitchChip } from "../../src/features/calendars/components/CalendarSwitchChip";
 import { EventDetailModal } from "../../src/features/events/components/EventDetailModal";
+import { DateRangeFilterSection } from "../../src/shared/components/DateRangeFilterSection";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
 import { PersonalOnlyBadge } from "../../src/shared/components/PersonalOnlyBadge";
@@ -25,6 +26,7 @@ import {
 } from "../../src/features/todos/hooks";
 import type { Todo, TodoWithEventTitle } from "../../src/features/todos/types";
 import { todayJstDateKey, toJstDateKey } from "../../src/shared/utils/formatDateTime";
+import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
 
 /** Scrolls the given ScrollView so the node comes into view near the top. */
 function scrollToNode(scrollRef: React.RefObject<ScrollView | null>, node: View | null) {
@@ -458,13 +460,22 @@ export default function TodosScreen() {
   const [reattachTargetTodo, setReattachTargetTodo] = useState<Todo | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
-  const groups = useMemo(() => groupTodosByEvent(todos), [todos]);
+  const [periodStart, setPeriodStart] = useState<string | null>(null);
+  const [periodEnd, setPeriodEnd] = useState<string | null>(null);
+
+  const allGroups = useMemo(() => groupTodosByEvent(todos), [todos]);
+  const groups = useMemo(
+    () => allGroups.filter((group) => isDateKeyInRange(toJstDateKey(group.eventStartAt), periodStart, periodEnd)),
+    [allGroups, periodStart, periodEnd]
+  );
   const eventIds = useMemo(() => groups.map((group) => group.eventId), [groups]);
   const { tagsByEventId } = useEventTagsByEvents(eventIds);
 
-  const isFilterActive = selectedCalendarIds !== null;
+  const isFilterActive = selectedCalendarIds !== null || periodStart !== null || periodEnd !== null;
   const handleResetFilter = useCallback(() => {
     setSelectedCalendarIds(null);
+    setPeriodStart(null);
+    setPeriodEnd(null);
   }, []);
 
   // Realtime alone isn't reliable for "created elsewhere" cases (e.g. adding
@@ -629,6 +640,17 @@ export default function TodosScreen() {
                     onPress={() => handleToggleCalendar(calendar.id)}
                   />
                 ))}
+              </FilterSection>
+              <FilterSection title="期間">
+                <DateRangeFilterSection
+                  testIDPrefix="todos-period"
+                  startDate={periodStart}
+                  endDate={periodEnd}
+                  onChange={({ startDate, endDate }) => {
+                    setPeriodStart(startDate);
+                    setPeriodEnd(endDate);
+                  }}
+                />
               </FilterSection>
             </FilterButton>
           ),
