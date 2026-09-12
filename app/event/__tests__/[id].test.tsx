@@ -721,6 +721,27 @@ describe("EventDetailScreen", () => {
     await waitFor(() => expect(refetchTodos).toHaveBeenCalled());
   });
 
+  it("edits a todo's title via the pencil icon and saves via updateTodo", async () => {
+    const { refetchTodos } = mockCommonHooks({
+      event: FUTURE_EVENT,
+      todos: [{ id: "todo-1", eventId: "event-1", title: "飲み物を買う", isDone: false, completedAt: null, reminderAt: null }],
+    });
+    const updateTodoMock = jest.fn().mockResolvedValue(true);
+    (useUpdateTodo as jest.Mock).mockReturnValue({ updateTodo: updateTodoMock, isSubmitting: false, error: null });
+
+    const { getByTestId, queryByText } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-todo-edit-todo-1"));
+    expect(getByTestId("event-todo-title-input-todo-1").props.value).toBe("飲み物を買う");
+
+    await fireEvent.changeText(getByTestId("event-todo-title-input-todo-1"), "炭酸水を買う");
+    await fireEvent.press(getByTestId("event-todo-title-confirm-todo-1"));
+
+    await waitFor(() => expect(updateTodoMock).toHaveBeenCalledWith("todo-1", { title: "炭酸水を買う" }));
+    await waitFor(() => expect(refetchTodos).toHaveBeenCalled());
+    expect(queryByText("削除")).toBeNull();
+  });
+
   it("shows the timed reminder options for a timed event, with none checked by default when no reminders exist yet", async () => {
     mockCommonHooks({ event: FUTURE_EVENT, reminders: [] });
 

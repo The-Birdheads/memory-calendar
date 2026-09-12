@@ -692,6 +692,48 @@ describe("TodosScreen", () => {
     expect(updateTodoMock).not.toHaveBeenCalled();
   });
 
+  it("edits a todo's title: pencil reveals a text field seeded with the current title, ✓ confirms and refetches", async () => {
+    const refetch = jest.fn();
+    mockCommonHooks(TODOS, refetch);
+    const updateTodoMock = jest.fn().mockResolvedValue(true);
+    (useUpdateTodo as jest.Mock).mockReturnValue({ updateTodo: updateTodoMock, isSubmitting: false, error: null });
+
+    const { getByTestId, queryByTestId, queryByText } = await render(<TodosScreen />);
+
+    expect(queryByTestId("todo-title-input-todo-1")).toBeNull();
+
+    await fireEvent.press(getByTestId("todo-edit-todo-1"));
+
+    expect(getByTestId("todo-title-input-todo-1").props.value).toBe("楽譜購入");
+    // 編集中はベル/ゴミ箱を隠す
+    expect(queryByTestId("todo-reminder-icon-todo-1")).toBeNull();
+    expect(queryByTestId("todo-delete-todo-1")).toBeNull();
+    expect(queryByText("楽譜購入")).toBeNull();
+
+    await fireEvent.changeText(getByTestId("todo-title-input-todo-1"), "新しい楽譜を購入");
+    await fireEvent.press(getByTestId("todo-title-confirm-todo-1"));
+
+    await waitFor(() => expect(updateTodoMock).toHaveBeenCalledWith("todo-1", { title: "新しい楽譜を購入" }));
+    await waitFor(() => expect(refetch).toHaveBeenCalled());
+    expect(queryByTestId("todo-title-input-todo-1")).toBeNull();
+  });
+
+  it("cancels a todo's title edit via ✕ without calling updateTodo", async () => {
+    mockCommonHooks(TODOS);
+    const updateTodoMock = jest.fn().mockResolvedValue(true);
+    (useUpdateTodo as jest.Mock).mockReturnValue({ updateTodo: updateTodoMock, isSubmitting: false, error: null });
+
+    const { getByTestId, queryByTestId, getByText } = await render(<TodosScreen />);
+
+    await fireEvent.press(getByTestId("todo-edit-todo-1"));
+    await fireEvent.changeText(getByTestId("todo-title-input-todo-1"), "書きかけの変更");
+    await fireEvent.press(getByTestId("todo-title-cancel-todo-1"));
+
+    expect(updateTodoMock).not.toHaveBeenCalled();
+    expect(queryByTestId("todo-title-input-todo-1")).toBeNull();
+    expect(getByText("楽譜購入")).toBeTruthy();
+  });
+
   it("shows the all-day reminder options for a todo linked to an all-day event", async () => {
     const allDayTodo = { ...TODOS[0], eventIsAllDay: true };
     mockCommonHooks([allDayTodo]);
@@ -837,6 +879,28 @@ describe("TodosScreen", () => {
     await fireEvent.press(getByTestId("orphaned-todo-delete-orphan-1"));
 
     await waitFor(() => expect(deleteTodoMock).toHaveBeenCalledWith("orphan-1"));
+    await waitFor(() => expect(refetchOrphaned).toHaveBeenCalled());
+  });
+
+  it("edits an orphaned todo's title and refetches the orphaned list", async () => {
+    mockCommonHooks(TODOS);
+    const refetchOrphaned = jest.fn();
+    const updateTodoMock = jest.fn().mockResolvedValue(true);
+    (useOrphanedTodos as jest.Mock).mockReturnValue({
+      todos: [ORPHANED_TODO],
+      isLoading: false,
+      error: null,
+      refetch: refetchOrphaned,
+    });
+    (useUpdateTodo as jest.Mock).mockReturnValue({ updateTodo: updateTodoMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<TodosScreen />);
+
+    await fireEvent.press(getByTestId("orphaned-todo-edit-orphan-1"));
+    await fireEvent.changeText(getByTestId("orphaned-todo-title-input-orphan-1"), "宛名を書いて投函");
+    await fireEvent.press(getByTestId("orphaned-todo-title-confirm-orphan-1"));
+
+    await waitFor(() => expect(updateTodoMock).toHaveBeenCalledWith("orphan-1", { title: "宛名を書いて投函" }));
     await waitFor(() => expect(refetchOrphaned).toHaveBeenCalled());
   });
 

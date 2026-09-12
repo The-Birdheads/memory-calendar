@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { FlatList, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Tabs, useFocusEffect } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
@@ -48,15 +48,34 @@ interface TodoItemRowProps {
   onToggle: (todo: TodoWithEventTitle) => void;
   onDelete: (todoId: string) => void;
   onSetReminder: (todoId: string, reminderAt: string | null) => void;
+  onEditTitle: (todoId: string, title: string) => void;
 }
 
-function TodoItemRow({ todo, emphasizeOverdue, onToggle, onDelete, onSetReminder }: TodoItemRowProps) {
+function TodoItemRow({ todo, emphasizeOverdue, onToggle, onDelete, onSetReminder, onEditTitle }: TodoItemRowProps) {
   const [isReminderModalVisible, setIsReminderModalVisible] = useState(false);
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(todo.title);
 
   const handleConfirmDelete = () => {
     onDelete(todo.id);
     setIsDeleteConfirmVisible(false);
+  };
+
+  const handleStartEditTitle = () => {
+    setTitleDraft(todo.title);
+    setIsEditingTitle(true);
+  };
+
+  const handleConfirmEditTitle = () => {
+    const trimmed = titleDraft.trim();
+    if (!trimmed) return;
+    if (trimmed !== todo.title) onEditTitle(todo.id, trimmed);
+    setIsEditingTitle(false);
+  };
+
+  const handleCancelEditTitle = () => {
+    setIsEditingTitle(false);
   };
 
   const hasReminder = todo.reminderAt !== null;
@@ -70,22 +89,58 @@ function TodoItemRow({ todo, emphasizeOverdue, onToggle, onDelete, onSetReminder
         <TouchableOpacity testID={`todo-checkbox-${todo.id}`} onPress={() => onToggle(todo)}>
           <Text style={styles.checkboxGlyph}>{todo.isDone ? "☑" : "☐"}</Text>
         </TouchableOpacity>
-        <Text style={[styles.todoTitle, todo.isDone && styles.doneText]}>{todo.title}</Text>
-        <TouchableOpacity
-          testID={`todo-reminder-icon-${todo.id}`}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          onPress={() => setIsReminderModalVisible(true)}
-        >
-          <Icon
-            testID={`todo-reminder-bell-${todo.id}`}
-            name={hasReminder ? "bell" : "bell-off"}
-            size={18}
-            color={hasReminder ? "#2f6fed" : "#999"}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity testID={`todo-delete-${todo.id}`} onPress={() => setIsDeleteConfirmVisible(true)}>
-          <Icon name="trash" size={18} color="#d32f2f" />
-        </TouchableOpacity>
+
+        {isEditingTitle ? (
+          <>
+            <TextInput
+              testID={`todo-title-input-${todo.id}`}
+              style={styles.todoTitleInput}
+              value={titleDraft}
+              onChangeText={setTitleDraft}
+              autoFocus
+            />
+            <TouchableOpacity
+              testID={`todo-title-confirm-${todo.id}`}
+              onPress={handleConfirmEditTitle}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.confirmCheck}>✓</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID={`todo-title-cancel-${todo.id}`}
+              onPress={handleCancelEditTitle}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.cancelText}>✕</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.todoTitle, todo.isDone && styles.doneText]}>{todo.title}</Text>
+            <TouchableOpacity
+              testID={`todo-edit-${todo.id}`}
+              onPress={handleStartEditTitle}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Icon name="edit" size={18} color="#2f6fed" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID={`todo-reminder-icon-${todo.id}`}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              onPress={() => setIsReminderModalVisible(true)}
+            >
+              <Icon
+                testID={`todo-reminder-bell-${todo.id}`}
+                name={hasReminder ? "bell" : "bell-off"}
+                size={18}
+                color={hasReminder ? "#2f6fed" : "#999"}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity testID={`todo-delete-${todo.id}`} onPress={() => setIsDeleteConfirmVisible(true)}>
+              <Icon name="trash" size={18} color="#d32f2f" />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       <Modal
@@ -179,6 +234,7 @@ interface EventSectionProps {
   onToggleTodo: (todo: TodoWithEventTitle) => void;
   onDeleteTodo: (todoId: string) => void;
   onSetReminder: (todoId: string, reminderAt: string | null) => void;
+  onEditTodoTitle: (todoId: string, title: string) => void;
   onOpenEvent: (eventId: string) => void;
   sectionRef?: (node: View | null) => void;
 }
@@ -192,6 +248,7 @@ function EventSection({
   onToggleTodo,
   onDeleteTodo,
   onSetReminder,
+  onEditTodoTitle,
   onOpenEvent,
   sectionRef,
 }: EventSectionProps) {
@@ -259,6 +316,7 @@ function EventSection({
               onToggle={onToggleTodo}
               onDelete={onDeleteTodo}
               onSetReminder={onSetReminder}
+              onEditTitle={onEditTodoTitle}
             />
           ))}
 
@@ -282,6 +340,7 @@ function EventSection({
                   onToggle={onToggleTodo}
                   onDelete={onDeleteTodo}
                   onSetReminder={onSetReminder}
+                  onEditTitle={onEditTodoTitle}
                 />
               ))
             : null}
@@ -296,22 +355,78 @@ interface OrphanedTodoRowProps {
   onToggle: (todo: Todo) => void;
   onDelete: (todoId: string) => void;
   onReattach: (todo: Todo) => void;
+  onEditTitle: (todoId: string, title: string) => void;
 }
 
-function OrphanedTodoRow({ todo, onToggle, onDelete, onReattach }: OrphanedTodoRowProps) {
+function OrphanedTodoRow({ todo, onToggle, onDelete, onReattach, onEditTitle }: OrphanedTodoRowProps) {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(todo.title);
+
+  const handleStartEditTitle = () => {
+    setTitleDraft(todo.title);
+    setIsEditingTitle(true);
+  };
+
+  const handleConfirmEditTitle = () => {
+    const trimmed = titleDraft.trim();
+    if (!trimmed) return;
+    if (trimmed !== todo.title) onEditTitle(todo.id, trimmed);
+    setIsEditingTitle(false);
+  };
+
+  const handleCancelEditTitle = () => {
+    setIsEditingTitle(false);
+  };
+
   return (
     <View style={styles.todoRow} testID={`orphaned-todo-item-${todo.id}`}>
       <View style={styles.todoMainRow}>
         <TouchableOpacity testID={`orphaned-todo-checkbox-${todo.id}`} onPress={() => onToggle(todo)}>
           <Text style={styles.checkboxGlyph}>{todo.isDone ? "☑" : "☐"}</Text>
         </TouchableOpacity>
-        <Text style={[styles.todoTitle, todo.isDone && styles.doneText]}>{todo.title}</Text>
-        <TouchableOpacity testID={`orphaned-todo-reattach-${todo.id}`} onPress={() => onReattach(todo)}>
-          <Text style={styles.reattachLink}>予定に紐付ける</Text>
-        </TouchableOpacity>
-        <TouchableOpacity testID={`orphaned-todo-delete-${todo.id}`} onPress={() => onDelete(todo.id)}>
-          <Icon name="trash" size={18} color="#d32f2f" />
-        </TouchableOpacity>
+
+        {isEditingTitle ? (
+          <>
+            <TextInput
+              testID={`orphaned-todo-title-input-${todo.id}`}
+              style={styles.todoTitleInput}
+              value={titleDraft}
+              onChangeText={setTitleDraft}
+              autoFocus
+            />
+            <TouchableOpacity
+              testID={`orphaned-todo-title-confirm-${todo.id}`}
+              onPress={handleConfirmEditTitle}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.confirmCheck}>✓</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID={`orphaned-todo-title-cancel-${todo.id}`}
+              onPress={handleCancelEditTitle}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.cancelText}>✕</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.todoTitle, todo.isDone && styles.doneText]}>{todo.title}</Text>
+            <TouchableOpacity
+              testID={`orphaned-todo-edit-${todo.id}`}
+              onPress={handleStartEditTitle}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Icon name="edit" size={18} color="#2f6fed" />
+            </TouchableOpacity>
+            <TouchableOpacity testID={`orphaned-todo-reattach-${todo.id}`} onPress={() => onReattach(todo)}>
+              <Text style={styles.reattachLink}>予定に紐付ける</Text>
+            </TouchableOpacity>
+            <TouchableOpacity testID={`orphaned-todo-delete-${todo.id}`} onPress={() => onDelete(todo.id)}>
+              <Icon name="trash" size={18} color="#d32f2f" />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -466,6 +581,11 @@ export default function TodosScreen() {
     if (success) await refetch();
   };
 
+  const handleEditTodoTitle = async (todoId: string, title: string) => {
+    const success = await updateTodo(todoId, { title });
+    if (success) await refetch();
+  };
+
   const handleToggleOrphaned = async (todo: Todo) => {
     const success = await toggleDone(todo.id, !todo.isDone);
     if (success) await refetchOrphaned();
@@ -473,6 +593,11 @@ export default function TodosScreen() {
 
   const handleDeleteOrphaned = async (todoId: string) => {
     const success = await deleteTodo(todoId);
+    if (success) await refetchOrphaned();
+  };
+
+  const handleEditOrphanedTodoTitle = async (todoId: string, title: string) => {
+    const success = await updateTodo(todoId, { title });
     if (success) await refetchOrphaned();
   };
 
@@ -562,6 +687,7 @@ export default function TodosScreen() {
                 onToggleTodo={handleToggle}
                 onDeleteTodo={handleDelete}
                 onSetReminder={handleSetReminder}
+                onEditTodoTitle={handleEditTodoTitle}
                 onOpenEvent={setSelectedEventId}
               />
             )}
@@ -582,6 +708,7 @@ export default function TodosScreen() {
                 onToggle={handleToggleOrphaned}
                 onDelete={handleDeleteOrphaned}
                 onReattach={setReattachTargetTodo}
+                onEditTitle={handleEditOrphanedTodoTitle}
               />
             ))}
           </View>
@@ -613,6 +740,7 @@ export default function TodosScreen() {
                     onToggleTodo={handleToggle}
                     onDeleteTodo={handleDelete}
                     onSetReminder={handleSetReminder}
+                    onEditTodoTitle={handleEditTodoTitle}
                     onOpenEvent={setSelectedEventId}
                     sectionRef={(node) => sectionRefs.current.set(group.eventId, node)}
                   />
@@ -646,6 +774,7 @@ export default function TodosScreen() {
                     onToggleTodo={handleToggle}
                     onDeleteTodo={handleDelete}
                     onSetReminder={handleSetReminder}
+                    onEditTodoTitle={handleEditTodoTitle}
                     onOpenEvent={setSelectedEventId}
                   />
                 )}
@@ -853,6 +982,21 @@ const styles = StyleSheet.create({
   todoTitle: {
     flex: 1,
     fontSize: 16,
+  },
+  todoTitleInput: {
+    flex: 1,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "#fff",
+  },
+  confirmCheck: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2f6fed",
   },
   doneText: {
     color: "#999",

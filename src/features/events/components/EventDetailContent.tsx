@@ -249,6 +249,11 @@ export function EventDetailContent({
     if (success) await refetchTodos();
   };
 
+  const handleEditTodoTitle = async (todoId: string, title: string) => {
+    const success = await updateTodo(todoId, { title });
+    if (success) await refetchTodos();
+  };
+
   const handleAddReminder = async (kind: EventReminderKind, custom?: EventReminderCustomOffset) => {
     const success = await addEventReminder(eventId, kind, custom);
     if (success) await refetchReminders();
@@ -459,6 +464,7 @@ export function EventDetailContent({
           onToggle={handleToggleTodo}
           onDelete={handleDeleteTodo}
           onSetReminder={handleSetTodoReminder}
+          onEditTitle={handleEditTodoTitle}
         />
       ))}
       <View style={styles.todoAddRow}>

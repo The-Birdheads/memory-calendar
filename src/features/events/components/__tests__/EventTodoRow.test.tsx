@@ -31,6 +31,7 @@ describe("EventTodoRow", () => {
         onToggle={jest.fn()}
         onDelete={jest.fn()}
         onSetReminder={jest.fn()}
+        onEditTitle={jest.fn()}
       />
     );
 
@@ -46,6 +47,7 @@ describe("EventTodoRow", () => {
         onToggle={jest.fn()}
         onDelete={jest.fn()}
         onSetReminder={jest.fn()}
+        onEditTitle={jest.fn()}
       />
     );
 
@@ -62,6 +64,7 @@ describe("EventTodoRow", () => {
         onToggle={jest.fn()}
         onDelete={jest.fn()}
         onSetReminder={onSetReminder}
+        onEditTitle={jest.fn()}
       />
     );
 
@@ -80,6 +83,7 @@ describe("EventTodoRow", () => {
         onToggle={jest.fn()}
         onDelete={jest.fn()}
         onSetReminder={jest.fn()}
+        onEditTitle={jest.fn()}
       />
     );
 
@@ -98,6 +102,7 @@ describe("EventTodoRow", () => {
         onToggle={jest.fn()}
         onDelete={jest.fn()}
         onSetReminder={jest.fn()}
+        onEditTitle={jest.fn()}
       />
     );
 
@@ -118,6 +123,7 @@ describe("EventTodoRow", () => {
         onToggle={onToggle}
         onDelete={onDelete}
         onSetReminder={jest.fn()}
+        onEditTitle={jest.fn()}
       />
     );
 
@@ -126,5 +132,85 @@ describe("EventTodoRow", () => {
 
     await fireEvent.press(getByTestId("event-todo-delete-todo-1"));
     expect(onDelete).toHaveBeenCalledWith("todo-1");
+  });
+
+  it("edits the title: tapping the pencil reveals a text field seeded with the current title, and ✓ confirms it", async () => {
+    const onEditTitle = jest.fn();
+    const { getByTestId, queryByTestId, queryByText } = await render(
+      <EventTodoRow
+        todo={BASE_TODO}
+        isAllDay={TIMED_EVENT.isAllDay}
+        eventStartAt={TIMED_EVENT.eventStartAt}
+        onToggle={jest.fn()}
+        onDelete={jest.fn()}
+        onSetReminder={jest.fn()}
+        onEditTitle={onEditTitle}
+      />
+    );
+
+    expect(queryByTestId("event-todo-title-input-todo-1")).toBeNull();
+
+    await fireEvent.press(getByTestId("event-todo-edit-todo-1"));
+
+    expect(getByTestId("event-todo-title-input-todo-1").props.value).toBe("飲み物を買う");
+    // 編集中はベル/ゴミ箱を隠し、テキスト欄+✓/✕だけを出す
+    expect(queryByTestId("event-todo-reminder-icon-todo-1")).toBeNull();
+    expect(queryByTestId("event-todo-delete-todo-1")).toBeNull();
+    expect(queryByText("飲み物を買う")).toBeNull();
+
+    await fireEvent.changeText(getByTestId("event-todo-title-input-todo-1"), "炭酸水を買う");
+    await fireEvent.press(getByTestId("event-todo-title-confirm-todo-1"));
+
+    expect(onEditTitle).toHaveBeenCalledWith("todo-1", "炭酸水を買う");
+    expect(queryByTestId("event-todo-title-input-todo-1")).toBeNull();
+  });
+
+  it("cancels the title edit via ✕ without calling onEditTitle", async () => {
+    const onEditTitle = jest.fn();
+    const { getByTestId, queryByTestId, getByText } = await render(
+      <EventTodoRow
+        todo={BASE_TODO}
+        isAllDay={TIMED_EVENT.isAllDay}
+        eventStartAt={TIMED_EVENT.eventStartAt}
+        onToggle={jest.fn()}
+        onDelete={jest.fn()}
+        onSetReminder={jest.fn()}
+        onEditTitle={onEditTitle}
+      />
+    );
+
+    await fireEvent.press(getByTestId("event-todo-edit-todo-1"));
+    await fireEvent.changeText(getByTestId("event-todo-title-input-todo-1"), "書きかけの変更");
+    await fireEvent.press(getByTestId("event-todo-title-cancel-todo-1"));
+
+    expect(onEditTitle).not.toHaveBeenCalled();
+    expect(queryByTestId("event-todo-title-input-todo-1")).toBeNull();
+    expect(getByText("飲み物を買う")).toBeTruthy();
+  });
+
+  it("does not call onEditTitle when confirming an unchanged or blank title", async () => {
+    const onEditTitle = jest.fn();
+    const { getByTestId } = await render(
+      <EventTodoRow
+        todo={BASE_TODO}
+        isAllDay={TIMED_EVENT.isAllDay}
+        eventStartAt={TIMED_EVENT.eventStartAt}
+        onToggle={jest.fn()}
+        onDelete={jest.fn()}
+        onSetReminder={jest.fn()}
+        onEditTitle={onEditTitle}
+      />
+    );
+
+    await fireEvent.press(getByTestId("event-todo-edit-todo-1"));
+    await fireEvent.press(getByTestId("event-todo-title-confirm-todo-1"));
+    expect(onEditTitle).not.toHaveBeenCalled();
+
+    await fireEvent.press(getByTestId("event-todo-edit-todo-1"));
+    await fireEvent.changeText(getByTestId("event-todo-title-input-todo-1"), "   ");
+    await fireEvent.press(getByTestId("event-todo-title-confirm-todo-1"));
+    expect(onEditTitle).not.toHaveBeenCalled();
+    // 空欄は確定できず、編集モードのままであること
+    expect(getByTestId("event-todo-title-input-todo-1")).toBeTruthy();
   });
 });

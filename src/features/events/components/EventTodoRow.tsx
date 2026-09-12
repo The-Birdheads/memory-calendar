@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Icon } from "../../../shared/components/Icon";
 import { TodoReminderPicker } from "../../todos/components/TodoReminderPicker";
@@ -14,6 +14,7 @@ export interface EventTodoRowProps {
   onToggle: (todo: Todo) => void;
   onDelete: (todoId: string) => void;
   onSetReminder: (todoId: string, reminderAt: string | null) => void;
+  onEditTitle: (todoId: string, title: string) => void;
 }
 
 /**
@@ -21,36 +22,99 @@ export interface EventTodoRowProps {
  * 設定されていればベルアイコンを青で表示し、タップすると `TodoReminderPicker`
  * を開いて設定・変更できる。予定詳細側は削除に確認ダイアログを挟まない
  * (元の挙動を維持)点だけToDoタブと異なる。
+ * タイトルの編集も同じくToDoタブと共通のインライン編集(鉛筆→テキスト欄+✓/✕)。
  */
-export function EventTodoRow({ todo, isAllDay, eventStartAt, onToggle, onDelete, onSetReminder }: EventTodoRowProps) {
+export function EventTodoRow({
+  todo,
+  isAllDay,
+  eventStartAt,
+  onToggle,
+  onDelete,
+  onSetReminder,
+  onEditTitle,
+}: EventTodoRowProps) {
   const [isReminderModalVisible, setIsReminderModalVisible] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(todo.title);
   const hasReminder = todo.reminderAt !== null;
+
+  const handleStartEditTitle = () => {
+    setTitleDraft(todo.title);
+    setIsEditingTitle(true);
+  };
+
+  const handleConfirmEditTitle = () => {
+    const trimmed = titleDraft.trim();
+    if (!trimmed) return;
+    if (trimmed !== todo.title) onEditTitle(todo.id, trimmed);
+    setIsEditingTitle(false);
+  };
+
+  const handleCancelEditTitle = () => {
+    setIsEditingTitle(false);
+  };
 
   return (
     <View style={styles.row} testID={`event-todo-${todo.id}`}>
       <TouchableOpacity testID={`event-todo-checkbox-${todo.id}`} onPress={() => onToggle(todo)}>
         <Text>{todo.isDone ? "☑" : "☐"}</Text>
       </TouchableOpacity>
-      <Text style={[styles.title, todo.isDone && styles.doneText]}>{todo.title}</Text>
-      <TouchableOpacity
-        testID={`event-todo-reminder-icon-${todo.id}`}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        onPress={() => setIsReminderModalVisible(true)}
-      >
-        <Icon
-          testID={`event-todo-reminder-bell-${todo.id}`}
-          name={hasReminder ? "bell" : "bell-off"}
-          size={16}
-          color={hasReminder ? "#2f6fed" : "#999"}
-        />
-      </TouchableOpacity>
-      <TouchableOpacity
-        testID={`event-todo-delete-${todo.id}`}
-        onPress={() => onDelete(todo.id)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Icon name="trash" size={16} color="#d32f2f" />
-      </TouchableOpacity>
+
+      {isEditingTitle ? (
+        <>
+          <TextInput
+            testID={`event-todo-title-input-${todo.id}`}
+            style={styles.titleInput}
+            value={titleDraft}
+            onChangeText={setTitleDraft}
+            autoFocus
+          />
+          <TouchableOpacity
+            testID={`event-todo-title-confirm-${todo.id}`}
+            onPress={handleConfirmEditTitle}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.confirmCheck}>✓</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID={`event-todo-title-cancel-${todo.id}`}
+            onPress={handleCancelEditTitle}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.cancelText}>✕</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          <Text style={[styles.title, todo.isDone && styles.doneText]}>{todo.title}</Text>
+          <TouchableOpacity
+            testID={`event-todo-edit-${todo.id}`}
+            onPress={handleStartEditTitle}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon name="edit" size={16} color="#2f6fed" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID={`event-todo-reminder-icon-${todo.id}`}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            onPress={() => setIsReminderModalVisible(true)}
+          >
+            <Icon
+              testID={`event-todo-reminder-bell-${todo.id}`}
+              name={hasReminder ? "bell" : "bell-off"}
+              size={16}
+              color={hasReminder ? "#2f6fed" : "#999"}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID={`event-todo-delete-${todo.id}`}
+            onPress={() => onDelete(todo.id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon name="trash" size={16} color="#d32f2f" />
+          </TouchableOpacity>
+        </>
+      )}
 
       <Modal
         visible={isReminderModalVisible}
@@ -101,6 +165,24 @@ const styles = StyleSheet.create({
   doneText: {
     color: "#999",
     textDecorationLine: "line-through",
+  },
+  titleInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "#fff",
+  },
+  confirmCheck: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2f6fed",
+  },
+  cancelText: {
+    fontSize: 16,
+    color: "#666",
   },
   modalOverlay: {
     flex: 1,
