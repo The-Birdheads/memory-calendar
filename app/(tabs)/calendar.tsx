@@ -433,7 +433,8 @@ export default function CalendarScreen() {
   useFocusEffect(
     useCallback(() => {
       refetchEvents();
-    }, [refetchEvents])
+      refetchEventTags();
+    }, [refetchEvents, refetchEventTags])
   );
 
   // タブを離れるたびに絞り込みをリセットする(共通フィルターの決まり - 戻って

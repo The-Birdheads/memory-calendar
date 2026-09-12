@@ -269,6 +269,22 @@ describe("CalendarScreen", () => {
     await waitFor(() => expect(refetch).toHaveBeenCalled());
   });
 
+  it("refetches tags when the tab regains focus, so a tag change made elsewhere shows up (regression)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const refetchEventTags = jest.fn();
+    (useEventTagsByEvents as jest.Mock).mockReturnValue({
+      tagsByEventId: {},
+      isLoading: false,
+      error: null,
+      refetch: refetchEventTags,
+    });
+
+    await render(<CalendarScreen />);
+
+    await waitFor(() => expect(refetchEventTags).toHaveBeenCalled());
+  });
+
   it("shows a switcher for each of the caller's calendars, inside the header filter sheet", async () => {
     mockCommonHooks();
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });

@@ -165,6 +165,14 @@ function TimelinePanel() {
     [periodFilteredEvents]
   );
   const { tagsByEventId, refetch: refetchEventTags } = useEventTagsByEvents(periodFilteredEventIds);
+  // タグは予定と違いイベントID一覧が変わらない限り自動では取り直されない
+  // (カレンダー画面で付け外ししてこのタブに戻ってきても反映されない不具合の
+  // 修正) - フォーカスのたびに明示的に取り直す。
+  useFocusEffect(
+    useCallback(() => {
+      refetchEventTags();
+    }, [refetchEventTags])
+  );
   const events = useMemo(() => {
     if (selectedTagId !== UNTAGGED_TAG_FILTER) return periodFilteredEvents;
     return periodFilteredEvents.filter((event) => (tagsByEventId[event.id] ?? []).length === 0);

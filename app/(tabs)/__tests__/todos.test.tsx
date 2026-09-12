@@ -390,6 +390,21 @@ describe("TodosScreen", () => {
     await waitFor(() => expect(refetch).toHaveBeenCalled());
   });
 
+  it("refetches tags when the tab regains focus, so a tag change made from the calendar shows up (regression)", async () => {
+    mockCommonHooks(TODOS);
+    const refetchEventTags = jest.fn();
+    (useEventTagsByEvents as jest.Mock).mockReturnValue({
+      tagsByEventId: {},
+      isLoading: false,
+      error: null,
+      refetch: refetchEventTags,
+    });
+
+    await render(<TodosScreen />);
+
+    await waitFor(() => expect(refetchEventTags).toHaveBeenCalled());
+  });
+
   it("collapses and expands a section when its header is pressed", async () => {
     mockCommonHooks(TODOS);
 

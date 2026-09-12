@@ -128,7 +128,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave }: EditTagFormProp
 
       {level === "minor" ? (
         <>
-          <View style={styles.parentRow}>
+          <View testID="edit-tag-grandparent-row" style={styles.parentRow}>
             {majorTags.map((major) => (
               <TouchableOpacity
                 key={major.id}
@@ -141,7 +141,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave }: EditTagFormProp
             ))}
           </View>
           {grandparentId ? (
-            <View style={styles.parentRow}>
+            <View testID="edit-tag-parent-row" style={styles.parentRow}>
               {midChildrenOfGrandparent.map((mid) => (
                 <TouchableOpacity
                   key={mid.id}
@@ -156,7 +156,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave }: EditTagFormProp
           ) : null}
         </>
       ) : eligibleParentLevel ? (
-        <View style={styles.parentRow}>
+        <View testID="edit-tag-parent-row" style={styles.parentRow}>
           {eligibleParents.map((candidate) => (
             <TouchableOpacity
               key={candidate.id}
@@ -232,6 +232,7 @@ const styles = StyleSheet.create({
   },
   parentRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   parentButton: {

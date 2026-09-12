@@ -208,6 +208,22 @@ describe("HistoryScreen", () => {
       expect(usePastEventsByTag).toHaveBeenCalledWith(undefined, ["cal-1", "cal-2"]);
     });
 
+    it("refetches tags when the panel regains focus, so a tag change made elsewhere shows up (regression)", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({ events: PAST_EVENTS, isLoading: false, error: null });
+      const refetchEventTags = jest.fn();
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        tagsByEventId: {},
+        isLoading: false,
+        error: null,
+        refetch: refetchEventTags,
+      });
+
+      await render(<HistoryScreen />);
+
+      await waitFor(() => expect(refetchEventTags).toHaveBeenCalled());
+    });
+
     it("groups events by JST year-month, in the order the events already come in", async () => {
       mockCommonHooks();
       (usePastEventsByTag as jest.Mock).mockReturnValue({

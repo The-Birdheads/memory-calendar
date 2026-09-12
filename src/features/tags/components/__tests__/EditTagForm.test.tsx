@@ -127,6 +127,20 @@ describe("EditTagForm", () => {
     });
   });
 
+  it("wraps the parent-tag options onto multiple lines instead of overflowing off-screen (regression: with many 大分類 tags, later ones became untappable)", async () => {
+    const onSave = jest.fn();
+    const { getByTestId } = await render(
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, OTHER_MAJOR_TAG]} calendars={CALENDARS}
+        onSave={onSave} />
+    );
+
+    await fireEvent.press(getByTestId("edit-tag-level-mid"));
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    expect(flattenStyle(getByTestId("edit-tag-parent-row").props.style).flexWrap).toBe("wrap");
+  });
+
   it("excludes the tag itself from its own eligible parent options", async () => {
     const midTag = { ...MAJOR_TAG, id: "tag-3", level: "mid" as const, parentId: "tag-1" };
     const { queryByTestId } = await render(

@@ -469,7 +469,7 @@ export default function TodosScreen() {
     [allGroups, periodStart, periodEnd]
   );
   const eventIds = useMemo(() => groups.map((group) => group.eventId), [groups]);
-  const { tagsByEventId } = useEventTagsByEvents(eventIds);
+  const { tagsByEventId, refetch: refetchEventTags } = useEventTagsByEvents(eventIds);
 
   const isFilterActive = selectedCalendarIds !== null || periodStart !== null || periodEnd !== null;
   const handleResetFilter = useCallback(() => {
@@ -490,7 +490,8 @@ export default function TodosScreen() {
       refetch();
       refetchOrphaned();
       refetchCalendars();
-    }, [refetch, refetchOrphaned, refetchCalendars])
+      refetchEventTags();
+    }, [refetch, refetchOrphaned, refetchCalendars, refetchEventTags])
   );
   // On blur (leaving the tab), reset the calendar filter (共通フィルターの決まり).
   // Kept as its own useFocusEffect, independent of the one above: refetch's
