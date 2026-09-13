@@ -7,6 +7,9 @@ export interface DeleteTagConfirmModalProps {
   hasChildren?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** 削除処理が実行中かどうか。連打で削除処理が重複実行されるのを防ぐため、
+   * 実行中は削除ボタンを無効化する。 */
+  isSubmitting?: boolean;
 }
 
 export function DeleteTagConfirmModal({
@@ -14,6 +17,7 @@ export function DeleteTagConfirmModal({
   hasChildren,
   onConfirm,
   onCancel,
+  isSubmitting,
 }: DeleteTagConfirmModalProps) {
   if (!visible) {
     return null;
@@ -40,7 +44,9 @@ export function DeleteTagConfirmModal({
             <TouchableOpacity
               testID="delete-tag-confirm-button"
               onPress={onConfirm}
+              disabled={isSubmitting}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={isSubmitting ? styles.confirmButtonDisabled : undefined}
             >
               <Icon name="trash" size={20} color="#d32f2f" />
             </TouchableOpacity>
@@ -84,5 +90,8 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 16,
     color: "#666",
+  },
+  confirmButtonDisabled: {
+    opacity: 0.4,
   },
 });

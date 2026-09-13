@@ -92,12 +92,15 @@ export interface CalendarCreateScreenProps {
 export function CalendarCreateScreen({ calendars, onChange, onCreated }: CalendarCreateScreenProps) {
   const [nameDraft, setNameDraft] = useState("");
   const [colorDraft, setColorDraft] = useState(COLOR_PALETTE[0].hex);
-  const { createCalendar, error: createError } = useCreateCalendar();
+  const { createCalendar, isSubmitting: isCreatingCalendar, error: createError } = useCreateCalendar();
   const { tagTree } = useTagTree();
   const allTags = useMemo(() => flattenTagTree(tagTree), [tagTree]);
   const usageByColor = useMemo(() => buildUsageByColor(calendars, allTags), [calendars, allTags]);
 
   const handleCreate = async () => {
+    // 連打で同じカレンダーが2件作られてしまうのを防ぐ(下のボタン側のdisabled
+    // と二重で防御する)。
+    if (isCreatingCalendar) return;
     const created = await createCalendar({ name: nameDraft, color: colorDraft });
     if (created) {
       onChange?.();
@@ -129,8 +132,13 @@ export function CalendarCreateScreen({ calendars, onChange, onCreated }: Calenda
         />
 
         {createError ? <Text style={styles.errorText}>{getCalendarErrorMessageJa(createError)}</Text> : null}
-        <TouchableOpacity testID="calendar-settings-create-submit" style={styles.saveButton} onPress={handleCreate}>
-          <Text style={styles.saveButtonText}>作成</Text>
+        <TouchableOpacity
+          testID="calendar-settings-create-submit"
+          style={[styles.saveButton, isCreatingCalendar && styles.saveButtonDisabled]}
+          disabled={isCreatingCalendar}
+          onPress={handleCreate}
+        >
+          <Text style={styles.saveButtonText}>{isCreatingCalendar ? "作成中…" : "作成"}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -144,9 +152,10 @@ export interface CalendarJoinScreenProps {
 
 export function CalendarJoinScreen({ onChange, onJoined }: CalendarJoinScreenProps) {
   const [joinCodeDraft, setJoinCodeDraft] = useState("");
-  const { joinByInvite, error: joinError } = useJoinByInvite();
+  const { joinByInvite, isSubmitting: isJoining, error: joinError } = useJoinByInvite();
 
   const handleJoin = async () => {
+    if (isJoining) return;
     const joined = await joinByInvite(joinCodeDraft);
     if (joined) {
       onChange?.();
@@ -167,8 +176,13 @@ export function CalendarJoinScreen({ onChange, onJoined }: CalendarJoinScreenPro
           autoCapitalize="none"
         />
         {joinError ? <Text style={styles.errorText}>{getCalendarErrorMessageJa(joinError)}</Text> : null}
-        <TouchableOpacity testID="calendar-settings-join-submit" style={styles.saveButton} onPress={handleJoin}>
-          <Text style={styles.saveButtonText}>参加</Text>
+        <TouchableOpacity
+          testID="calendar-settings-join-submit"
+          style={[styles.saveButton, isJoining && styles.saveButtonDisabled]}
+          disabled={isJoining}
+          onPress={handleJoin}
+        >
+          <Text style={styles.saveButtonText}>{isJoining ? "参加中…" : "参加"}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -224,7 +238,7 @@ export function CalendarEditScreen({
 
   const { updateCalendar, error: updateError } = useUpdateCalendar();
   const { members } = useCalendarMembers(calendarId);
-  const { leaveOrDeleteCalendar, error: leaveError } = useLeaveOrDeleteCalendar();
+  const { leaveOrDeleteCalendar, isSubmitting: isLeavingOrDeleting, error: leaveError } = useLeaveOrDeleteCalendar();
   const { tagTree } = useTagTree();
   const allTags = useMemo(() => flattenTagTree(tagTree), [tagTree]);
   const usageByColor = useMemo(
@@ -238,6 +252,7 @@ export function CalendarEditScreen({
   };
 
   const handleConfirmLeaveOrDelete = async () => {
+    if (isLeavingOrDeleting) return;
     const deleted = await leaveOrDeleteCalendar(calendarId);
     if (deleted !== null) {
       setIsLeaveConfirmVisible(false);
@@ -323,6 +338,7 @@ export function CalendarEditScreen({
         willDeleteEntirely={members.length <= 1}
         onConfirm={handleConfirmLeaveOrDelete}
         onCancel={() => setIsLeaveConfirmVisible(false)}
+        isSubmitting={isLeavingOrDeleting}
       />
     </>
   );
@@ -450,6 +466,9 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  saveButtonDisabled: {
+    backgroundColor: "#b7c6ea",
   },
   memberRow: {
     flexDirection: "row",

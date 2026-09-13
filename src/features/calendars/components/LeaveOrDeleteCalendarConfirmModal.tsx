@@ -9,6 +9,9 @@ export interface LeaveOrDeleteCalendarConfirmModalProps {
   willDeleteEntirely: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** 削除/離脱処理が実行中かどうか。連打で処理が重複実行されるのを防ぐため、
+   * 実行中は確定ボタンを無効化する。 */
+  isSubmitting?: boolean;
 }
 
 export function LeaveOrDeleteCalendarConfirmModal({
@@ -16,6 +19,7 @@ export function LeaveOrDeleteCalendarConfirmModal({
   willDeleteEntirely,
   onConfirm,
   onCancel,
+  isSubmitting,
 }: LeaveOrDeleteCalendarConfirmModalProps) {
   if (!visible) {
     return null;
@@ -49,6 +53,8 @@ export function LeaveOrDeleteCalendarConfirmModal({
             <TouchableOpacity
               testID="leave-or-delete-calendar-confirm-button"
               onPress={onConfirm}
+              disabled={isSubmitting}
+              style={isSubmitting ? styles.confirmButtonDisabled : undefined}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               {willDeleteEntirely ? (
@@ -97,5 +103,8 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 16,
     color: "#666",
+  },
+  confirmButtonDisabled: {
+    opacity: 0.4,
   },
 });

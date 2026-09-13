@@ -14,6 +14,9 @@ export interface EditTagFormProps {
   /** 大分類の色選択で、既に他のカレンダー/タグが使っている色を教えるために使う。 */
   calendars: Calendar[];
   onSave: (input: UpdateTagInput) => void;
+  /** 保存処理が実行中かどうか。連打で同じタグが複数作られるのを防ぐため、
+   * 実行中は保存ボタンを無効化する。 */
+  isSubmitting?: boolean;
 }
 
 export const TAG_COLORS = COLOR_PALETTE;
@@ -31,7 +34,7 @@ function eligibleParentsFor(level: TagLevel, allTags: Tag[], excludeId: string):
   return allTags.filter((candidate) => candidate.level === parentLevel && candidate.id !== excludeId);
 }
 
-export function EditTagForm({ tag, allTags, calendars, onSave }: EditTagFormProps) {
+export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: EditTagFormProps) {
   const [name, setName] = useState(tag.name);
   const [level, setLevel] = useState<TagLevel>(tag.level);
   const [parentId, setParentId] = useState<string | null>(tag.parentId);
@@ -81,6 +84,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave }: EditTagFormProp
   };
 
   const handleSave = () => {
+    if (isSubmitting) return;
     onSave({ name, color: computedColor, level, parentId: level === "major" ? null : parentId });
   };
 
@@ -172,7 +176,8 @@ export function EditTagForm({ tag, allTags, calendars, onSave }: EditTagFormProp
 
       <TouchableOpacity
         testID="edit-tag-save-button"
-        style={styles.saveButton}
+        style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
+        disabled={isSubmitting}
         onPress={handleSave}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
@@ -250,6 +255,9 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     paddingHorizontal: 16,
     paddingVertical: 8,
+  },
+  saveButtonDisabled: {
+    opacity: 0.4,
   },
   saveButtonText: {
     fontSize: 18,

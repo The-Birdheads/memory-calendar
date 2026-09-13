@@ -139,6 +139,25 @@ describe("MealFormModal", () => {
     });
   });
 
+  it("disables the save button and does not call onSave again while a save is already in flight (regression: double-tap created two meal records)", async () => {
+    const onSave = jest.fn();
+    const { getByTestId } = await render(
+      <MealFormModal
+        target={{ mode: "create", initialValues: CREATE_INITIAL_VALUES }}
+        calendars={CALENDARS}
+        onClose={jest.fn()}
+        onSave={onSave}
+        isSaving
+      />
+    );
+
+    expect(getByTestId("meal-form-save").props.accessibilityState?.disabled).toBe(true);
+
+    await fireEvent.press(getByTestId("meal-form-save"));
+
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it("calls onClose when cancel is pressed", async () => {
     const onClose = jest.fn();
     const { getByTestId } = await render(
@@ -190,6 +209,27 @@ describe("MealFormModal", () => {
     await fireEvent.press(getByTestId("meal-form-delete-confirm"));
 
     expect(onDelete).toHaveBeenCalledWith("meal-1");
+  });
+
+  it("disables the delete-confirm button and does not call onDelete again while a delete is already in flight (regression)", async () => {
+    const onDelete = jest.fn();
+    const { getByTestId } = await render(
+      <MealFormModal
+        target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
+        calendars={CALENDARS}
+        onClose={jest.fn()}
+        onSave={jest.fn()}
+        onDelete={onDelete}
+        isDeleting
+      />
+    );
+
+    await fireEvent.press(getByTestId("meal-form-delete"));
+    expect(getByTestId("meal-form-delete-confirm").props.accessibilityState?.disabled).toBe(true);
+
+    await fireEvent.press(getByTestId("meal-form-delete-confirm"));
+
+    expect(onDelete).not.toHaveBeenCalled();
   });
 
   it("cancels deletion without calling onDelete when the delete confirmation is dismissed", async () => {

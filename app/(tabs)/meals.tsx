@@ -109,9 +109,10 @@ function useCalendarFilter() {
  * ここに集約して2箇所での重複を避けている。
  */
 function useMealFormController(createTargetCalendarId: string, refetch: () => Promise<void>) {
-  const { createMealRecord } = useCreateMealRecord();
-  const { updateMealRecord } = useUpdateMealRecord();
-  const { deleteMealRecord } = useDeleteMealRecord();
+  const { createMealRecord, isSubmitting: isCreatingMeal } = useCreateMealRecord();
+  const { updateMealRecord, isSubmitting: isUpdatingMeal } = useUpdateMealRecord();
+  const { deleteMealRecord, isSubmitting: isDeletingMeal } = useDeleteMealRecord();
+  const isSavingMeal = isCreatingMeal || isUpdatingMeal;
   const [formTarget, setFormTarget] = useState<MealFormTarget | null>(null);
 
   const openCreate = (defaults: { mealDate: string; slot: MealSlot }) => {
@@ -140,6 +141,9 @@ function useMealFormController(createTargetCalendarId: string, refetch: () => Pr
   const closeForm = () => setFormTarget(null);
 
   const handleSave = async (values: MealFormValues) => {
+    // 連打で同じ献立が2件作られてしまうのを防ぐ(下のボタン側のdisabledと
+    // 二重で防御する)。
+    if (isSavingMeal) return;
     const success =
       formTarget?.mode === "edit"
         ? await updateMealRecord(formTarget.recordId, {
@@ -169,6 +173,7 @@ function useMealFormController(createTargetCalendarId: string, refetch: () => Pr
   };
 
   const handleDelete = async (recordId: string) => {
+    if (isDeletingMeal) return;
     const success = await deleteMealRecord(recordId);
     if (success) {
       closeForm();
@@ -176,14 +181,14 @@ function useMealFormController(createTargetCalendarId: string, refetch: () => Pr
     }
   };
 
-  return { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete };
+  return { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal };
 }
 
 function PlanPanel() {
   const { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter } =
     useCalendarFilter();
   const { mealRecords, refetch } = useMealRecordsByCalendars(activeCalendarIds);
-  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete } = useMealFormController(
+  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
     createTargetCalendarId,
     refetch
   );
@@ -265,6 +270,8 @@ function PlanPanel() {
         calendars={calendars}
         onClose={closeForm}
         onSave={handleSave}
+        isSaving={isSavingMeal}
+        isDeleting={isDeletingMeal}
         onDelete={formTarget?.mode === "edit" ? handleDelete : undefined}
       />
     </View>
@@ -281,7 +288,7 @@ function LogPanel() {
     handleResetFilter: handleResetCalendarFilter,
   } = useCalendarFilter();
   const { mealRecords, refetch } = useMealRecordsByCalendars(activeCalendarIds);
-  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete } = useMealFormController(
+  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
     createTargetCalendarId,
     refetch
   );
@@ -400,6 +407,8 @@ function LogPanel() {
         calendars={calendars}
         onClose={closeForm}
         onSave={handleSave}
+        isSaving={isSavingMeal}
+        isDeleting={isDeletingMeal}
         onDelete={formTarget?.mode === "edit" ? handleDelete : undefined}
       />
     </View>

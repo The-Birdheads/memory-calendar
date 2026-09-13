@@ -20,6 +20,7 @@ const BASE_VALUE: EventFormValue = {
   end: new Date("2026-09-01T10:00:00.000Z"),
   location: "",
   url: "",
+  memo: "",
 };
 
 describe("EventFormFields", () => {
@@ -134,6 +135,29 @@ describe("EventFormFields", () => {
     expect(queryByTestId("event-edit-url-add")).toBeNull();
     expect(getByTestId("event-edit-location-input").props.value).toBe("渋谷");
     expect(getByTestId("event-edit-url-input").props.value).toBe("https://example.com");
+  });
+
+  it("calls onChange with the new memo, folded into a '+ メモを追加' button until touched, like location/url", async () => {
+    const onChange = jest.fn();
+    const { getByTestId, queryByTestId } = await render(
+      <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={onChange} />
+    );
+
+    expect(queryByTestId("event-create-memo-input")).toBeNull();
+
+    await fireEvent.press(getByTestId("event-create-memo-add"));
+    await fireEvent.changeText(getByTestId("event-create-memo-input"), "駅前で待ち合わせ");
+
+    expect(onChange).toHaveBeenCalledWith({ memo: "駅前で待ち合わせ" });
+  });
+
+  it("shows the memo input directly (no add button) when a value is already set", async () => {
+    const { getByTestId, queryByTestId } = await render(
+      <EventFormFields testIDPrefix="event-edit" value={{ ...BASE_VALUE, memo: "持ち物: 名刺" }} onChange={jest.fn()} />
+    );
+
+    expect(queryByTestId("event-edit-memo-add")).toBeNull();
+    expect(getByTestId("event-edit-memo-input").props.value).toBe("持ち物: 名刺");
   });
 
   it("uses the given testIDPrefix so create and edit forms don't collide", async () => {

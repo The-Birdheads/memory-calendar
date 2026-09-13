@@ -57,6 +57,20 @@ describe("EditTagForm", () => {
     });
   });
 
+  it("disables the save button and does not call onSave again while a save is already in flight (regression: double-tap created two tags)", async () => {
+    const onSave = jest.fn();
+    const { getByTestId } = await render(
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS}
+        onSave={onSave} isSubmitting />
+    );
+
+    expect(getByTestId("edit-tag-save-button").props.accessibilityState?.disabled).toBe(true);
+
+    await fireEvent.press(getByTestId("edit-tag-save-button"));
+
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it("uses a ✓ icon instead of the 保存 text label for the save button", async () => {
     const { queryByText, getByTestId } = await render(
       <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS}

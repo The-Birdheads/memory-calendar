@@ -36,8 +36,8 @@ export default function MealSearchScreen() {
   // 検索結果は献立タブの一覧と同じ行(MealRow)をそのまま使い、タップすると
   // 同じ編集フォームが開く - 「さがして終わり」ではなく、見つけた献立の
   // 評価やメモをその場で直せるようにする(2026-09)。
-  const { updateMealRecord } = useUpdateMealRecord();
-  const { deleteMealRecord } = useDeleteMealRecord();
+  const { updateMealRecord, isSubmitting: isSavingMeal } = useUpdateMealRecord();
+  const { deleteMealRecord, isSubmitting: isDeletingMeal } = useDeleteMealRecord();
   const [formTarget, setFormTarget] = useState<MealFormTarget | null>(null);
 
   const openEdit = (record: MealRecord) => {
@@ -59,7 +59,7 @@ export default function MealSearchScreen() {
   const closeForm = () => setFormTarget(null);
 
   const handleSaveEdit = async (values: MealFormValues) => {
-    if (formTarget?.mode !== "edit") return;
+    if (formTarget?.mode !== "edit" || isSavingMeal) return;
     const success = await updateMealRecord(formTarget.recordId, {
       title: values.title,
       url: values.url || null,
@@ -75,6 +75,7 @@ export default function MealSearchScreen() {
   };
 
   const handleDelete = async (recordId: string) => {
+    if (isDeletingMeal) return;
     const success = await deleteMealRecord(recordId);
     if (success) {
       closeForm();
@@ -226,6 +227,8 @@ export default function MealSearchScreen() {
         calendars={calendars}
         onClose={closeForm}
         onSave={handleSaveEdit}
+        isSaving={isSavingMeal}
+        isDeleting={isDeletingMeal}
         onDelete={formTarget?.mode === "edit" ? handleDelete : undefined}
       />
     </>

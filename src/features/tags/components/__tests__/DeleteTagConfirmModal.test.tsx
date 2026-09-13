@@ -62,6 +62,19 @@ describe("DeleteTagConfirmModal", () => {
     expect(getByTestId("delete-tag-confirm-button")).toBeTruthy();
   });
 
+  it("disables the delete button and does not call onConfirm again while a delete is already in flight (regression)", async () => {
+    const onConfirm = jest.fn();
+    const { getByTestId } = await render(
+      <DeleteTagConfirmModal visible onConfirm={onConfirm} onCancel={jest.fn()} isSubmitting />
+    );
+
+    expect(getByTestId("delete-tag-confirm-button").props.accessibilityState?.disabled).toBe(true);
+
+    await fireEvent.press(getByTestId("delete-tag-confirm-button"));
+
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it("calls onCancel (not onConfirm) when tapping outside the card, on the backdrop", async () => {
     const onCancel = jest.fn();
     const onConfirm = jest.fn();

@@ -58,6 +58,11 @@ export interface MealFormModalProps {
   onSave: (values: MealFormValues) => void;
   /** Required to show the delete button (only relevant in edit mode). */
   onDelete?: (recordId: string) => void;
+  /** 保存処理が実行中かどうか。連打で同じ献立が複数作られるのを防ぐため、
+   * 実行中は保存ボタンを無効化する。 */
+  isSaving?: boolean;
+  /** 削除処理が実行中かどうか。連打で削除処理が重複実行されるのを防ぐ。 */
+  isDeleting?: boolean;
 }
 
 /**
@@ -93,6 +98,8 @@ export function MealFormModal({
   onClose,
   onSave,
   onDelete,
+  isSaving,
+  isDeleting,
 }: MealFormModalProps) {
   return (
     <Modal
@@ -108,6 +115,8 @@ export function MealFormModal({
           onClose={onClose}
           onSave={onSave}
           onDelete={onDelete}
+          isSaving={isSaving}
+          isDeleting={isDeleting}
         />
       ) : null}
     </Modal>
@@ -120,12 +129,16 @@ function MealFormModalContent({
   onClose,
   onSave,
   onDelete,
+  isSaving,
+  isDeleting,
 }: {
   target: MealFormTarget;
   calendars: Calendar[];
   onClose: () => void;
   onSave: (values: MealFormValues) => void;
   onDelete?: (recordId: string) => void;
+  isSaving?: boolean;
+  isDeleting?: boolean;
 }) {
   const [title, setTitle] = useState(target.initialValues.title);
   const [url, setUrl] = useState(target.initialValues.url);
@@ -143,6 +156,7 @@ function MealFormModalContent({
     calendars.find((calendar) => calendar.id === calendarId) ?? null;
 
   const handleSave = () => {
+    if (isSaving) return;
     onSave({
       title,
       url,
@@ -155,6 +169,7 @@ function MealFormModalContent({
   };
 
   const handleConfirmDelete = () => {
+    if (isDeleting) return;
     if (target.mode === "edit") onDelete?.(target.recordId);
     setIsDeleteConfirmVisible(false);
   };
@@ -331,9 +346,10 @@ function MealFormModalContent({
               <TouchableOpacity
                 testID="meal-form-save"
                 onPress={handleSave}
+                disabled={isSaving}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.saveLink}>✓</Text>
+                <Text style={[styles.saveLink, isSaving && styles.saveLinkDisabled]}>✓</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -373,6 +389,8 @@ function MealFormModalContent({
               <TouchableOpacity
                 testID="meal-form-delete-confirm"
                 onPress={handleConfirmDelete}
+                disabled={isDeleting}
+                style={isDeleting ? styles.confirmButtonDisabled : undefined}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Icon name="trash" size={20} color="#d32f2f" />
@@ -499,5 +517,11 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 16,
     color: "#666",
+  },
+  saveLinkDisabled: {
+    opacity: 0.4,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.4,
   },
 });

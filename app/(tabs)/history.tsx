@@ -24,16 +24,12 @@ import {
   useRemoveAllTagsFromEvents,
   useTagTree,
 } from "../../src/features/tags/hooks";
-import type { TagTreeNode } from "../../src/features/tags/types";
+import { flattenTagTree, sortTagsHierarchically } from "../../src/features/tags/tagTree";
 import { DateRangeFilterSection } from "../../src/shared/components/DateRangeFilterSection";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
 import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
 import { jstNow, todayJstDateKey, toJstDateKey } from "../../src/shared/utils/formatDateTime";
-
-function flattenTags(nodes: TagTreeNode[]): TagTreeNode[] {
-  return nodes.flatMap((node) => [node, ...flattenTags(node.children)]);
-}
 
 /** "2年前"/"1年前" - どちらもJST日付キー("YYYY-MM-DD")なので年の部分の文字列比較だけで済む。 */
 function yearsAgoLabel(entryJstDateKey: string, todayKey: string): string {
@@ -156,7 +152,7 @@ function TimelinePanel() {
     [eventsByTag, periodStart, periodEnd]
   );
 
-  const allTagsFlat = useMemo(() => flattenTags(tagTree), [tagTree]);
+  const allTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
 
   const periodFilteredEventIds = useMemo(
     () => periodFilteredEvents.map((event) => event.id),
@@ -326,7 +322,7 @@ function TimelinePanel() {
             <View testID={`history-month-group-${group.yearMonth}`}>
               <Text style={styles.monthHeader}>{group.label}</Text>
               {group.events.map((event, index) => {
-                const tags = tagsByEventId[event.id] ?? [];
+                const tags = sortTagsHierarchically(tagsByEventId[event.id] ?? [], allTagsFlat);
                 const hasPhotos = eventIdsWithPhotos.has(event.id);
                 const isLastInGroup = index === group.events.length - 1;
 
@@ -438,7 +434,16 @@ function PhotoGridPanel() {
     }, [refetchCalendars, handleResetFilter])
   );
 
-  const { entries } = useMemoriesTimeline(activeCalendarIds, memoriesFilter);
+  const { entries, refetch: refetchMemories } = useMemoriesTimeline(activeCalendarIds, memoriesFilter);
+  // カレンダー画面など他の画面で写真を追加/削除してこのタブに戻ってきても
+  // 反映されない不具合の修正 - イベントID一覧が変わらない限り自動では
+  // 取り直されないため、フォーカスのたびに明示的に取り直す(タグの
+  // refetchEventTagsと同じ理由・同じ形)。
+  useFocusEffect(
+    useCallback(() => {
+      refetchMemories();
+    }, [refetchMemories])
+  );
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
   const monthGroups = useMemo(() => groupMemoriesByYearMonth(entries), [entries]);

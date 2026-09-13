@@ -689,6 +689,21 @@ describe("HistoryScreen", () => {
       expect(getByText("思い出がありません")).toBeTruthy();
     });
 
+    it("refetches memories when the panel regains focus, so a photo added elsewhere (e.g. from the calendar) shows up (regression)", async () => {
+      mockCommonHooks();
+      const refetchMemories = jest.fn();
+      (useMemoriesTimeline as jest.Mock).mockReturnValue({
+        entries: [],
+        isLoading: false,
+        error: null,
+        refetch: refetchMemories,
+      });
+
+      await renderPhotoPanel();
+
+      await waitFor(() => expect(refetchMemories).toHaveBeenCalled());
+    });
+
     it("groups memories under a year-month header, like an album divided into chapters", async () => {
       mockCommonHooks();
       (useMemoriesTimeline as jest.Mock).mockReturnValue({

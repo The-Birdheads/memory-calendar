@@ -12,6 +12,7 @@ export interface EventFormValue {
   end: Date;
   location: string;
   url: string;
+  memo: string;
 }
 
 function formatFieldLabel(date: Date, isAllDay: boolean): string {
@@ -124,6 +125,16 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         keyboardType="url"
         value={value.url}
         onChangeText={(url) => onChange({ url })}
+      />
+
+      <RevealableTextField
+        testID={`${testIDPrefix}-memo-input`}
+        addButtonTestID={`${testIDPrefix}-memo-add`}
+        addLabel="メモを追加"
+        placeholder="メモ"
+        multiline
+        value={value.memo}
+        onChangeText={(memo) => onChange({ memo })}
       />
     </>
   );

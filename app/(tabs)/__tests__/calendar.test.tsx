@@ -857,6 +857,58 @@ describe("CalendarScreen", () => {
     await waitFor(() => expect(queryByTestId("event-create-title-input")).toBeNull());
   });
 
+  it("creates a new event with a memo entered via '+ メモを追加'", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "誕生日会");
+    await fireEvent.press(getByTestId("event-create-memo-add"));
+    await fireEvent.changeText(getByTestId("event-create-memo-input"), "プレゼントを忘れない");
+
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() =>
+      expect(createEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ memo: "プレゼントを忘れない" })
+      )
+    );
+  });
+
+  it("shows '作成中…' and disables the submit button while a create request is already in flight", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn();
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: true, error: null });
+
+    const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "誕生日会");
+
+    expect(getByText("作成中…")).toBeTruthy();
+    expect(getByTestId("event-create-submit").props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it("does not call createEvent again while a request is already in flight (regression: double-tap created two events)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn();
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: true, error: null });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "誕生日会");
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    expect(createEventMock).not.toHaveBeenCalled();
+  });
+
   it("colors an untagged event with its calendar's own default color", async () => {
     mockCommonHooks();
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({

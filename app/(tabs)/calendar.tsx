@@ -50,7 +50,7 @@ import {
   useRemoveAllTagsFromEvents,
   useTagTree,
 } from "../../src/features/tags/hooks";
-import { flattenTagTree } from "../../src/features/tags/tagTree";
+import { flattenTagTree, sortTagsHierarchically } from "../../src/features/tags/tagTree";
 import { useCreateTodo } from "../../src/features/todos/hooks";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
@@ -190,7 +190,7 @@ export default function CalendarScreen() {
     return computeDateKeyRange(firstWeek[0].dateKey, lastWeek[lastWeek.length - 1].dateKey);
   }, [monthGrid]);
   const { events, refetch: refetchEvents } = useEventsInRangeForCalendars(activeCalendarIds, range);
-  const { createEvent, error: createEventError } = useCreateEvent();
+  const { createEvent, isSubmitting: isCreatingEvent, error: createEventError } = useCreateEvent();
   const { createDefaultEventReminders } = useCreateDefaultEventReminders();
   const { createTodo } = useCreateTodo();
 
@@ -254,6 +254,7 @@ export default function CalendarScreen() {
     end: new Date(),
     location: "",
     url: "",
+    memo: "",
   }));
   const [hasTodos, setHasTodos] = useState(false);
   const [todoItems, setTodoItems] = useState<string[]>([]);
@@ -367,6 +368,7 @@ export default function CalendarScreen() {
       end: base,
       location: "",
       url: "",
+      memo: "",
     });
     setHasTodos(false);
     setTodoItems([]);
@@ -400,6 +402,10 @@ export default function CalendarScreen() {
   };
 
   const handleCreateEvent = async () => {
+    // 連打で同じ予定が2件作られてしまう不具合の修正 - useCreateEventの
+    // isSubmittingが立っている間の再入をブロックする(下のボタン側の
+    // disabledと二重で防御する)。
+    if (isCreatingEvent) return;
     const createdEvent = await createEvent({
       calendarId: newEventCalendarId || activeCalendarId,
       title: newEventForm.title,
@@ -408,6 +414,7 @@ export default function CalendarScreen() {
       isAllDay: newEventForm.isAllDay,
       location: newEventForm.location || undefined,
       url: newEventForm.url || undefined,
+      memo: newEventForm.memo || undefined,
     });
     if (createdEvent) {
       if (hasTodos) {
@@ -839,7 +846,7 @@ export default function CalendarScreen() {
                 <View testID={`calendar-month-list-date-group-${group.dateKey}`}>
                   <Text style={styles.monthListDateHeader}>{group.label}</Text>
                   {group.events.map((event) => {
-                    const tags = tagsByEventId[event.id] ?? [];
+                    const tags = sortTagsHierarchically(tagsByEventId[event.id] ?? [], allTagsFlat);
                     return (
                       <TouchableOpacity
                         key={event.id}
@@ -1166,8 +1173,13 @@ export default function CalendarScreen() {
               >
                 <Text style={styles.cancelText}>✕</Text>
               </TouchableOpacity>
-              <TouchableOpacity testID="event-create-submit" style={styles.createButton} onPress={handleCreateEvent}>
-                <Text style={styles.createButtonText}>作成</Text>
+              <TouchableOpacity
+                testID="event-create-submit"
+                style={[styles.createButton, isCreatingEvent && styles.createButtonDisabled]}
+                disabled={isCreatingEvent}
+                onPress={handleCreateEvent}
+              >
+                <Text style={styles.createButtonText}>{isCreatingEvent ? "作成中…" : "作成"}</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -1719,6 +1731,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  createButtonDisabled: {
+    backgroundColor: "#b7c6ea",
   },
   createButtonText: {
     color: "#fff",

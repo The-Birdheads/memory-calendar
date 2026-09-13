@@ -1,9 +1,9 @@
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 
 import TodosScreen from "../todos";
 import { useMyCalendars } from "../../../src/features/calendars/hooks";
 import { useEventsInRange } from "../../../src/features/events/hooks";
-import { useEventTagsByEvents } from "../../../src/features/tags/hooks";
+import { useEventTagsByEvents, useTagTree } from "../../../src/features/tags/hooks";
 import {
   useDeleteTodo,
   useOrphanedTodos,
@@ -54,6 +54,7 @@ jest.mock("../../../src/features/events/hooks", () => ({
 
 jest.mock("../../../src/features/tags/hooks", () => ({
   useEventTagsByEvents: jest.fn(),
+  useTagTree: jest.fn(),
 }));
 
 jest.mock("../../../src/features/todos/hooks", () => ({
@@ -237,6 +238,7 @@ function mockCommonHooks(todos: typeof TODOS, refetch = jest.fn()) {
     error: null,
     refetch: jest.fn(),
   });
+  (useTagTree as jest.Mock).mockReturnValue({ tagTree: [], isLoading: false, error: null, refetch: jest.fn() });
   (useReattachTodoToExistingEvent as jest.Mock).mockReturnValue({
     reattachTodoToExistingEvent: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
@@ -575,6 +577,56 @@ describe("TodosScreen", () => {
     expect(getByTestId("todo-section-tags-event-1")).toBeTruthy();
     expect(getByText("音楽")).toBeTruthy();
     expect(useEventTagsByEvents).toHaveBeenLastCalledWith(["event-1"]);
+  });
+
+  it("shows an event's tags in 大分類→中分類→小分類 hierarchical order, regardless of the order they were fetched in", async () => {
+    mockCommonHooks(TODOS); // event-1
+    (useEventTagsByEvents as jest.Mock).mockReturnValue({
+      // Deliberately fetched mid-before-major, to prove the display order
+      // isn't just whatever order the join happened to return.
+      tagsByEventId: {
+        "event-1": [
+          { id: "tag-mid", parentId: "tag-major", level: "mid", name: "バンド", color: "#00ff00", createdAt: "2026-08-01" },
+          { id: "tag-major", parentId: null, level: "major", name: "音楽", color: "#ff0000", createdAt: "2026-08-01" },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    (useTagTree as jest.Mock).mockReturnValue({
+      tagTree: [
+        {
+          id: "tag-major",
+          parentId: null,
+          level: "major",
+          name: "音楽",
+          color: "#ff0000",
+          createdAt: "2026-08-01",
+          children: [
+            {
+              id: "tag-mid",
+              parentId: "tag-major",
+              level: "mid",
+              name: "バンド",
+              color: "#00ff00",
+              createdAt: "2026-08-01",
+              children: [],
+            },
+          ],
+        },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId } = await render(<TodosScreen />);
+
+    const badgeIds = within(getByTestId("todo-section-tags-event-1"))
+      .getAllByTestId(/^event-tag-badge-/)
+      .map((node) => node.props.testID);
+    expect(badgeIds).toEqual(["event-tag-badge-tag-major", "event-tag-badge-tag-mid"]);
   });
 
   it("shows no tags row for an event with no tags", async () => {

@@ -474,6 +474,30 @@ describe("SettingsHubModal", () => {
       );
     });
 
+    it("does not call createCalendar again while a create request is already in flight (regression: double-tap created two calendars)", async () => {
+      mockHooks();
+      const createCalendarMock = jest.fn();
+      (useCreateCalendar as jest.Mock).mockReturnValue({
+        createCalendar: createCalendarMock,
+        isSubmitting: true,
+        error: null,
+      });
+
+      const { getByTestId, getByText } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} initialSection="calendar" />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-new-button"));
+      await fireEvent.changeText(getByTestId("calendar-settings-name-input"), "新しいカレンダー");
+
+      expect(getByText("作成中…")).toBeTruthy();
+      expect(getByTestId("calendar-settings-create-submit").props.accessibilityState?.disabled).toBe(true);
+
+      await fireEvent.press(getByTestId("calendar-settings-create-submit"));
+
+      expect(createCalendarMock).not.toHaveBeenCalled();
+    });
+
     it("creates a calendar and moves into a dedicated「作成しました」step (not straight into the busy edit view)", async () => {
       mockHooks();
       const createCalendarMock = jest.fn().mockResolvedValue({
@@ -635,6 +659,30 @@ describe("SettingsHubModal", () => {
       expect(getByTestId("calendar-settings-calendar-cal-1")).toBeTruthy();
     });
 
+    it("does not call joinByInvite again while a join request is already in flight (regression)", async () => {
+      mockHooks();
+      const joinByInviteMock = jest.fn();
+      (useJoinByInvite as jest.Mock).mockReturnValue({
+        joinByInvite: joinByInviteMock,
+        isSubmitting: true,
+        error: null,
+      });
+
+      const { getByTestId, getByText } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} initialSection="calendar" />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-join-button"));
+      await fireEvent.changeText(getByTestId("calendar-settings-join-code-input"), "ABC123");
+
+      expect(getByText("参加中…")).toBeTruthy();
+      expect(getByTestId("calendar-settings-join-submit").props.accessibilityState?.disabled).toBe(true);
+
+      await fireEvent.press(getByTestId("calendar-settings-join-submit"));
+
+      expect(joinByInviteMock).not.toHaveBeenCalled();
+    });
+
     it("offers to leave (not delete) a group calendar that has other members, and delete when alone", async () => {
       mockHooks();
 
@@ -674,6 +722,29 @@ describe("SettingsHubModal", () => {
       await waitFor(() => expect(onChange).toHaveBeenCalled());
       expect(queryByTestId("calendar-settings-name-input")).toBeNull();
       expect(getByTestId("calendar-settings-calendar-cal-1")).toBeTruthy();
+    });
+
+    it("does not call leaveOrDeleteCalendar again while a request is already in flight (regression)", async () => {
+      mockHooks();
+      const leaveOrDeleteCalendarMock = jest.fn();
+      (useLeaveOrDeleteCalendar as jest.Mock).mockReturnValue({
+        leaveOrDeleteCalendar: leaveOrDeleteCalendarMock,
+        isSubmitting: true,
+        error: null,
+      });
+
+      const { getByTestId } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} initialSection="calendar" />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+      await fireEvent.press(getByTestId("calendar-settings-leave-or-delete-button"));
+
+      expect(getByTestId("leave-or-delete-calendar-confirm-button").props.accessibilityState?.disabled).toBe(true);
+
+      await fireEvent.press(getByTestId("leave-or-delete-calendar-confirm-button"));
+
+      expect(leaveOrDeleteCalendarMock).not.toHaveBeenCalled();
     });
   });
 
@@ -721,6 +792,26 @@ describe("SettingsHubModal", () => {
       await waitFor(() =>
         expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("ABC123") })),
       );
+    });
+
+    it("does not call createInvite again while a generate request is already in flight (regression)", async () => {
+      mockHooks();
+      const createInvite = jest.fn();
+      (useCreateInvite as jest.Mock).mockReturnValue({ createInvite, isSubmitting: true, error: null });
+
+      const { getByTestId, getByText } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} initialSection="calendar" />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+      await fireEvent.press(getByTestId("calendar-settings-invite-button"));
+
+      expect(getByText("発行中…")).toBeTruthy();
+      expect(getByTestId("invite-flow-generate").props.accessibilityState?.disabled).toBe(true);
+
+      await fireEvent.press(getByTestId("invite-flow-generate"));
+
+      expect(createInvite).not.toHaveBeenCalled();
     });
   });
 

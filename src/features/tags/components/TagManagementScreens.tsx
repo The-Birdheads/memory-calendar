@@ -72,9 +72,10 @@ export function TagFormScreen({ tagId, onChange, onSaved }: TagFormScreenProps) 
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const { tagTree, refetch } = useTagTree();
   const { calendars } = useMyCalendars();
-  const { createTag } = useCreateTag();
-  const { updateTag } = useUpdateTag();
-  const { deleteTag } = useDeleteTag();
+  const { createTag, isSubmitting: isCreatingTag } = useCreateTag();
+  const { updateTag, isSubmitting: isUpdatingTag } = useUpdateTag();
+  const { deleteTag, isSubmitting: isDeletingTag } = useDeleteTag();
+  const isSavingTag = isCreatingTag || isUpdatingTag;
 
   const allTags = flattenTagTree(tagTree);
   const selectedTag = tagId ? (allTags.find((tag) => tag.id === tagId) ?? null) : null;
@@ -83,6 +84,9 @@ export function TagFormScreen({ tagId, onChange, onSaved }: TagFormScreenProps) 
     : false;
 
   const handleSave = async (input: UpdateTagInput) => {
+    // 連打で同じタグが2件作られてしまうのを防ぐ(下のEditTagForm側のdisabledと
+    // 二重で防御する)。
+    if (isSavingTag) return;
     const success = tagId
       ? await updateTag(tagId, input)
       : await createTag({
@@ -99,7 +103,7 @@ export function TagFormScreen({ tagId, onChange, onSaved }: TagFormScreenProps) 
   };
 
   const handleConfirmDelete = async () => {
-    if (!deleteTargetId) return;
+    if (!deleteTargetId || isDeletingTag) return;
     const success = await deleteTag(deleteTargetId);
     setDeleteTargetId(null);
     if (success) {
@@ -113,7 +117,13 @@ export function TagFormScreen({ tagId, onChange, onSaved }: TagFormScreenProps) 
     <>
       <ScrollView keyboardShouldPersistTaps="handled">
         <View style={styles.formSection}>
-          <EditTagForm tag={selectedTag ?? blankTag()} allTags={allTags} calendars={calendars} onSave={handleSave} />
+          <EditTagForm
+            tag={selectedTag ?? blankTag()}
+            allTags={allTags}
+            calendars={calendars}
+            onSave={handleSave}
+            isSubmitting={isSavingTag}
+          />
           {tagId && selectedTag ? (
             <TouchableOpacity testID="tag-management-delete-button" onPress={() => setDeleteTargetId(selectedTag.id)}>
               <Text style={styles.deleteText}>このタグを削除</Text>
@@ -127,6 +137,7 @@ export function TagFormScreen({ tagId, onChange, onSaved }: TagFormScreenProps) 
         hasChildren={deleteTargetHasChildren}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTargetId(null)}
+        isSubmitting={isDeletingTag}
       />
     </>
   );

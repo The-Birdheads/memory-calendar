@@ -32,6 +32,19 @@ export function flattenVisibleTagTree(nodes: TagTreeNode[], expandedIds: Set<str
   return result;
 }
 
+/**
+ * タグが表示される全ての箇所(予定のタグバッジ、予定詳細の現在のタグ一覧
+ * など)で共通の並び順にするための並べ替え。渡された`tags`(何らかの予定に
+ * 付いているタグの部分集合で、順序は不定)を、`allTagsFlat`
+ * (`flattenTagTree(tagTree)`の depth-first 順 - 大分類A→中分類A-1→
+ * 小分類A-1-a→小分類A-1-b→中分類A-2→大分類B)における位置を基準に
+ * 並べ替える。`tags`自体は変更しない。
+ */
+export function sortTagsHierarchically<T extends Tag>(tags: T[], allTagsFlat: Tag[]): T[] {
+  const orderIndex = new Map(allTagsFlat.map((tag, index) => [tag.id, index]));
+  return [...tags].sort((a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0));
+}
+
 /** Returns [tagId, ...its ancestors' ids] by walking parentId pointers, or [] if tagId is not found. */
 export function getAncestorChainIds(tagId: string | undefined, allTags: Tag[]): string[] {
   const chain: string[] = [];

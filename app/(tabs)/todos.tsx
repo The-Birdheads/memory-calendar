@@ -10,7 +10,8 @@ import { FilterButton, FilterSection } from "../../src/shared/components/FilterB
 import { Icon } from "../../src/shared/components/Icon";
 import { PersonalOnlyBadge } from "../../src/shared/components/PersonalOnlyBadge";
 import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
-import { useEventTagsByEvents } from "../../src/features/tags/hooks";
+import { useEventTagsByEvents, useTagTree } from "../../src/features/tags/hooks";
+import { flattenTagTree, sortTagsHierarchically } from "../../src/features/tags/tagTree";
 import type { Tag } from "../../src/features/tags/types";
 import { formatEventDateRangeLabel } from "../../src/features/todos/formatEventDateRangeLabel";
 import { countIncomplete, groupTodosByEvent, type EventTodoGroup } from "../../src/features/todos/groupByEvent";
@@ -470,6 +471,12 @@ export default function TodosScreen() {
   );
   const eventIds = useMemo(() => groups.map((group) => group.eventId), [groups]);
   const { tagsByEventId, refetch: refetchEventTags } = useEventTagsByEvents(eventIds);
+  const { tagTree } = useTagTree();
+  const allTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
+  const getSortedTagsForEvent = useCallback(
+    (eventId: string) => sortTagsHierarchically(tagsByEventId[eventId] ?? [], allTagsFlat),
+    [tagsByEventId, allTagsFlat]
+  );
 
   const isFilterActive = selectedCalendarIds !== null || periodStart !== null || periodEnd !== null;
   const handleResetFilter = useCallback(() => {
@@ -704,7 +711,7 @@ export default function TodosScreen() {
               <EventSection
                 group={group}
                 today={today}
-                tags={tagsByEventId[group.eventId] ?? []}
+                tags={getSortedTagsForEvent(group.eventId)}
                 isCollapsed={collapsedEventIds.has(group.eventId)}
                 onToggleCollapse={handleToggleSection}
                 onToggleTodo={handleToggle}
@@ -757,7 +764,7 @@ export default function TodosScreen() {
                   <EventSection
                     group={group}
                     today={today}
-                    tags={tagsByEventId[group.eventId] ?? []}
+                    tags={getSortedTagsForEvent(group.eventId)}
                     isCollapsed={collapsedEventIds.has(group.eventId)}
                     onToggleCollapse={handleToggleSection}
                     onToggleTodo={handleToggle}
@@ -791,7 +798,7 @@ export default function TodosScreen() {
                   <EventSection
                     group={group}
                     today={today}
-                    tags={tagsByEventId[group.eventId] ?? []}
+                    tags={getSortedTagsForEvent(group.eventId)}
                     isCollapsed={collapsedEventIds.has(group.eventId)}
                     onToggleCollapse={handleToggleSection}
                     onToggleTodo={handleToggle}

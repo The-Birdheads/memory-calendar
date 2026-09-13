@@ -12,10 +12,13 @@ export interface InviteScreenProps {
  * SettingsHubModal の画面スタックから "invite" として表示される。 */
 export function InviteScreen({ calendarId, currentUserId }: InviteScreenProps) {
   const { members } = useCalendarMembers(calendarId);
-  const { createInvite } = useCreateInvite();
+  const { createInvite, isSubmitting: isGeneratingInvite } = useCreateInvite();
   const [code, setCode] = useState<string | null>(null);
 
   const handleGenerate = async () => {
+    // 連打で招待コードが複数発行されてしまうのを防ぐ(下のボタン側のdisabled
+    // と二重で防御する)。
+    if (isGeneratingInvite) return;
     const invite = await createInvite(calendarId);
     if (invite) setCode(invite.code);
   };
@@ -46,8 +49,13 @@ export function InviteScreen({ calendarId, currentUserId }: InviteScreenProps) {
             </TouchableOpacity>
           </>
         ) : (
-          <TouchableOpacity testID="invite-flow-generate" style={styles.generateButton} onPress={handleGenerate}>
-            <Text style={styles.generateButtonText}>招待コードを発行</Text>
+          <TouchableOpacity
+            testID="invite-flow-generate"
+            style={[styles.generateButton, isGeneratingInvite && styles.generateButtonDisabled]}
+            disabled={isGeneratingInvite}
+            onPress={handleGenerate}
+          >
+            <Text style={styles.generateButtonText}>{isGeneratingInvite ? "発行中…" : "招待コードを発行"}</Text>
           </TouchableOpacity>
         )}
 
@@ -92,6 +100,9 @@ const styles = StyleSheet.create({
   generateButtonText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  generateButtonDisabled: {
+    backgroundColor: "#b7c6ea",
   },
   shareButton: {
     alignSelf: "flex-start",

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -46,6 +47,7 @@ import { EventTagBadges } from "../../tags/components/EventTagBadges";
 import { PersonalOnlyBadge } from "../../../shared/components/PersonalOnlyBadge";
 import { TagPickerRow } from "../../tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useDetachTagFromEvent, useEventTags, useTagTree } from "../../tags/hooks";
+import { flattenTagTree, sortTagsHierarchically } from "../../tags/tagTree";
 import { useCreateTodo, useDeleteTodo, useToggleDone, useTodosByEvent, useUpdateTodo } from "../../todos/hooks";
 import type { Todo } from "../../todos/types";
 import { EventTodoRow } from "./EventTodoRow";
@@ -109,8 +111,10 @@ export function EventDetailContent({
   const { postComment } = usePostComment();
   const { deleteComment } = useDeleteComment();
 
-  const { tags, refetch: refetchTags } = useEventTags(eventId);
+  const { tags: unsortedTags, refetch: refetchTags } = useEventTags(eventId);
   const { tagTree } = useTagTree();
+  const allTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
+  const tags = useMemo(() => sortTagsHierarchically(unsortedTags, allTagsFlat), [unsortedTags, allTagsFlat]);
   const { attachTagsToEvent } = useAttachTagsToEvent();
   const { detachTagFromEvent } = useDetachTagFromEvent();
   // タグは共有カレンダーでも個人用の項目(誰が何をタグ付けするかは各自の分類)なので、
@@ -119,7 +123,7 @@ export function EventDetailContent({
   const [tagEditSelection, setTagEditSelection] = useState<string[]>([]);
 
   const { todos, refetch: refetchTodos } = useTodosByEvent(eventId);
-  const { createTodo } = useCreateTodo();
+  const { createTodo, isSubmitting: isAddingTodo } = useCreateTodo();
   const { toggleDone } = useToggleDone();
   const { deleteTodo } = useDeleteTodo();
   const { updateTodo } = useUpdateTodo();
@@ -142,10 +146,11 @@ export function EventDetailContent({
     end: new Date(),
     location: "",
     url: "",
+    memo: "",
   });
 
   const { photos, refetch: refetchPhotos } = useEventPhotos(eventId);
-  const { attachPhoto } = useAttachPhoto();
+  const { attachPhoto, isSubmitting: isUploadingPhoto } = useAttachPhoto();
   const { detachPhoto } = useDetachPhoto();
   const { setPhotoThumbnail } = useSetPhotoThumbnail();
 
@@ -237,7 +242,9 @@ export function EventDetailContent({
   }, [eventId]);
 
   const handleAddTodo = async () => {
-    if (!newTodoTitle.trim()) return;
+    // 連打で同じToDoが2件作られてしまうのを防ぐ(下のボタン側のdisabledと
+    // 二重で防御する)。
+    if (isAddingTodo || !newTodoTitle.trim()) return;
     const success = await createTodo({ eventId, title: newTodoTitle });
     if (success) {
       setNewTodoTitle("");
@@ -284,6 +291,7 @@ export function EventDetailContent({
       end: new Date(event.endAt),
       location: event.location ?? "",
       url: event.url ?? "",
+      memo: event.memo ?? "",
     });
     setIsEditModalVisible(true);
   };
@@ -296,6 +304,7 @@ export function EventDetailContent({
       isAllDay: editForm.isAllDay,
       location: editForm.location || null,
       url: editForm.url || null,
+      memo: editForm.memo || null,
     });
     if (success) {
       setIsEditModalVisible(false);
@@ -327,6 +336,7 @@ export function EventDetailContent({
   };
 
   const handleAddPhoto = async () => {
+    if (isUploadingPhoto) return;
     const picked = await pickPhotoFromLibrary();
     if (!picked) return;
     const success = await attachPhoto(eventId, picked);
@@ -411,7 +421,12 @@ export function EventDetailContent({
         onSelectThumbnail={handleSelectThumbnail}
         onDeleteOwnPhoto={handleDeleteOwnPhoto}
       />
-      {photos.some((photo) => photo.uploadedBy === session?.user.id) ? null : (
+      {photos.some((photo) => photo.uploadedBy === session?.user.id) ? null : isUploadingPhoto ? (
+        <View testID="event-photo-uploading" style={styles.photoUploadingRow}>
+          <ActivityIndicator size="small" color="#2f6fed" />
+          <Text style={styles.photoUploadingText}>アップロード中…</Text>
+        </View>
+      ) : (
         <TouchableOpacity
           testID="event-photo-add"
           style={styles.iconButton}
@@ -503,7 +518,8 @@ export function EventDetailContent({
         />
         <TouchableOpacity
           testID="event-todo-add"
-          style={styles.iconButton}
+          style={[styles.iconButton, isAddingTodo && styles.iconButtonDisabled]}
+          disabled={isAddingTodo}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={handleAddTodo}
         >
@@ -568,6 +584,14 @@ export function EventDetailContent({
             <Icon name="link" size={14} color="#2f6fed" />
             <Text testID="event-detail-url" style={styles.detailLink}>
               {event.url}
+            </Text>
+          </View>
+        ) : null}
+        {event.memo ? (
+          <View style={styles.detailRow}>
+            <Icon name="note" size={14} color="#444" />
+            <Text testID="event-detail-memo" style={styles.detailText}>
+              {event.memo}
             </Text>
           </View>
         ) : null}
@@ -762,6 +786,19 @@ const styles = StyleSheet.create({
   // 「編集」「追加」用の、文言ではなくアイコンだけのボタン(2026-09見直し)。
   iconButton: {
     padding: 2,
+  },
+  iconButtonDisabled: {
+    opacity: 0.4,
+  },
+  photoUploadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 2,
+  },
+  photoUploadingText: {
+    fontSize: 12,
+    color: "#666",
   },
   detailInfo: {
     paddingHorizontal: 16,
