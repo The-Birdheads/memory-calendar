@@ -465,15 +465,17 @@ describe("CalendarScreen", () => {
     expect(flattened.backgroundColor).toBe("#e53935");
   });
 
-  it("shows a multi-day event on every day it spans, on the grid and in the day list", async () => {
+  it("shows a multi-day event as one connected banner spanning the days it touches (TimeTree-style), and opens the day it was pressed on", async () => {
     mockCommonHooks();
     const multiDayEvent = {
       id: "event-3",
       calendarId: "cal-1",
       title: "旅行",
       categoryColor: "#43a047",
+      // 2026-08-18(Tue) JST 18:00 through 08-20(Thu) JST 19:00 - entirely
+      // within one week, so it renders as a single banner, not per-day dots.
       startAt: "2026-08-18T09:00:00.000Z",
-      endAt: "2026-08-20T18:00:00.000Z",
+      endAt: "2026-08-20T10:00:00.000Z",
     };
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
       events: [multiDayEvent],
@@ -482,23 +484,44 @@ describe("CalendarScreen", () => {
       refetch: jest.fn(),
     });
 
-    const { getByTestId } = await render(<CalendarScreen />);
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
 
-    // The marker for the multi-day event shows up on all three days it spans.
-    for (const dateKey of ["2026-08-18", "2026-08-19", "2026-08-20"]) {
-      expect(
-        within(getByTestId(`calendar-grid-cell-${dateKey}`)).getByTestId("calendar-grid-dot-event-3")
-      ).toBeTruthy();
-    }
+    // No more per-day dots for a banner-eligible multi-day event.
+    expect(queryByTestId("calendar-grid-dot-event-3")).toBeNull();
 
-    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+    // One connected banner for the week it falls in.
+    const banner = getByTestId("calendar-grid-banner-event-3-week-3");
+    expect(within(banner).getByText("旅行")).toBeTruthy();
+
+    await fireEvent.press(banner);
+    // Pressing the banner opens the day it starts on (its own colStart).
     expect(getByTestId("calendar-event-event-3")).toBeTruthy();
+  });
 
-    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-19"));
-    expect(getByTestId("calendar-event-event-3")).toBeTruthy();
+  it("splits a multi-day event that crosses a week boundary into a banner per week, without per-day dots", async () => {
+    mockCommonHooks();
+    const multiDayEvent = {
+      id: "event-3",
+      calendarId: "cal-1",
+      title: "旅行",
+      categoryColor: "#43a047",
+      // 2026-08-14(Fri) through 08-17(Mon) crosses the Sat/Sun boundary
+      // between two weeks.
+      startAt: "2026-08-14T09:00:00.000Z",
+      endAt: "2026-08-17T10:00:00.000Z",
+    };
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [multiDayEvent],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
 
-    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-20"));
-    expect(getByTestId("calendar-event-event-3")).toBeTruthy();
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    expect(queryByTestId("calendar-grid-dot-event-3")).toBeNull();
+    expect(getByTestId("calendar-grid-banner-event-3-week-2")).toBeTruthy();
+    expect(getByTestId("calendar-grid-banner-event-3-week-3")).toBeTruthy();
   });
 
   it("shows a dot for an event on a grayed-out leading/trailing day from the adjacent month", async () => {
@@ -874,6 +897,38 @@ describe("CalendarScreen", () => {
     await waitFor(() =>
       expect(createDefaultEventRemindersMock).toHaveBeenCalledWith("event-created-1", true)
     );
+  });
+
+  it("does not seed default reminders for an event created with a past date (regression: reminders fired immediately for backdated events)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+    const createDefaultEventRemindersMock = jest.fn().mockResolvedValue(true);
+    (useCreateDefaultEventReminders as jest.Mock).mockReturnValue({
+      createDefaultEventReminders: createDefaultEventRemindersMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "先週の集まり");
+
+    // "now" is fixed at 2026-08-18T12:00:00.000Z (see beforeEach) - both
+    // start and end here are safely in the past.
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-08-01T10:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-08-01T12:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+    expect(createDefaultEventRemindersMock).not.toHaveBeenCalled();
   });
 
   it("creates the event in a different calendar when picked from the create modal's calendar picker", async () => {

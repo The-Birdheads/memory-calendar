@@ -306,26 +306,68 @@ describe("HistoryScreen", () => {
       await fireEvent.press(getByTestId("history-filter"));
 
       expect(getByTestId("history-tag-filter-all")).toBeTruthy();
-      expect(getByTestId("history-tag-filter-tag-1")).toBeTruthy();
-      expect(queryByTestId("history-tag-filter-tag-2")).toBeNull();
+      expect(getByTestId("history-tag-filter-tag-tag-1")).toBeTruthy();
+      expect(queryByTestId("history-tag-filter-tag-tag-2")).toBeNull();
 
-      await fireEvent.press(getByTestId("history-tag-filter-tag-1"));
+      await fireEvent.press(getByTestId("history-tag-filter-tag-tag-1"));
 
-      expect(getByTestId("history-tag-filter-tag-2")).toBeTruthy();
+      expect(getByTestId("history-tag-filter-tag-tag-2")).toBeTruthy();
     });
 
-    it("requests past events filtered by the selected tag, across all calendars, when a filter is pressed", async () => {
+    it("always fetches unfiltered across all calendars (tag filtering happens client-side) regardless of which tags are selected", async () => {
       mockCommonHooks();
 
       const { getByTestId } = await render(<HistoryScreen />);
       await fireEvent.press(getByTestId("history-filter"));
 
-      await fireEvent.press(getByTestId("history-tag-filter-tag-1"));
-      await fireEvent.press(getByTestId("history-tag-filter-tag-2"));
+      await fireEvent.press(getByTestId("history-tag-filter-tag-tag-1"));
+      await fireEvent.press(getByTestId("history-tag-filter-tag-tag-2"));
 
       await waitFor(() =>
-        expect(usePastEventsByTag).toHaveBeenLastCalledWith("tag-2", ["cal-1", "cal-2"])
+        expect(usePastEventsByTag).toHaveBeenLastCalledWith(undefined, ["cal-1", "cal-2"])
       );
+    });
+
+    it("supports selecting multiple tags at once, narrowing to events that have every selected tag (AND, not OR)", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({
+        events: [
+          { id: "event-a", calendarId: "cal-1", title: "行事のみ", startAt: "2026-08-10T10:00:00.000Z" },
+          { id: "event-b", calendarId: "cal-1", title: "行事と誕生日", startAt: "2026-08-11T10:00:00.000Z" },
+          { id: "event-c", calendarId: "cal-1", title: "誕生日のみ", startAt: "2026-08-12T10:00:00.000Z" },
+        ],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        tagsByEventId: {
+          "event-a": [{ id: "tag-1", name: "行事", color: "#ff0000" }],
+          "event-b": [
+            { id: "tag-1", name: "行事", color: "#ff0000" },
+            { id: "tag-2", name: "誕生日", color: "#00ff00" },
+          ],
+          "event-c": [{ id: "tag-2", name: "誕生日", color: "#00ff00" }],
+        },
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, getByText, queryByText } = await render(<HistoryScreen />);
+      await fireEvent.press(getByTestId("history-filter"));
+
+      // Selecting only 行事 (tag-1) keeps both events that have it.
+      await fireEvent.press(getByTestId("history-tag-filter-tag-tag-1"));
+      expect(getByText("行事のみ")).toBeTruthy();
+      expect(getByText("行事と誕生日")).toBeTruthy();
+      expect(queryByText("誕生日のみ")).toBeNull();
+
+      // Also selecting 誕生日 (tag-2) narrows to only the event with both.
+      await fireEvent.press(getByTestId("history-tag-filter-tag-tag-2"));
+      expect(queryByText("行事のみ")).toBeNull();
+      expect(getByText("行事と誕生日")).toBeTruthy();
+      expect(queryByText("誕生日のみ")).toBeNull();
     });
 
     it("filters to events with no tags at all when 未設定 is selected, fetching unfiltered and narrowing client-side", async () => {
@@ -398,10 +440,13 @@ describe("HistoryScreen", () => {
       const { getByTestId } = await render(<HistoryScreen />);
       await fireEvent.press(getByTestId("history-filter"));
 
-      await fireEvent.press(getByTestId("history-tag-filter-tag-1"));
+      await fireEvent.press(getByTestId("history-tag-filter-tag-tag-1"));
       await fireEvent.press(getByTestId("history-calendar-filter-cal-2"));
 
-      await waitFor(() => expect(usePastEventsByTag).toHaveBeenLastCalledWith("tag-1", ["cal-1"]));
+      await waitFor(() => expect(usePastEventsByTag).toHaveBeenLastCalledWith(undefined, ["cal-1"]));
+      // Toggling the calendar filter didn't clear the tag selection - tag-1's
+      // child (tag-2) is still revealed, proving tag-1 is still selected.
+      expect(getByTestId("history-tag-filter-tag-tag-2")).toBeTruthy();
     });
 
     it("shows an active-filter indicator once a calendar or tag filter is touched, and clears it via reset", async () => {
@@ -424,18 +469,21 @@ describe("HistoryScreen", () => {
     it("resets both the calendar and tag selections when the sheet's reset link is pressed", async () => {
       mockCommonHooks();
 
-      const { getByTestId } = await render(<HistoryScreen />);
+      const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
       await fireEvent.press(getByTestId("history-filter"));
 
-      await fireEvent.press(getByTestId("history-tag-filter-tag-1"));
+      await fireEvent.press(getByTestId("history-tag-filter-tag-tag-1"));
       await fireEvent.press(getByTestId("history-calendar-filter-cal-2"));
-      await waitFor(() => expect(usePastEventsByTag).toHaveBeenLastCalledWith("tag-1", ["cal-1"]));
+      await waitFor(() => expect(usePastEventsByTag).toHaveBeenLastCalledWith(undefined, ["cal-1"]));
+      expect(getByTestId("history-tag-filter-tag-tag-2")).toBeTruthy();
 
       await fireEvent.press(getByTestId("history-filter-reset"));
 
       await waitFor(() =>
         expect(usePastEventsByTag).toHaveBeenLastCalledWith(undefined, ["cal-1", "cal-2"])
       );
+      // tag-1 was cleared too, so its child tag-2 is no longer revealed.
+      expect(queryByTestId("history-tag-filter-tag-tag-2")).toBeNull();
     });
 
     it("narrows the timeline by 期間 (start/end date), applied client-side on top of the tag-filtered events", async () => {

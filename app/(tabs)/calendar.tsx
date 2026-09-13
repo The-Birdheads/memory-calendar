@@ -31,6 +31,7 @@ import {
 import { isJapaneseHoliday } from "../../src/features/events/japaneseHolidays";
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { buildMonthEventGroups } from "../../src/features/events/monthEventList";
+import { buildMultiDayBanners, excludeBannerEvents } from "../../src/features/events/multiDayBanners";
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
 import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
@@ -54,11 +55,18 @@ import { useCreateTodo } from "../../src/features/todos/hooks";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
 import { PersonalOnlyBadge } from "../../src/shared/components/PersonalOnlyBadge";
-import { formatTime, jstNow } from "../../src/shared/utils/formatDateTime";
+import { formatTime, jstNow, toJstDateKey, todayJstDateKey } from "../../src/shared/utils/formatDateTime";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
 const MAX_DOTS_PER_CELL = 3;
+
+// 複数日予定のバー表示(TimeTree風)まわりの寸法。BANNER_AREA_TOPは
+// gridCellの`paddingTop:4` + 日付バッジの高さ24 + `gap:2` の合計 - バーが
+// 日付バッジの直下、通常のピル表示(gridEventList)と同じ高さから始まるように揃える。
+const BANNER_AREA_TOP = 30;
+const BANNER_ROW_HEIGHT = 13;
+const BANNER_ROW_GAP = 2;
 
 // focusedDate/"today" represent a CALENDAR DAY, not an absolute instant - by
 // convention here their UTC-* accessors are read as if they were the
@@ -273,9 +281,31 @@ export default function CalendarScreen() {
     expandEventDateKeys(event.startAt, event.endAt).includes(selectedDateKey)
   );
 
+  // 複数日にまたがる予定は、TimeTreeのように週をまたいでもつながって見える
+  // 横長バーとして月グリッドの上に重ねて表示する(下記のmultiDayBanners)。
+  // セル内の通常ピル表示(eventsByDate)には、単日の予定と、lane数の上限を
+  // 超えてバー表示に乗れなかった複数日の予定だけを残す。
+  const { banners: multiDayBanners, overflowEventIds: multiDayOverflowEventIds, laneCountByWeek } = useMemo(
+    () => buildMultiDayBanners(events, monthGrid),
+    [events, monthGrid]
+  );
+  const cellPillEvents = useMemo(
+    () => excludeBannerEvents(events, multiDayOverflowEventIds),
+    [events, multiDayOverflowEventIds]
+  );
+  const bannersByWeekIndex = useMemo(() => {
+    const map = new Map<number, typeof multiDayBanners>();
+    multiDayBanners.forEach((banner) => {
+      const list = map.get(banner.weekIndex) ?? [];
+      list.push(banner);
+      map.set(banner.weekIndex, list);
+    });
+    return map;
+  }, [multiDayBanners]);
+
   const eventsByDate = useMemo(() => {
     const map = new Map<string, Event[]>();
-    events.forEach((event) => {
+    cellPillEvents.forEach((event) => {
       for (const key of expandEventDateKeys(event.startAt, event.endAt)) {
         const list = map.get(key) ?? [];
         list.push(event);
@@ -283,7 +313,7 @@ export default function CalendarScreen() {
       }
     });
     return map;
-  }, [events]);
+  }, [cellPillEvents]);
 
   const handleToday = () => {
     setFocusedDate(jstNow());
@@ -390,7 +420,21 @@ export default function CalendarScreen() {
       }
       // 自分の意思でリマインドを設定しなくても最低限通知が届くよう、
       // 作成直後に既定のリマインド(終日: 当日+1日前 / 時刻指定: 10分前)を設定する。
-      await createDefaultEventReminders(createdEvent.id, newEventForm.isAllDay);
+      // ただし過去日で登録した予定(記録目的の後追い入力など)には設定しない -
+      // 既に終わったことへのリマインドは意味がなく、登録直後に届いてしまう
+      // (event_reminders.remind_atが既に過去になり、次回のnotification-dispatcher
+      // 実行で「期限到来」と判定されるため)。予定詳細画面でのリマインド枠自体も
+      // 過去の予定では非表示にしている(isPast)のと同じ考え方。終日予定は
+      // 「終了時刻」ではなくJSTの暦日で今日以降かどうかを見る - 終日予定の
+      // start/endは(このファイルの他の終日予定と同じ規約で)当日09:00Zに
+      // 固定しているため、素直に現在時刻と比較すると同日でも9時JST18時を
+      // 過ぎた時点で「過去」と誤判定してしまう。
+      const isPastEndDate = newEventForm.isAllDay
+        ? toJstDateKey(newEventForm.end.toISOString()) < todayJstDateKey()
+        : newEventForm.end.getTime() < Date.now();
+      if (!isPastEndDate) {
+        await createDefaultEventReminders(createdEvent.id, newEventForm.isAllDay);
+      }
       setIsCreateModalVisible(false);
       await refetchEvents();
     }
@@ -663,68 +707,108 @@ export default function CalendarScreen() {
             ))}
           </View>
           <View testID="calendar-weeks-area" style={styles.weeksArea}>
-            {monthGrid.map((week, weekIndex) => (
-              <View key={weekIndex} testID={`calendar-grid-row-${weekIndex}`} style={styles.gridRow}>
-                {week.map((cell) => {
-                  const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
-                  const isToday = cell.dateKey === todayDateKey();
-                  const isSelected = cell.dateKey === selectedDateKey;
-                  const dayOfWeek = new Date(`${cell.dateKey}T00:00:00.000Z`).getUTCDay();
-                  const isSaturday = dayOfWeek === 6;
-                  const isSundayOrHoliday = dayOfWeek === 0 || isJapaneseHoliday(cell.dateKey);
-                  return (
-                    <TouchableOpacity
-                      key={cell.dateKey}
-                      testID={`calendar-grid-cell-${cell.dateKey}`}
-                      style={[
-                        styles.gridCell,
-                        isSelected && styles.gridCellSelected,
-                        !cell.isCurrentMonth && styles.gridCellMuted,
-                      ]}
-                      onPress={() => handleSelectDateCell(cell.dateKey)}
-                    >
-                      <View style={[styles.gridDayBadge, isToday && styles.gridDayBadgeToday]}>
-                        <Text
+            {monthGrid.map((week, weekIndex) => {
+              const weekBanners = bannersByWeekIndex.get(weekIndex) ?? [];
+              const laneCount = laneCountByWeek[weekIndex] ?? 0;
+              return (
+                <View key={weekIndex} testID={`calendar-grid-row-${weekIndex}`} style={styles.gridRow}>
+                  {week.map((cell) => {
+                    const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
+                    const isToday = cell.dateKey === todayDateKey();
+                    const isSelected = cell.dateKey === selectedDateKey;
+                    const dayOfWeek = new Date(`${cell.dateKey}T00:00:00.000Z`).getUTCDay();
+                    const isSaturday = dayOfWeek === 6;
+                    const isSundayOrHoliday = dayOfWeek === 0 || isJapaneseHoliday(cell.dateKey);
+                    return (
+                      <TouchableOpacity
+                        key={cell.dateKey}
+                        testID={`calendar-grid-cell-${cell.dateKey}`}
+                        style={[
+                          styles.gridCell,
+                          isSelected && styles.gridCellSelected,
+                          !cell.isCurrentMonth && styles.gridCellMuted,
+                        ]}
+                        onPress={() => handleSelectDateCell(cell.dateKey)}
+                      >
+                        <View style={[styles.gridDayBadge, isToday && styles.gridDayBadgeToday]}>
+                          <Text
+                            style={[
+                              styles.gridDayText,
+                              isSaturday && styles.gridDaySaturday,
+                              isSundayOrHoliday && styles.gridDaySunday,
+                              isToday && styles.gridDayTextToday,
+                            ]}
+                          >
+                            {cell.day}
+                          </Text>
+                        </View>
+                        <View
                           style={[
-                            styles.gridDayText,
-                            isSaturday && styles.gridDaySaturday,
-                            isSundayOrHoliday && styles.gridDaySunday,
-                            isToday && styles.gridDayTextToday,
+                            styles.gridEventList,
+                            laneCount > 0 && { marginTop: laneCount * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP) },
                           ]}
                         >
-                          {cell.day}
-                        </Text>
-                      </View>
-                      <View style={styles.gridEventList}>
-                        {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => (
-                          <View
-                            key={event.id}
-                            testID={`calendar-grid-dot-${event.id}`}
-                            style={[styles.gridEventBar, { backgroundColor: resolveEventColor(event, calendarColorById) }]}
-                          >
-                            {personalCalendarIds.has(event.calendarId) ? (
-                              <Icon
-                                testID={`calendar-grid-dot-personal-${event.id}`}
-                                name="lock"
-                                size={7}
-                                color="#fff"
-                                style={styles.gridEventBarLockIcon}
-                              />
-                            ) : null}
-                            <Text style={styles.gridEventBarText} numberOfLines={1} ellipsizeMode="clip">
-                              {event.title}
-                            </Text>
-                          </View>
-                        ))}
-                        {cellEvents.length > MAX_DOTS_PER_CELL ? (
-                          <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
-                        ) : null}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
+                          {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => (
+                            <View
+                              key={event.id}
+                              testID={`calendar-grid-dot-${event.id}`}
+                              style={[styles.gridEventBar, { backgroundColor: resolveEventColor(event, calendarColorById) }]}
+                            >
+                              {personalCalendarIds.has(event.calendarId) ? (
+                                <Icon
+                                  testID={`calendar-grid-dot-personal-${event.id}`}
+                                  name="lock"
+                                  size={7}
+                                  color="#fff"
+                                  style={styles.gridEventBarLockIcon}
+                                />
+                              ) : null}
+                              <Text style={styles.gridEventBarText} numberOfLines={1} ellipsizeMode="clip">
+                                {event.title}
+                              </Text>
+                            </View>
+                          ))}
+                          {cellEvents.length > MAX_DOTS_PER_CELL ? (
+                            <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {weekBanners.length > 0 ? (
+                    <View style={styles.gridBannerOverlay} pointerEvents="box-none">
+                      {weekBanners.map((banner) => (
+                        <TouchableOpacity
+                          key={`${banner.event.id}-${weekIndex}`}
+                          testID={`calendar-grid-banner-${banner.event.id}-week-${weekIndex}`}
+                          onPress={() => handleSelectDateCell(week[banner.colStart].dateKey)}
+                          style={[
+                            styles.gridBanner,
+                            {
+                              left: `${(banner.colStart / 7) * 100}%`,
+                              width: `${((banner.colEnd - banner.colStart + 1) / 7) * 100}%`,
+                              top: BANNER_AREA_TOP + banner.lane * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP),
+                              backgroundColor: resolveEventColor(banner.event, calendarColorById),
+                              borderTopLeftRadius: banner.isStart ? 3 : 0,
+                              borderBottomLeftRadius: banner.isStart ? 3 : 0,
+                              borderTopRightRadius: banner.isEnd ? 3 : 0,
+                              borderBottomRightRadius: banner.isEnd ? 3 : 0,
+                            },
+                          ]}
+                        >
+                          {personalCalendarIds.has(banner.event.calendarId) ? (
+                            <Icon name="lock" size={7} color="#fff" style={styles.gridEventBarLockIcon} />
+                          ) : null}
+                          <Text style={styles.gridEventBarText} numberOfLines={1} ellipsizeMode="clip">
+                            {banner.event.title}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
         </View>
       ) : (
@@ -1317,6 +1401,21 @@ const styles = StyleSheet.create({
   gridRow: {
     flex: 1,
     flexDirection: "row",
+    position: "relative",
+  },
+  gridBannerOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  gridBanner: {
+    position: "absolute",
+    flexDirection: "row",
+    alignItems: "center",
+    height: 13,
+    paddingHorizontal: 2,
   },
   gridCell: {
     flex: 1,

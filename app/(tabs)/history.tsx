@@ -16,6 +16,7 @@ import { BulkTagAssignPanel } from "../../src/features/tags/components/BulkTagAs
 import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
 import { SelectionCircle } from "../../src/features/tags/components/SelectionCircle";
 import { TagIcon } from "../../src/features/tags/components/TagIcon";
+import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
 import {
   useAttachTagsToEvents,
   useBulkTagSelection,
@@ -23,7 +24,6 @@ import {
   useRemoveAllTagsFromEvents,
   useTagTree,
 } from "../../src/features/tags/hooks";
-import { flattenVisibleTagTree, getAncestorChainIds } from "../../src/features/tags/tagTree";
 import type { TagTreeNode } from "../../src/features/tags/types";
 import { DateRangeFilterSection } from "../../src/shared/components/DateRangeFilterSection";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
@@ -34,15 +34,6 @@ import { jstNow, todayJstDateKey, toJstDateKey } from "../../src/shared/utils/fo
 function flattenTags(nodes: TagTreeNode[]): TagTreeNode[] {
   return nodes.flatMap((node) => [node, ...flattenTags(node.children)]);
 }
-
-/**
- * タグ絞り込みの「未設定」を表す特別な値。実在のタグid(uuid)とは衝突しない。
- * RPC(list_past_events_by_tag)はこの値を知らないので、選択中はp_tag_idに
- * undefined(絞り込みなし)を渡して全件取得し、取得済みのタグ一覧
- * (tagsByEventId、バッジ表示にどのみち使う)を使ってクライアント側で
- * 「タグが1件も付いていない予定」だけに絞り込む。
- */
-const UNTAGGED_TAG_FILTER = "__untagged__";
 
 /** "2年前"/"1年前" - どちらもJST日付キー("YYYY-MM-DD")なので年の部分の文字列比較だけで済む。 */
 function yearsAgoLabel(entryJstDateKey: string, todayKey: string): string {
@@ -108,7 +99,10 @@ function TimelinePanel() {
   };
 
   const { tagTree } = useTagTree();
-  const [selectedTagId, setSelectedTagId] = useState<string | undefined>(undefined);
+  // 複数選択(AND条件 - 選択した全てのタグが付いている予定だけを表示)。
+  // 「未設定」は実在のタグとは併用できない排他的な状態として別に持つ。
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [isUntaggedSelected, setIsUntaggedSelected] = useState(false);
   const [periodStart, setPeriodStart] = useState<string | null>(null);
   const [periodEnd, setPeriodEnd] = useState<string | null>(null);
 
@@ -118,10 +112,24 @@ function TimelinePanel() {
 
   const handleResetFilters = useCallback(() => {
     setSelectedCalendarIds(null);
-    setSelectedTagId(undefined);
+    setSelectedTagIds([]);
+    setIsUntaggedSelected(false);
     setPeriodStart(null);
     setPeriodEnd(null);
   }, []);
+
+  const handleSelectAllTags = () => {
+    setSelectedTagIds([]);
+    setIsUntaggedSelected(false);
+  };
+  const handleSelectUntagged = () => {
+    setSelectedTagIds([]);
+    setIsUntaggedSelected(true);
+  };
+  const handleToggleTagFilter = (tagId: string) => {
+    setIsUntaggedSelected(false);
+    setSelectedTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
 
   // カレンダー名の変更はCalendarタブ自身のuseMyCalendarsしか再取得しないため、
   // このタブに来るたびに取り直して最新の名前を反映する。フィルターは、この
@@ -140,25 +148,15 @@ function TimelinePanel() {
     }, [refetchCalendars, handleResetFilters])
   );
 
-  const { events: eventsByTag, refetch: refetchEventsByTag } = usePastEventsByTag(
-    selectedTagId === UNTAGGED_TAG_FILTER ? undefined : selectedTagId,
-    activeCalendarIds
-  );
+  // タグでの絞り込み(未設定/複数選択のAND条件)はすべてクライアント側で行う
+  // ので、RPCへは常にタグ指定なし(全件)を渡す。
+  const { events: eventsByTag, refetch: refetchEventsByTag } = usePastEventsByTag(undefined, activeCalendarIds);
   const periodFilteredEvents = useMemo(
     () => eventsByTag.filter((event) => isDateKeyInRange(toJstDateKey(event.startAt), periodStart, periodEnd)),
     [eventsByTag, periodStart, periodEnd]
   );
 
-  // 大分類 → 中分類 → 小分類 の順にドリルダウンして選択肢を表示する。
   const allTagsFlat = useMemo(() => flattenTags(tagTree), [tagTree]);
-  const expandedTagIds = useMemo(
-    () => getAncestorChainIds(selectedTagId, allTagsFlat),
-    [selectedTagId, allTagsFlat]
-  );
-  const visibleTags = useMemo(
-    () => flattenVisibleTagTree(tagTree, expandedTagIds),
-    [tagTree, expandedTagIds]
-  );
 
   const periodFilteredEventIds = useMemo(
     () => periodFilteredEvents.map((event) => event.id),
@@ -174,9 +172,17 @@ function TimelinePanel() {
     }, [refetchEventTags])
   );
   const events = useMemo(() => {
-    if (selectedTagId !== UNTAGGED_TAG_FILTER) return periodFilteredEvents;
-    return periodFilteredEvents.filter((event) => (tagsByEventId[event.id] ?? []).length === 0);
-  }, [periodFilteredEvents, selectedTagId, tagsByEventId]);
+    if (isUntaggedSelected) {
+      return periodFilteredEvents.filter((event) => (tagsByEventId[event.id] ?? []).length === 0);
+    }
+    if (selectedTagIds.length > 0) {
+      return periodFilteredEvents.filter((event) => {
+        const eventTagIds = new Set((tagsByEventId[event.id] ?? []).map((tag) => tag.id));
+        return selectedTagIds.every((tagId) => eventTagIds.has(tagId));
+      });
+    }
+    return periodFilteredEvents;
+  }, [periodFilteredEvents, isUntaggedSelected, selectedTagIds, tagsByEventId]);
 
   const eventIds = useMemo(() => events.map((event) => event.id), [events]);
   const { eventIdsWithPhotos } = useEventIdsWithPhotos(eventIds);
@@ -186,7 +192,11 @@ function TimelinePanel() {
   const handleCloseDetail = () => setSelectedEventId(null);
 
   const isFilterActive =
-    selectedCalendarIds !== null || selectedTagId !== undefined || periodStart !== null || periodEnd !== null;
+    selectedCalendarIds !== null ||
+    selectedTagIds.length > 0 ||
+    isUntaggedSelected ||
+    periodStart !== null ||
+    periodEnd !== null;
 
   const selectedTagNames = useMemo(
     () => bulk.selectedTagIds.flatMap((tagId) => allTagsFlat.find((tag) => tag.id === tagId)?.name ?? []),
@@ -238,41 +248,41 @@ function TimelinePanel() {
                   />
                 ))}
               </FilterSection>
-              <FilterSection title="タグ">
+              <FilterSection title="タグ(複数選択時は全て含む予定のみ表示)">
                 <TouchableOpacity
                   testID="history-tag-filter-all"
-                  onPress={() => setSelectedTagId(undefined)}
-                  style={[styles.filterChip, selectedTagId === undefined && styles.filterChipActive]}
+                  onPress={handleSelectAllTags}
+                  style={[
+                    styles.filterChip,
+                    !isUntaggedSelected && selectedTagIds.length === 0 && styles.filterChipActive,
+                  ]}
                 >
-                  <Text style={selectedTagId === undefined ? styles.filterChipTextActive : styles.filterChipText}>
+                  <Text
+                    style={
+                      !isUntaggedSelected && selectedTagIds.length === 0
+                        ? styles.filterChipTextActive
+                        : styles.filterChipText
+                    }
+                  >
                     すべて
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   testID="history-tag-filter-untagged"
-                  onPress={() => setSelectedTagId(UNTAGGED_TAG_FILTER)}
-                  style={[styles.filterChip, selectedTagId === UNTAGGED_TAG_FILTER && styles.filterChipActive]}
+                  onPress={handleSelectUntagged}
+                  style={[styles.filterChip, isUntaggedSelected && styles.filterChipActive]}
                 >
-                  <Text
-                    style={
-                      selectedTagId === UNTAGGED_TAG_FILTER ? styles.filterChipTextActive : styles.filterChipText
-                    }
-                  >
+                  <Text style={isUntaggedSelected ? styles.filterChipTextActive : styles.filterChipText}>
                     未設定
                   </Text>
                 </TouchableOpacity>
-                {visibleTags.map((tag) => (
-                  <TouchableOpacity
-                    key={tag.id}
-                    testID={`history-tag-filter-${tag.id}`}
-                    onPress={() => setSelectedTagId(tag.id)}
-                    style={[styles.filterChip, selectedTagId === tag.id && styles.filterChipActive]}
-                  >
-                    <Text style={selectedTagId === tag.id ? styles.filterChipTextActive : styles.filterChipText}>
-                      {tag.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                <TagPickerRow
+                  testIDPrefix="history-tag-filter"
+                  tagTree={tagTree}
+                  selectedTagIds={selectedTagIds}
+                  onToggle={handleToggleTagFilter}
+                  hideLabel
+                />
               </FilterSection>
               <FilterSection title="期間">
                 <DateRangeFilterSection
