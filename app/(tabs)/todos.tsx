@@ -240,6 +240,8 @@ interface EventSectionProps {
   onEditTodoTitle: (todoId: string, title: string) => void;
   onOpenEvent: (eventId: string) => void;
   sectionRef?: (node: View | null) => void;
+  /** 色未設定のタグをその予定のカレンダー色で表示するためのフォールバック。 */
+  calendarColorById: Record<string, string>;
 }
 
 function EventSection({
@@ -254,6 +256,7 @@ function EventSection({
   onEditTodoTitle,
   onOpenEvent,
   sectionRef,
+  calendarColorById,
 }: EventSectionProps) {
   const [isDoneExpanded, setIsDoneExpanded] = useState(false);
 
@@ -292,7 +295,7 @@ function EventSection({
         </TouchableOpacity>
         {tags.length > 0 ? (
           <View testID={`todo-section-tags-${group.eventId}`}>
-            <EventTagBadges tags={tags} />
+            <EventTagBadges tags={tags} fallbackColor={calendarColorById[group.eventCalendarId]} />
           </View>
         ) : null}
         <View style={styles.sectionHeaderSubRow}>
@@ -473,6 +476,10 @@ export default function TodosScreen() {
   const { tagsByEventId, refetch: refetchEventTags } = useEventTagsByEvents(eventIds);
   const { tagTree } = useTagTree();
   const allTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
+  const calendarColorById = useMemo(
+    () => Object.fromEntries(calendars.map((calendar) => [calendar.id, calendar.color])),
+    [calendars]
+  );
   const getSortedTagsForEvent = useCallback(
     (eventId: string) => sortTagsHierarchically(tagsByEventId[eventId] ?? [], allTagsFlat),
     [tagsByEventId, allTagsFlat]
@@ -719,6 +726,7 @@ export default function TodosScreen() {
                 onSetReminder={handleSetReminder}
                 onEditTodoTitle={handleEditTodoTitle}
                 onOpenEvent={setSelectedEventId}
+                calendarColorById={calendarColorById}
               />
             )}
           />
@@ -772,6 +780,7 @@ export default function TodosScreen() {
                     onSetReminder={handleSetReminder}
                     onEditTodoTitle={handleEditTodoTitle}
                     onOpenEvent={setSelectedEventId}
+                    calendarColorById={calendarColorById}
                     sectionRef={(node) => sectionRefs.current.set(group.eventId, node)}
                   />
                 )}
@@ -806,6 +815,7 @@ export default function TodosScreen() {
                     onSetReminder={handleSetReminder}
                     onEditTodoTitle={handleEditTodoTitle}
                     onOpenEvent={setSelectedEventId}
+                    calendarColorById={calendarColorById}
                   />
                 )}
               />

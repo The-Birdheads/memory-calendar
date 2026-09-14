@@ -26,8 +26,11 @@ function renderTagRow(node: TagTreeNode, depth: number, onSelect: (tag: Tag) => 
         style={[styles.tagRow, { paddingLeft: 16 + depth * 16 }]}
         onPress={() => onSelect(node)}
       >
-        <TagLevelIcon testID={`tag-management-tag-icon-${node.id}`} level={node.level} color={node.color} />
-        <View testID={`tag-management-tag-badge-${node.id}`} style={[styles.tagBadge, { backgroundColor: node.color }]}>
+        <TagLevelIcon testID={`tag-management-tag-icon-${node.id}`} level={node.level} color={node.color ?? "#999999"} />
+        <View
+          testID={`tag-management-tag-badge-${node.id}`}
+          style={[styles.tagBadge, { backgroundColor: node.color ?? "#999999" }]}
+        >
           <Text style={styles.tagBadgeText}>{node.name}</Text>
         </View>
       </TouchableOpacity>

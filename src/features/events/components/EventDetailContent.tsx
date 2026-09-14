@@ -486,7 +486,7 @@ export function EventDetailContent({
           hideLabel
         />
       ) : tags.length > 0 ? (
-        <EventTagBadges tags={tags} />
+        <EventTagBadges tags={tags} fallbackColor={currentCalendar?.color} />
       ) : (
         <Text style={styles.emptyText}>タグはまだありません（編集から追加できます）</Text>
       )}

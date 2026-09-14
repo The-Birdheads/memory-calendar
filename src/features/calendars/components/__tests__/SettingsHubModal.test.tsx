@@ -214,6 +214,20 @@ describe("SettingsHubModal", () => {
       expect(flattenStyle(getByTestId("tag-management-tag-badge-tag-1").props.style).backgroundColor).toBe("#ff0000");
     });
 
+    it("shows a neutral gray badge for a tag with no color set (色未設定)", async () => {
+      const flattenStyle = (style: unknown) =>
+        Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+      mockHooks({ tagTree: [{ ...TAG_TREE[0], color: null }] });
+
+      const { getByTestId } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} />,
+      );
+
+      await fireEvent.press(getByTestId("settings-hub-open-tags"));
+
+      expect(flattenStyle(getByTestId("tag-management-tag-badge-tag-1").props.style).backgroundColor).toBe("#999999");
+    });
+
     it("returns exactly one level via the single back button, however deep the stack is", async () => {
       mockHooks();
 

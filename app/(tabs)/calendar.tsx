@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -10,6 +11,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Tabs, router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -341,23 +343,57 @@ export default function CalendarScreen() {
     });
   };
 
+  // 月送りスワイプの「つるん」としたスライド演出用。指の動きに合わせて
+  // gridTranslateXをそのまま追従させ(onPanResponderMove)、指を離した時に
+  // 月が変わる操作だったら「今の月を画面外までスライドさせる→
+  // (フォーカス月を切り替えて)反対側から新しい月をスライドインさせる」の
+  // 2段階アニメーションを再生する。月を跨がない操作なら0に戻すだけ。
+  const { width: screenWidth } = useWindowDimensions();
+  const gridTranslateXRef = useRef(new Animated.Value(0));
+
+  const animateMonthSwipe = (direction: 1 | -1) => {
+    Animated.timing(gridTranslateXRef.current, {
+      toValue: -direction * screenWidth,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => {
+      shiftFocusedDate(direction);
+      gridTranslateXRef.current.setValue(direction * screenWidth);
+      Animated.timing(gridTranslateXRef.current, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+    });
+  };
+
   // 初回レンダーで1度だけ生成する(依存配列は空)。生成時の shiftFocusedDate の
   // クロージャを掴み続けるが、shiftFocusedDate は関数型 setState で常に最新の
   // state を受け取るため問題ない(上のコメント参照)。
+  /* eslint-disable react-hooks/refs -- ここで参照しているgridTranslateXRef.currentは、この
+     useMemoの生成関数自体の実行時ではなく、下のonPanResponderMove/onPanResponderReleaseという
+     イベントハンドラのクロージャ内で(タッチ操作に応じて)呼ばれる時にだけ読まれる。 */
   const monthSwipeResponder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_event, gestureState) =>
           Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5,
+        onPanResponderMove: (_event, gestureState) => {
+          gridTranslateXRef.current.setValue(gestureState.dx);
+        },
         onPanResponderRelease: (_event, gestureState) => {
           const direction = resolveMonthSwipeDirection(gestureState.dx, gestureState.dy);
           if (direction !== null) {
-            shiftFocusedDate(direction);
+            animateMonthSwipe(direction);
+          } else {
+            Animated.spring(gridTranslateXRef.current, { toValue: 0, useNativeDriver: true }).start();
           }
         },
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gridTranslateXRef/screenWidthはこのPanResponder生成後に変わらない前提(screenWidthは回転時に変わり得るが、そのためだけに一度掴んだPanResponderを作り直す価値は薄い)
     []
   );
+  /* eslint-enable react-hooks/refs */
 
   const openCreateModal = () => {
     const base = new Date(`${selectedDateKey}T09:00:00.000Z`);
@@ -713,7 +749,13 @@ export default function CalendarScreen() {
               </Text>
             ))}
           </View>
-          <View testID="calendar-weeks-area" style={styles.weeksArea}>
+          {/* Animated.Valueは安定したオブジェクト参照であり、毎レンダーでstyleへ渡すのがReact Native公式のPanResponder+Animatedパターン(react-hooks/refsの誤検知)。 */}
+          <View style={styles.gridWeeksClip}>
+            <Animated.View
+              testID="calendar-weeks-area"
+              // eslint-disable-next-line react-hooks/refs -- 上のコメント参照。Animated.Valueの安定参照を毎レンダーでstyleへ渡す公式パターン。
+              style={[styles.weeksArea, { transform: [{ translateX: gridTranslateXRef.current }] }]}
+            >
             {monthGrid.map((week, weekIndex) => {
               const weekBanners = bannersByWeekIndex.get(weekIndex) ?? [];
               const laneCount = laneCountByWeek[weekIndex] ?? 0;
@@ -816,6 +858,7 @@ export default function CalendarScreen() {
                 </View>
               );
             })}
+            </Animated.View>
           </View>
         </View>
       ) : (
@@ -883,7 +926,9 @@ export default function CalendarScreen() {
                               {event.title}
                             </Text>
                           </View>
-                          {tags.length > 0 ? <EventTagBadges tags={tags} /> : null}
+                          {tags.length > 0 ? (
+                            <EventTagBadges tags={tags} fallbackColor={calendarColorById[event.calendarId]} />
+                          ) : null}
                         </View>
                       </TouchableOpacity>
                     );
@@ -1393,6 +1438,10 @@ const styles = StyleSheet.create({
   },
   weekdayRow: {
     flexDirection: "row",
+  },
+  gridWeeksClip: {
+    flex: 1,
+    overflow: "hidden",
   },
   weeksArea: {
     flex: 1,

@@ -1,6 +1,7 @@
 import { fireEvent, render } from "@testing-library/react-native";
 
 import { ColorSwatchPicker } from "../ColorSwatchPicker";
+import { COLOR_PALETTE } from "../../constants/colorPalette";
 import type { ColorUsageEntry } from "../../utils/colorUsage";
 import type { Calendar } from "../../../features/calendars/types";
 
@@ -19,6 +20,17 @@ describe("ColorSwatchPicker", () => {
     expect(getByTestId("color-blue")).toBeTruthy();
     expect(getByTestId("color-red")).toBeTruthy();
     expect(getByTestId("color-pink")).toBeTruthy();
+  });
+
+  it("offers 12 colors to choose from, including the newer additions", async () => {
+    const { getByTestId } = await render(
+      <ColorSwatchPicker testIDPrefix="color" selected="#2f6fed" onSelect={jest.fn()} usageByColor={NO_USAGE} />
+    );
+
+    expect(COLOR_PALETTE).toHaveLength(12);
+    for (const color of COLOR_PALETTE) {
+      expect(getByTestId(`color-${color.name}`)).toBeTruthy();
+    }
   });
 
   it("calls onSelect with the tapped swatch's hex", async () => {
@@ -53,6 +65,35 @@ describe("ColorSwatchPicker", () => {
     expect(queryByTestId("color-blue-used-mark")).toBeNull();
     // No message yet, since the used color isn't the selected one.
     expect(queryByTestId("color-usage-message")).toBeNull();
+  });
+
+  it("shows no '未設定' swatch by default", async () => {
+    const { queryByTestId } = await render(
+      <ColorSwatchPicker testIDPrefix="color" selected="#2f6fed" onSelect={jest.fn()} usageByColor={NO_USAGE} />
+    );
+
+    expect(queryByTestId("color-unset")).toBeNull();
+  });
+
+  it("shows a '未設定' swatch when allowUnset is set, calling onSelect(null) when pressed", async () => {
+    const onSelect = jest.fn();
+    const { getByTestId } = await render(
+      <ColorSwatchPicker testIDPrefix="color" selected="#2f6fed" onSelect={onSelect} usageByColor={NO_USAGE} allowUnset />
+    );
+
+    await fireEvent.press(getByTestId("color-unset"));
+
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
+
+  it("marks the '未設定' swatch as selected when selected is null", async () => {
+    const { getByTestId } = await render(
+      <ColorSwatchPicker testIDPrefix="color" selected={null} onSelect={jest.fn()} usageByColor={NO_USAGE} allowUnset />
+    );
+
+    const flattenStyle = (style: unknown) =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    expect(flattenStyle(getByTestId("color-unset").props.style).borderColor).toBe("#333");
   });
 
   it("shows the usage message once the used color becomes the selected one", async () => {

@@ -38,7 +38,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: E
   const [name, setName] = useState(tag.name);
   const [level, setLevel] = useState<TagLevel>(tag.level);
   const [parentId, setParentId] = useState<string | null>(tag.parentId);
-  const [majorColor, setMajorColor] = useState(tag.level === "major" ? tag.color : TAG_COLORS[0].hex);
+  const [majorColor, setMajorColor] = useState<string | null>(tag.level === "major" ? tag.color : TAG_COLORS[0].hex);
   const usageByColor = useMemo<Record<string, ColorUsageEntry>>(
     () =>
       Object.fromEntries(
@@ -66,8 +66,17 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: E
       )
     : [];
   const parentTag = parentId ? allTags.find((candidate) => candidate.id === parentId) : undefined;
+  // 親(中分類なら大分類、小分類なら中分類)の色を自動で薄めた色にする。親の
+  // 色が未設定の場合は薄める元の色が無いため、そのまま未設定を引き継ぐ
+  // (`??`だと親のcolorが明示的にnullの時もmajorColorへフォールバックして
+  // しまうため、parentTagの有無で分岐する)。
+  const baseColorForChild = parentTag ? parentTag.color : majorColor;
   const computedColor =
-    level === "major" ? majorColor : lightenHexColor(parentTag?.color ?? majorColor, AUTO_SHADE_AMOUNT);
+    level === "major"
+      ? majorColor
+      : baseColorForChild !== null
+        ? lightenHexColor(baseColorForChild, AUTO_SHADE_AMOUNT)
+        : null;
 
   const handleLevelChange = (nextLevel: TagLevel) => {
     if (nextLevel !== "major" && eligibleParentsFor(nextLevel, allTags, tag.id).length === 0) {
@@ -98,14 +107,22 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: E
           selected={majorColor}
           onSelect={setMajorColor}
           usageByColor={usageByColor}
+          allowUnset
         />
       ) : (
         <View style={styles.autoColorRow}>
           <View
             testID="edit-tag-color-preview"
-            style={[styles.colorSwatch, { backgroundColor: computedColor }]}
+            style={[
+              styles.colorSwatch,
+              computedColor !== null ? { backgroundColor: computedColor } : styles.colorSwatchUnset,
+            ]}
           />
-          <Text style={styles.autoColorLabel}>親タグの色から自動設定されます</Text>
+          <Text style={styles.autoColorLabel}>
+            {computedColor !== null
+              ? "親タグの色から自動設定されます"
+              : "親タグが未設定のため、この色も未設定になります(表示時はカレンダーの色が使われます)"}
+          </Text>
         </View>
       )}
 
@@ -204,6 +221,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 2,
     borderColor: "transparent",
+  },
+  colorSwatchUnset: {
+    backgroundColor: "#eee",
   },
   autoColorRow: {
     flexDirection: "row",

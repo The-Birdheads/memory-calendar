@@ -110,4 +110,15 @@ describe("TagPickerRow", () => {
     expect(getByTestId("event-create-tag-tag-a-check")).toBeTruthy();
     expect(queryByTestId("event-create-tag-tag-b-check")).toBeNull();
   });
+
+  it("falls back to a neutral gray for a tag with no color set (色未設定)", async () => {
+    const treeWithUnsetTag = [{ ...TREE[0], color: null }, TREE[1]];
+    const flattenStyle = (style: unknown) =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const { getByTestId } = await render(
+      <TagPickerRow testIDPrefix="event-create" tagTree={treeWithUnsetTag} selectedTagIds={[]} onToggle={jest.fn()} />
+    );
+
+    expect(flattenStyle(getByTestId("event-create-tag-tag-a").props.style).backgroundColor).toBe("#999999");
+  });
 });

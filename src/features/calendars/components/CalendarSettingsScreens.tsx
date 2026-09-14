@@ -127,7 +127,7 @@ export function CalendarCreateScreen({ calendars, onChange, onCreated }: Calenda
         <ColorSwatchPicker
           testIDPrefix="calendar-settings-color"
           selected={colorDraft}
-          onSelect={setColorDraft}
+          onSelect={(hex) => hex !== null && setColorDraft(hex)}
           usageByColor={usageByColor}
         />
 
@@ -286,7 +286,7 @@ export function CalendarEditScreen({
           <ColorSwatchPicker
             testIDPrefix="calendar-settings-color"
             selected={colorDraft}
-            onSelect={setColorDraft}
+            onSelect={(hex) => hex !== null && setColorDraft(hex)}
             usageByColor={usageByColor}
           />
 

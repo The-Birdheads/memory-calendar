@@ -22,7 +22,7 @@ const DEFAULT_TIMED_REMINDER_KINDS: EventReminderKind[] = ["before_10m"];
 const TAG_LEVEL_PRIORITY = ["major", "mid", "minor"];
 
 interface EventTagJoinRow {
-  tags: { color: string; level: string } | null;
+  tags: { color: string | null; level: string } | null;
 }
 
 /** PostgRESTの埋め込みリソースに`count`を付けると`[{ count: N }]`という
@@ -36,7 +36,9 @@ function extractCount(rows: CountJoinRow[] | null | undefined): number {
 }
 
 function pickPrimaryTagColor(eventTags: EventTagJoinRow[]): string | null {
-  const tags = eventTags.map((row) => row.tags).filter((tag): tag is { color: string; level: string } => tag !== null);
+  const tags = eventTags
+    .map((row) => row.tags)
+    .filter((tag): tag is { color: string | null; level: string } => tag !== null);
   if (tags.length === 0) return null;
 
   for (const level of TAG_LEVEL_PRIORITY) {

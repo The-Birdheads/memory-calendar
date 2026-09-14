@@ -5,7 +5,8 @@ export interface Tag {
   parentId: string | null;
   level: TagLevel;
   name: string;
-  color: string;
+  /** null = 色未設定。表示時はカレンダー(や予定)の色にフォールバックする。 */
+  color: string | null;
   createdAt: string;
 }
 
@@ -15,14 +16,14 @@ export interface TagTreeNode extends Tag {
 
 export interface CreateTagInput {
   name: string;
-  color: string;
+  color: string | null;
   level: TagLevel;
   parentId?: string | null;
 }
 
 export interface UpdateTagInput {
   name?: string;
-  color?: string;
+  color?: string | null;
   level?: TagLevel;
   parentId?: string | null;
 }

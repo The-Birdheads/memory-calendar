@@ -21,6 +21,24 @@ describe("EventTagBadges", () => {
     );
   });
 
+  it("falls back to the given fallbackColor for a tag with no color set (画面上はカレンダーの色が適用される)", async () => {
+    const unsetTag = { id: "tag-4", parentId: null, level: "major" as const, name: "その他", color: null, createdAt: "2026-08-18T00:03:00.000Z" };
+    const { getByTestId } = await render(<EventTagBadges tags={[unsetTag]} fallbackColor="#123456" />);
+
+    expect(getByTestId("event-tag-badge-tag-4").props.style).toContainEqual(
+      expect.objectContaining({ backgroundColor: "#123456" })
+    );
+  });
+
+  it("falls back to a neutral gray for a tag with no color set when no fallbackColor is given", async () => {
+    const unsetTag = { id: "tag-4", parentId: null, level: "major" as const, name: "その他", color: null, createdAt: "2026-08-18T00:03:00.000Z" };
+    const { getByTestId } = await render(<EventTagBadges tags={[unsetTag]} />);
+
+    expect(getByTestId("event-tag-badge-tag-4").props.style).toContainEqual(
+      expect.objectContaining({ backgroundColor: "#999999" })
+    );
+  });
+
   it("renders nothing when no tags are attached", async () => {
     const { queryByTestId } = await render(<EventTagBadges tags={[]} />);
 

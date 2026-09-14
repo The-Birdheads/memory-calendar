@@ -101,4 +101,38 @@ describe("BulkTagAssignPanel", () => {
     await fireEvent.press(getByTestId("bulk-tag-switch-to-assign"));
     expect(onSwitchToAssignMode).toHaveBeenCalled();
   });
+
+  it("places the 'まとめて削除' button to the right of the heading in assign mode", async () => {
+    const { getByText, getByTestId } = await render(
+      <BulkTagAssignPanel
+        testIDPrefix="bulk-tag"
+        tagTree={TAG_TREE}
+        mode="assign"
+        selectedTagIds={[]}
+        onToggleTag={jest.fn()}
+        onSwitchToRemoveMode={jest.fn()}
+        onSwitchToAssignMode={jest.fn()}
+      />
+    );
+
+    expect(getByText("まとめて削除")).toBeTruthy();
+    expect(getByTestId("bulk-tag-switch-to-remove")).toBeTruthy();
+  });
+
+  it("places a 'まとめて付与' button to the right of the heading in remove mode", async () => {
+    const { getByText, getByTestId } = await render(
+      <BulkTagAssignPanel
+        testIDPrefix="bulk-tag"
+        tagTree={TAG_TREE}
+        mode="remove"
+        selectedTagIds={[]}
+        onToggleTag={jest.fn()}
+        onSwitchToRemoveMode={jest.fn()}
+        onSwitchToAssignMode={jest.fn()}
+      />
+    );
+
+    expect(getByText("まとめて付与")).toBeTruthy();
+    expect(getByTestId("bulk-tag-switch-to-assign")).toBeTruthy();
+  });
 });

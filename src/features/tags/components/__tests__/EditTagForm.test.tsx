@@ -141,6 +141,47 @@ describe("EditTagForm", () => {
     });
   });
 
+  it("saves a major tag with no color when '未設定' is picked (色未設定 - falls back to the calendar's color on screen)", async () => {
+    const onSave = jest.fn();
+    const { getByTestId } = await render(
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, OTHER_MAJOR_TAG]} calendars={CALENDARS}
+        onSave={onSave} />
+    );
+
+    await fireEvent.press(getByTestId("edit-tag-color-unset"));
+    await fireEvent.press(getByTestId("edit-tag-save-button"));
+
+    expect(onSave).toHaveBeenCalledWith({
+      name: "行事",
+      color: null,
+      level: "major",
+      parentId: null,
+    });
+  });
+
+  it("also leaves a mid tag's color unset (rather than crashing) when its major parent's color is unset", async () => {
+    const unsetMajorTag = { ...OTHER_MAJOR_TAG, color: null };
+    const onSave = jest.fn();
+    const { getByTestId, getByText } = await render(
+      <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, unsetMajorTag]} calendars={CALENDARS}
+        onSave={onSave} />
+    );
+
+    await fireEvent.press(getByTestId("edit-tag-level-mid"));
+    await fireEvent.press(getByTestId(`edit-tag-parent-${unsetMajorTag.id}`));
+
+    expect(getByText(/この色も未設定になります/)).toBeTruthy();
+
+    await fireEvent.press(getByTestId("edit-tag-save-button"));
+
+    expect(onSave).toHaveBeenCalledWith({
+      name: "行事",
+      color: null,
+      level: "mid",
+      parentId: unsetMajorTag.id,
+    });
+  });
+
   it("wraps the parent-tag options onto multiple lines instead of overflowing off-screen (regression: with many 大分類 tags, later ones became untappable)", async () => {
     const onSave = jest.fn();
     const { getByTestId } = await render(

@@ -18,8 +18,8 @@ export interface FindColorUsageOptions {
  * 調べる。タグは大分類(major)のみを対象にする - 中分類/小分類は親の色を
  * 自動で薄めた色になり(`lightenHexColor`)、パレットのhex値そのものとは
  * 一致しないため。編集中の本人(calendarId/tagId)は除外する(2026-09追加 -
- * パレットが7色しかなく、カレンダー/タグが増えるほど色が被りやすいため、
- * 被っていること自体に選択時に気づけるようにした)。
+ * パレットの色数が限られており、カレンダー/タグが増えるほど色が被りやすい
+ * ため、被っていること自体に選択時に気づけるようにした)。
  */
 export function findColorUsage(
   hex: string,

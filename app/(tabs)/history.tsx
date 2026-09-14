@@ -183,6 +183,10 @@ function TimelinePanel() {
   const eventIds = useMemo(() => events.map((event) => event.id), [events]);
   const { eventIdsWithPhotos } = useEventIdsWithPhotos(eventIds);
   const timelineGroups = useMemo(() => groupEventsByYearMonth(events), [events]);
+  const calendarColorById = useMemo(
+    () => Object.fromEntries(calendars.map((calendar) => [calendar.id, calendar.color])),
+    [calendars]
+  );
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const handleCloseDetail = () => setSelectedEventId(null);
@@ -363,7 +367,9 @@ function TimelinePanel() {
                             />
                           ) : null}
                         </View>
-                        {tags.length > 0 ? <EventTagBadges tags={tags} /> : null}
+                        {tags.length > 0 ? (
+                          <EventTagBadges tags={tags} fallbackColor={calendarColorById[event.calendarId]} />
+                        ) : null}
                       </View>
                     </View>
                   </TouchableOpacity>

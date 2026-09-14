@@ -8,7 +8,7 @@ interface TagRow {
   parent_id: string | null;
   level: Tag["level"];
   name: string;
-  color: string;
+  color: string | null;
   created_at: string;
 }
 

@@ -36,7 +36,7 @@ export function TagPickerRow({ testIDPrefix, tagTree, selectedTagIds, onToggle, 
             <TouchableOpacity
               key={tag.id}
               testID={`${testIDPrefix}-tag-${tag.id}`}
-              style={[styles.chip, { backgroundColor: tag.color }, selected && styles.chipSelected]}
+              style={[styles.chip, { backgroundColor: tag.color ?? "#999999" }, selected && styles.chipSelected]}
               onPress={() => onToggle(tag.id)}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >

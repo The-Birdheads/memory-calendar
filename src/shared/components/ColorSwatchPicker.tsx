@@ -5,11 +5,15 @@ import { formatColorUsageMessage, hasColorUsage, type ColorUsageEntry } from "..
 
 export interface ColorSwatchPickerProps {
   testIDPrefix: string;
-  selected: string;
-  onSelect: (hex: string) => void;
+  selected: string | null;
+  onSelect: (hex: string | null) => void;
   /** 色ごとの使用状況(呼び出し側が`findColorUsage`で組み立てる)。キーは
    * パレットのhex値。 */
   usageByColor: Record<string, ColorUsageEntry>;
+  /** trueなら「未設定」スウォッチを先頭に表示する(タグの色選択のみ - カレン
+   * ダーの色は必須のため渡さない)。選択すると表示時にカレンダーの色へ
+   * フォールバックする。 */
+  allowUnset?: boolean;
 }
 
 /**
@@ -19,13 +23,22 @@ export interface ColorSwatchPickerProps {
  * (2026-09追加)。選択自体をブロックはしない - あくまで参考情報で、
  * 気づいた上でも同じ色を選び直せる。
  */
-export function ColorSwatchPicker({ testIDPrefix, selected, onSelect, usageByColor }: ColorSwatchPickerProps) {
-  const selectedUsage = usageByColor[selected];
+export function ColorSwatchPicker({ testIDPrefix, selected, onSelect, usageByColor, allowUnset }: ColorSwatchPickerProps) {
+  const selectedUsage = selected !== null ? usageByColor[selected] : undefined;
   const message = selectedUsage ? formatColorUsageMessage(selectedUsage) : null;
 
   return (
     <View style={styles.container}>
       <View style={styles.row}>
+        {allowUnset ? (
+          <TouchableOpacity
+            testID={`${testIDPrefix}-unset`}
+            style={[styles.swatch, styles.unsetSwatch, selected === null && styles.swatchSelected]}
+            onPress={() => onSelect(null)}
+          >
+            <Text style={styles.unsetSwatchText}>-</Text>
+          </TouchableOpacity>
+        ) : null}
         {COLOR_PALETTE.map((color) => {
           const usage = usageByColor[color.hex];
           const isUsed = usage ? hasColorUsage(usage) : false;
@@ -72,6 +85,16 @@ const styles = StyleSheet.create({
   },
   swatchSelected: {
     borderColor: "#333",
+  },
+  unsetSwatch: {
+    backgroundColor: "#eee",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unsetSwatchText: {
+    color: "#999",
+    fontSize: 16,
+    fontWeight: "700",
   },
   usedMark: {
     position: "absolute",

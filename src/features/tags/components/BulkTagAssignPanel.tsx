@@ -33,7 +33,16 @@ export function BulkTagAssignPanel({
     <View testID={`${testIDPrefix}-panel`} style={styles.panel}>
       {mode === "assign" ? (
         <>
-          <Text style={styles.heading}>まとめて付与したいタグを選択してください</Text>
+          <View style={styles.headingRow}>
+            <Text style={styles.heading}>まとめて付与したいタグを選択してください</Text>
+            <TouchableOpacity
+              testID={`${testIDPrefix}-switch-to-remove`}
+              onPress={onSwitchToRemoveMode}
+              style={styles.removeModeButton}
+            >
+              <Text style={styles.removeModeButtonText}>まとめて削除</Text>
+            </TouchableOpacity>
+          </View>
           <TagPickerRow
             testIDPrefix={`${testIDPrefix}-tag-picker`}
             tagTree={tagTree}
@@ -41,21 +50,18 @@ export function BulkTagAssignPanel({
             onToggle={onToggleTag}
             hideLabel
           />
-          <TouchableOpacity
-            testID={`${testIDPrefix}-switch-to-remove`}
-            onPress={onSwitchToRemoveMode}
-            style={styles.removeModeButton}
-          >
-            <Text style={styles.removeModeButtonText}>まとめて削除</Text>
-          </TouchableOpacity>
         </>
       ) : (
-        <>
+        <View style={styles.headingRow}>
           <Text style={styles.heading}>選択した予定の全てのタグを削除します</Text>
-          <TouchableOpacity testID={`${testIDPrefix}-switch-to-assign`} onPress={onSwitchToAssignMode}>
-            <Text style={styles.backLink}>タグを選んで付与する場合はこちら</Text>
+          <TouchableOpacity
+            testID={`${testIDPrefix}-switch-to-assign`}
+            onPress={onSwitchToAssignMode}
+            style={styles.assignModeButton}
+          >
+            <Text style={styles.assignModeButtonText}>まとめて付与</Text>
           </TouchableOpacity>
-        </>
+        </View>
       )}
     </View>
   );
@@ -69,7 +75,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e3e6ec",
   },
+  headingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   heading: {
+    flex: 1,
     fontSize: 13,
     fontWeight: "700",
     color: "#333",
@@ -86,8 +99,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  backLink: {
+  assignModeButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "#e8f0fe",
+  },
+  assignModeButtonText: {
     color: "#2f6fed",
     fontSize: 13,
+    fontWeight: "700",
   },
 });
