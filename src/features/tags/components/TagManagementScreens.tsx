@@ -27,7 +27,9 @@ function renderTagRow(node: TagTreeNode, depth: number, onSelect: (tag: Tag) => 
         onPress={() => onSelect(node)}
       >
         <TagLevelIcon testID={`tag-management-tag-icon-${node.id}`} level={node.level} color={node.color} />
-        <Text>{node.name}</Text>
+        <View testID={`tag-management-tag-badge-${node.id}`} style={[styles.tagBadge, { backgroundColor: node.color }]}>
+          <Text style={styles.tagBadgeText}>{node.name}</Text>
+        </View>
       </TouchableOpacity>
       {node.children.map((child) => renderTagRow(child, depth + 1, onSelect))}
     </View>
@@ -162,6 +164,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingVertical: 8,
+  },
+  tagBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  tagBadgeText: {
+    color: "#fff",
+    fontSize: 12,
   },
   newButton: {
     flexDirection: "row",

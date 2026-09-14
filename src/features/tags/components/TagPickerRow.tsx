@@ -36,10 +36,16 @@ export function TagPickerRow({ testIDPrefix, tagTree, selectedTagIds, onToggle, 
             <TouchableOpacity
               key={tag.id}
               testID={`${testIDPrefix}-tag-${tag.id}`}
-              style={[styles.chip, { borderColor: tag.color }, selected && { backgroundColor: tag.color }]}
+              style={[styles.chip, { backgroundColor: tag.color }, selected && styles.chipSelected]}
               onPress={() => onToggle(tag.id)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
-              <Text style={selected ? styles.chipTextSelected : undefined}>{tag.name}</Text>
+              {selected ? (
+                <Text testID={`${testIDPrefix}-tag-${tag.id}-check`} style={styles.check}>
+                  ✓{" "}
+                </Text>
+              ) : null}
+              <Text style={styles.chipText}>{tag.name}</Text>
             </TouchableOpacity>
           );
         })}
@@ -62,14 +68,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  chipTextSelected: {
+  chipSelected: {
+    borderWidth: 2,
+    borderColor: "#222",
+  },
+  chipText: {
+    color: "#fff",
+    fontSize: 12,
+  },
+  check: {
     color: "#fff",
     fontWeight: "700",
+    fontSize: 12,
   },
 });

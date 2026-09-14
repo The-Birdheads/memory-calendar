@@ -90,4 +90,24 @@ describe("TagPickerRow", () => {
     expect(queryByText("タグ")).toBeNull();
     expect(getByTestId("event-create-tag-tag-a")).toBeTruthy();
   });
+
+  it("shows every chip filled with the tag's own color, matching the ToDo/event tag badge style, regardless of selection state", async () => {
+    const flattenStyle = (style: unknown) =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const { getByTestId } = await render(
+      <TagPickerRow testIDPrefix="event-create" tagTree={TREE} selectedTagIds={["tag-a"]} onToggle={jest.fn()} />
+    );
+
+    expect(flattenStyle(getByTestId("event-create-tag-tag-a").props.style).backgroundColor).toBe("#ff0000");
+    expect(flattenStyle(getByTestId("event-create-tag-tag-b").props.style).backgroundColor).toBe("#00ff00");
+  });
+
+  it("shows a ✓ mark on a selected chip, without it on an unselected chip", async () => {
+    const { getByTestId, queryByTestId } = await render(
+      <TagPickerRow testIDPrefix="event-create" tagTree={TREE} selectedTagIds={["tag-a"]} onToggle={jest.fn()} />
+    );
+
+    expect(getByTestId("event-create-tag-tag-a-check")).toBeTruthy();
+    expect(queryByTestId("event-create-tag-tag-b-check")).toBeNull();
+  });
 });

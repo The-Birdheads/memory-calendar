@@ -200,6 +200,20 @@ describe("SettingsHubModal", () => {
       expect(getByTestId("tag-management-tag-tag-1")).toBeTruthy();
     });
 
+    it("shows each tag with the same colored badge style used for ToDo/event tags", async () => {
+      const flattenStyle = (style: unknown) =>
+        Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+      mockHooks();
+
+      const { getByTestId } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} />,
+      );
+
+      await fireEvent.press(getByTestId("settings-hub-open-tags"));
+
+      expect(flattenStyle(getByTestId("tag-management-tag-badge-tag-1").props.style).backgroundColor).toBe("#ff0000");
+    });
+
     it("returns exactly one level via the single back button, however deep the stack is", async () => {
       mockHooks();
 

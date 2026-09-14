@@ -1457,7 +1457,7 @@ describe("CalendarScreen", () => {
     expect(within(personalFrame).getByTestId("event-create-has-todos-toggle")).toBeTruthy();
   });
 
-  it("keeps text inputs and tag chips white even inside the tinted shared/personal frames", async () => {
+  it("keeps text inputs white even inside the tinted shared/personal frames, while tag chips keep showing their own color", async () => {
     mockCommonHooks();
     (useMyCalendars as jest.Mock).mockReturnValue({
       calendars: [
@@ -1480,7 +1480,7 @@ describe("CalendarScreen", () => {
       Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
 
     expect(flattenStyle(getByTestId("event-create-title-input").props.style).backgroundColor).toBe("#fff");
-    expect(flattenStyle(getByTestId("event-create-tag-tag-a").props.style).backgroundColor).toBe("#fff");
+    expect(flattenStyle(getByTestId("event-create-tag-tag-a").props.style).backgroundColor).toBe("#ff0000");
   });
 
   it("shows an error message when event creation fails", async () => {
