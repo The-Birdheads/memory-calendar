@@ -447,6 +447,23 @@ describe("CalendarScreen", () => {
     expect(within(getByTestId("calendar-grid-dot-event-1")).getByText("朝会")).toBeTruthy();
   });
 
+  it("uses a readable font size for the event title inside its grid marker (regression: text was too small to read)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [TODAY_EVENT],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const titleStyle = flattenStyle(within(getByTestId("calendar-grid-dot-event-1")).getByText("朝会").props.style);
+    expect(titleStyle.fontSize).toBeGreaterThanOrEqual(10);
+  });
+
   it("colors the grid marker and day-list dot with the event's primary tag color when tagged", async () => {
     mockCommonHooks();
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
@@ -619,6 +636,24 @@ describe("CalendarScreen", () => {
 
     expect(getByText("8月18日 火曜日")).toBeTruthy();
     expect(getByTestId("calendar-event-event-1")).toBeTruthy();
+  });
+
+  it("uses a readable font size for the event title in the day's event list (regression: text was too small to read)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [TODAY_EVENT],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const titleStyle = flattenStyle(within(getByTestId("calendar-event-event-1")).getByText("朝会").props.style);
+    expect(titleStyle.fontSize).toBeGreaterThanOrEqual(15);
   });
 
   it("shows the day-events modal as a fixed-size card centered over a dimmed backdrop, not a full-screen sheet", async () => {

@@ -65,7 +65,7 @@ const MAX_DOTS_PER_CELL = 3;
 // gridCellの`paddingTop:4` + 日付バッジの高さ24 + `gap:2` の合計 - バーが
 // 日付バッジの直下、通常のピル表示(gridEventList)と同じ高さから始まるように揃える。
 const BANNER_AREA_TOP = 30;
-const BANNER_ROW_HEIGHT = 13;
+const BANNER_ROW_HEIGHT = 14;
 const BANNER_ROW_GAP = 2;
 
 // focusedDate/"today" represent a CALENDAR DAY, not an absolute instant - by
@@ -1426,7 +1426,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     flexDirection: "row",
     alignItems: "center",
-    height: 13,
+    height: 14,
     paddingHorizontal: 2,
   },
   gridCell: {
@@ -1483,13 +1483,13 @@ const styles = StyleSheet.create({
   },
   gridEventBarText: {
     flexShrink: 1,
-    fontSize: 9,
-    lineHeight: 11,
+    fontSize: 10,
+    lineHeight: 12,
     color: "#fff",
     fontWeight: "600",
   },
   gridDotOverflow: {
-    fontSize: 9,
+    fontSize: 10,
     color: "#888",
     textAlign: "center",
   },
@@ -1516,11 +1516,12 @@ const styles = StyleSheet.create({
   },
   eventTime: {
     color: "#666",
-    fontSize: 12,
+    fontSize: 13,
     width: 92,
   },
   eventTitle: {
     flex: 1,
+    fontSize: 15,
   },
   // 思い出(写真)・コメントが実際にある予定だけ、件数バッジで気づけるように
   // する(0件は省略 - 該当しない予定にまで並ぶとノイズになるため)。
