@@ -704,6 +704,66 @@ describe("HistoryScreen", () => {
       await waitFor(() => expect(refetchMemories).toHaveBeenCalled());
     });
 
+    it("shows a tag filter (colored badge chips, AND semantics), narrowing the photo grid to memories that have every selected tag (regression: tag filter was missing from this panel entirely)", async () => {
+      mockCommonHooks();
+      (useMemoriesTimeline as jest.Mock).mockReturnValue({
+        entries: [
+          { ...MEMORY_ENTRIES[0], id: "event-a", title: "行事のみ" },
+          { ...MEMORY_ENTRIES[0], id: "event-b", title: "誕生日のみ" },
+        ],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        tagsByEventId: {
+          "event-a": [{ id: "tag-1", name: "行事", color: "#ff0000" }],
+          "event-b": [{ id: "tag-2", name: "誕生日", color: "#00ff00" }],
+        },
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, getByText, queryByText } = await renderPhotoPanel();
+      await fireEvent.press(getByTestId("memories-filter"));
+
+      const flattenStyle = (style: unknown) =>
+        Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+      expect(flattenStyle(getByTestId("memories-tag-filter-tag-tag-1").props.style).backgroundColor).toBe("#ff0000");
+
+      await fireEvent.press(getByTestId("memories-tag-filter-tag-tag-1"));
+
+      expect(getByText("行事のみ")).toBeTruthy();
+      expect(queryByText("誕生日のみ")).toBeNull();
+    });
+
+    it("filters the photo grid to memories with no tags at all when 未設定 is selected", async () => {
+      mockCommonHooks();
+      (useMemoriesTimeline as jest.Mock).mockReturnValue({
+        entries: [
+          { ...MEMORY_ENTRIES[0], id: "event-a", title: "タグ無し" },
+          { ...MEMORY_ENTRIES[0], id: "event-b", title: "タグ有り" },
+        ],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        tagsByEventId: { "event-b": [{ id: "tag-1", name: "行事", color: "#ff0000" }] },
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, getByText, queryByText } = await renderPhotoPanel();
+      await fireEvent.press(getByTestId("memories-filter"));
+      await fireEvent.press(getByTestId("memories-tag-filter-untagged"));
+
+      expect(getByText("タグ無し")).toBeTruthy();
+      expect(queryByText("タグ有り")).toBeNull();
+    });
+
     it("groups memories under a year-month header, like an album divided into chapters", async () => {
       mockCommonHooks();
       (useMemoriesTimeline as jest.Mock).mockReturnValue({

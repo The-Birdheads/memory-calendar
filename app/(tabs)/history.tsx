@@ -423,11 +423,32 @@ function PhotoGridPanel() {
   const isFilteringByMonth = filterYear !== null && filterMonth !== null;
   const memoriesFilter = isFilteringByMonth ? { year: filterYear, month: filterMonth } : undefined;
 
-  const isFilterActive = selectedCalendarIds !== null || isFilteringByMonth;
+  const { tagTree } = useTagTree();
+  // 年表タブと同じ「複数選択時はAND条件、未設定は排他」のタグ絞り込み。
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [isUntaggedSelected, setIsUntaggedSelected] = useState(false);
+
+  const handleSelectAllTags = () => {
+    setSelectedTagIds([]);
+    setIsUntaggedSelected(false);
+  };
+  const handleSelectUntagged = () => {
+    setSelectedTagIds([]);
+    setIsUntaggedSelected(true);
+  };
+  const handleToggleTagFilter = (tagId: string) => {
+    setIsUntaggedSelected(false);
+    setSelectedTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
+
+  const isFilterActive =
+    selectedCalendarIds !== null || isFilteringByMonth || selectedTagIds.length > 0 || isUntaggedSelected;
   const handleResetFilter = useCallback(() => {
     setSelectedCalendarIds(null);
     setFilterYear(null);
     setFilterMonth(null);
+    setSelectedTagIds([]);
+    setIsUntaggedSelected(false);
   }, []);
 
   // カレンダー名の変更はCalendarタブ自身のuseMyCalendarsしか再取得しないため、
@@ -440,7 +461,7 @@ function PhotoGridPanel() {
     }, [refetchCalendars, handleResetFilter])
   );
 
-  const { entries, refetch: refetchMemories } = useMemoriesTimeline(activeCalendarIds, memoriesFilter);
+  const { entries: memoriesEntries, refetch: refetchMemories } = useMemoriesTimeline(activeCalendarIds, memoriesFilter);
   // カレンダー画面など他の画面で写真を追加/削除してこのタブに戻ってきても
   // 反映されない不具合の修正 - イベントID一覧が変わらない限り自動では
   // 取り直されないため、フォーカスのたびに明示的に取り直す(タグの
@@ -451,6 +472,26 @@ function PhotoGridPanel() {
     }, [refetchMemories])
   );
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+
+  const memoriesEntryIds = useMemo(() => memoriesEntries.map((entry) => entry.id), [memoriesEntries]);
+  const { tagsByEventId, refetch: refetchEventTags } = useEventTagsByEvents(memoriesEntryIds);
+  useFocusEffect(
+    useCallback(() => {
+      refetchEventTags();
+    }, [refetchEventTags])
+  );
+  const entries = useMemo(() => {
+    if (isUntaggedSelected) {
+      return memoriesEntries.filter((entry) => (tagsByEventId[entry.id] ?? []).length === 0);
+    }
+    if (selectedTagIds.length > 0) {
+      return memoriesEntries.filter((entry) => {
+        const entryTagIds = new Set((tagsByEventId[entry.id] ?? []).map((tag) => tag.id));
+        return selectedTagIds.every((tagId) => entryTagIds.has(tagId));
+      });
+    }
+    return memoriesEntries;
+  }, [memoriesEntries, isUntaggedSelected, selectedTagIds, tagsByEventId]);
 
   const monthGroups = useMemo(() => groupMemoriesByYearMonth(entries), [entries]);
   // 「n年前の今日」サプライズ演出 - 特定の年月に絞り込んでいる間は(その月の
@@ -497,6 +538,42 @@ function PhotoGridPanel() {
                     onPress={() => handleToggleCalendar(calendar.id)}
                   />
                 ))}
+              </FilterSection>
+              <FilterSection title="タグ(複数選択時は全て含む予定のみ表示)">
+                <TouchableOpacity
+                  testID="memories-tag-filter-all"
+                  onPress={handleSelectAllTags}
+                  style={[
+                    styles.filterChip,
+                    !isUntaggedSelected && selectedTagIds.length === 0 && styles.filterChipActive,
+                  ]}
+                >
+                  <Text
+                    style={
+                      !isUntaggedSelected && selectedTagIds.length === 0
+                        ? styles.filterChipTextActive
+                        : styles.filterChipText
+                    }
+                  >
+                    すべて
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  testID="memories-tag-filter-untagged"
+                  onPress={handleSelectUntagged}
+                  style={[styles.filterChip, isUntaggedSelected && styles.filterChipActive]}
+                >
+                  <Text style={isUntaggedSelected ? styles.filterChipTextActive : styles.filterChipText}>
+                    未設定
+                  </Text>
+                </TouchableOpacity>
+                <TagPickerRow
+                  testIDPrefix="memories-tag-filter"
+                  tagTree={tagTree}
+                  selectedTagIds={selectedTagIds}
+                  onToggle={handleToggleTagFilter}
+                  hideLabel
+                />
               </FilterSection>
               <FilterSection title="期間">
                 <TouchableOpacity

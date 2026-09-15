@@ -81,36 +81,42 @@ describe("MealsScreen", () => {
     jest.clearAllMocks();
   });
 
-  it("shows the 予定/記録 mode switch, defaulting to 予定 (plan)", async () => {
+  it("shows the 記録/予定 mode switch, defaulting to 記録 (log)", async () => {
     mockCommonHooks(RECORDS);
 
     const { getByTestId, queryByTestId } = await render(<MealsScreen />);
 
     expect(getByTestId("meals-mode-switch")).toBeTruthy();
-    expect(getByTestId("meals-plan-add")).toBeTruthy();
-    expect(queryByTestId("meals-log-add")).toBeNull();
+    expect(getByTestId("meals-log-add")).toBeTruthy();
+    expect(queryByTestId("meals-plan-add")).toBeNull();
   });
 
-  it("switches to the 記録 (log) panel and back, resetting each panel's own calendar filter on the way", async () => {
+  it("switches to the 予定 (plan) panel and back, resetting each panel's own calendar filter on the way", async () => {
     mockCommonHooks(RECORDS);
 
     const { getByTestId, queryByTestId } = await render(<MealsScreen />);
 
-    await fireEvent.press(getByTestId("meals-mode-log"));
-
-    expect(getByTestId("meals-log-add")).toBeTruthy();
-    expect(queryByTestId("meals-plan-add")).toBeNull();
-
     await fireEvent.press(getByTestId("meals-mode-plan"));
 
     expect(getByTestId("meals-plan-add")).toBeTruthy();
+    expect(queryByTestId("meals-log-add")).toBeNull();
+
+    await fireEvent.press(getByTestId("meals-mode-log"));
+
+    expect(getByTestId("meals-log-add")).toBeTruthy();
   });
 
   describe("予定パネル (plan panel)", () => {
+    async function renderPlanPanel() {
+      const utils = await render(<MealsScreen />);
+      await fireEvent.press(utils.getByTestId("meals-mode-plan"));
+      return utils;
+    }
+
     it("shows only future records, grouped under a date header", async () => {
       mockCommonHooks(RECORDS);
 
-      const { getByTestId, queryByTestId } = await render(<MealsScreen />);
+      const { getByTestId, queryByTestId } = await renderPlanPanel();
 
       expect(getByTestId("meals-plan-date-group-2026-08-25")).toBeTruthy();
       expect(getByTestId("meal-item-meal-2")).toBeTruthy();
@@ -120,7 +126,7 @@ describe("MealsScreen", () => {
     it("shows an empty state with a hint to use the + button when there are no upcoming meals", async () => {
       mockCommonHooks([]);
 
-      const { getByText } = await render(<MealsScreen />);
+      const { getByText } = await renderPlanPanel();
 
       expect(getByText("まだ献立の予定がありません")).toBeTruthy();
     });
@@ -131,7 +137,7 @@ describe("MealsScreen", () => {
       const createMealRecordMock = jest.fn().mockResolvedValue(true);
       (useCreateMealRecord as jest.Mock).mockReturnValue({ createMealRecord: createMealRecordMock, isSubmitting: false, error: null });
 
-      const { getByTestId, getByText } = await render(<MealsScreen />);
+      const { getByTestId, getByText } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meals-plan-add"));
 
@@ -161,7 +167,7 @@ describe("MealsScreen", () => {
       const createMealRecordMock = jest.fn().mockResolvedValue(true);
       (useCreateMealRecord as jest.Mock).mockReturnValue({ createMealRecord: createMealRecordMock, isSubmitting: false, error: null });
 
-      const { getByTestId } = await render(<MealsScreen />);
+      const { getByTestId } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meals-plan-add"));
 
@@ -180,7 +186,7 @@ describe("MealsScreen", () => {
       const updateMealRecordMock = jest.fn().mockResolvedValue(true);
       (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
 
-      const { getByTestId, getByText } = await render(<MealsScreen />);
+      const { getByTestId, getByText } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meal-item-meal-2"));
 
@@ -205,7 +211,7 @@ describe("MealsScreen", () => {
       const deleteMealRecordMock = jest.fn().mockResolvedValue(true);
       (useDeleteMealRecord as jest.Mock).mockReturnValue({ deleteMealRecord: deleteMealRecordMock, isSubmitting: false, error: null });
 
-      const { getByTestId, queryByTestId } = await render(<MealsScreen />);
+      const { getByTestId, queryByTestId } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meal-item-meal-2"));
       await fireEvent.press(getByTestId("meal-form-delete"));
@@ -221,7 +227,7 @@ describe("MealsScreen", () => {
       const updateMealRecordMock = jest.fn().mockResolvedValue(true);
       (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
 
-      const { getByTestId, queryByTestId } = await render(<MealsScreen />);
+      const { getByTestId, queryByTestId } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meal-item-meal-2"));
       await fireEvent.press(getByTestId("meal-form-cancel"));
@@ -233,7 +239,7 @@ describe("MealsScreen", () => {
     it("shows a calendar switcher (in the header filter sheet) defaulting to all calendars selected, toggling a calendar off/on to narrow the list", async () => {
       mockCommonHooks([]);
 
-      const { getByTestId } = await render(<MealsScreen />);
+      const { getByTestId } = await renderPlanPanel();
       await fireEvent.press(getByTestId("meals-filter"));
 
       expect(getByTestId("meals-calendar-switch-cal-1")).toBeTruthy();
@@ -247,7 +253,7 @@ describe("MealsScreen", () => {
     it("navigates to 献立をさがす for the active calendar from the header search button, so inspiration is reachable while planning too", async () => {
       mockCommonHooks(RECORDS);
 
-      const { getByTestId } = await render(<MealsScreen />);
+      const { getByTestId } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meals-search-button"));
 
@@ -262,7 +268,7 @@ describe("MealsScreen", () => {
       const createMealRecordMock = jest.fn().mockResolvedValue(true);
       (useCreateMealRecord as jest.Mock).mockReturnValue({ createMealRecord: createMealRecordMock, isSubmitting: false, error: null });
 
-      const { getByTestId } = await render(<MealsScreen />);
+      const { getByTestId } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meals-plan-add"));
       await fireEvent.changeText(getByTestId("meal-form-title-input"), "朝ごはん");

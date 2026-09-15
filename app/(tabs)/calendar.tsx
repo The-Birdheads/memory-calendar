@@ -1442,6 +1442,8 @@ const styles = StyleSheet.create({
   },
   weekdayRow: {
     flexDirection: "row",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e0e0e0",
   },
   gridWeeksClip: {
     flex: 1,
@@ -1467,6 +1469,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     position: "relative",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e0e0e0",
   },
   gridBannerOverlay: {
     position: "absolute",
@@ -1489,6 +1494,8 @@ const styles = StyleSheet.create({
     gap: 2,
     borderRadius: 8,
     overflow: "hidden",
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e0e0e0",
   },
   gridCellSelected: {
     backgroundColor: "#e8f0fe",

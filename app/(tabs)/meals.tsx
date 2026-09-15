@@ -30,24 +30,24 @@ type MealsMode = "plan" | "log";
  * する)ためのパネルで、それぞれ目的に合わせて別々にレイアウトしている。
  */
 export default function MealsScreen() {
-  const [mode, setMode] = useState<MealsMode>("plan");
+  const [mode, setMode] = useState<MealsMode>("log");
 
   return (
     <View style={styles.container}>
       <View style={styles.modeSwitchRow} testID="meals-mode-switch">
-        <TouchableOpacity
-          testID="meals-mode-plan"
-          style={[styles.modeSwitchButton, mode === "plan" && styles.modeSwitchButtonActive]}
-          onPress={() => setMode("plan")}
-        >
-          <Text style={mode === "plan" ? styles.modeSwitchTextActive : styles.modeSwitchText}>予定</Text>
-        </TouchableOpacity>
         <TouchableOpacity
           testID="meals-mode-log"
           style={[styles.modeSwitchButton, mode === "log" && styles.modeSwitchButtonActive]}
           onPress={() => setMode("log")}
         >
           <Text style={mode === "log" ? styles.modeSwitchTextActive : styles.modeSwitchText}>記録</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          testID="meals-mode-plan"
+          style={[styles.modeSwitchButton, mode === "plan" && styles.modeSwitchButtonActive]}
+          onPress={() => setMode("plan")}
+        >
+          <Text style={mode === "plan" ? styles.modeSwitchTextActive : styles.modeSwitchText}>予定</Text>
         </TouchableOpacity>
       </View>
 

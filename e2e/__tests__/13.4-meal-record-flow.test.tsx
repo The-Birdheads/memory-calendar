@@ -67,6 +67,7 @@ describe("13.4 献立記録フローの検証", () => {
 
     expect(queryByText("から揚げ")).toBeNull();
 
+    await fireEvent.press(getByTestId("meals-mode-plan"));
     await fireEvent.press(getByTestId("meals-plan-add"));
     await fireEvent.changeText(getByTestId("meal-form-title-input"), "から揚げ");
     await fireEvent.press(getByTestId("meal-form-date-button"));
