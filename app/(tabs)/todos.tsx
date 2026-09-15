@@ -833,7 +833,14 @@ export default function TodosScreen() {
         />
       ) : null}
       </ScrollView>
-      <EventDetailModal eventId={selectedEventId} onClose={() => setSelectedEventId(null)} />
+      <EventDetailModal
+        eventId={selectedEventId}
+        onClose={() => {
+          setSelectedEventId(null);
+          refetchEventTags();
+          refetch();
+        }}
+      />
     </>
   );
 }

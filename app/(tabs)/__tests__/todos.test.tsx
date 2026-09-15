@@ -447,6 +447,28 @@ describe("TodosScreen", () => {
     expect(queryByTestId("mock-event-detail-content")).toBeNull();
   });
 
+  it("refetches todos and tags when the event detail modal closes, so a tag removed there shows up immediately (regression)", async () => {
+    const refetchTodos = jest.fn();
+    mockCommonHooks(TODOS, refetchTodos);
+    const refetchEventTags = jest.fn();
+    (useEventTagsByEvents as jest.Mock).mockReturnValue({
+      tagsByEventId: {},
+      isLoading: false,
+      error: null,
+      refetch: refetchEventTags,
+    });
+
+    const { getByTestId } = await render(<TodosScreen />);
+
+    await fireEvent.press(getByTestId("todo-section-open-event-event-1"));
+    refetchTodos.mockClear();
+    refetchEventTags.mockClear();
+    await fireEvent.press(getByTestId("mock-event-detail-content"));
+
+    expect(refetchEventTags).toHaveBeenCalled();
+    expect(refetchTodos).toHaveBeenCalled();
+  });
+
   it("opens the right event's detail when todos span multiple events/calendars", async () => {
     mockCommonHooks(TODOS_TWO_EVENTS);
 

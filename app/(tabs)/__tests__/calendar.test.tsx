@@ -30,6 +30,8 @@ import {
   useUpdateTag,
 } from "../../../src/features/tags/hooks";
 import { useCreateTodo } from "../../../src/features/todos/hooks";
+import { useAttachPhoto } from "../../../src/features/memories/hooks";
+import { pickPhotoFromLibrary } from "../../../src/features/memories/imagePicker";
 
 jest.mock("expo-router", () => {
   const React = require("react");
@@ -76,6 +78,14 @@ jest.mock("../../../src/features/events/hooks", () => ({
 
 jest.mock("../../../src/features/todos/hooks", () => ({
   useCreateTodo: jest.fn(),
+}));
+
+jest.mock("../../../src/features/memories/hooks", () => ({
+  useAttachPhoto: jest.fn(),
+}));
+
+jest.mock("../../../src/features/memories/imagePicker", () => ({
+  pickPhotoFromLibrary: jest.fn(),
 }));
 
 jest.mock("../../../src/features/tags/hooks", () => {
@@ -177,6 +187,12 @@ function mockCommonHooks() {
     isSubmitting: false,
     error: null,
   });
+  (useAttachPhoto as jest.Mock).mockReturnValue({
+    attachPhoto: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (pickPhotoFromLibrary as jest.Mock).mockResolvedValue(null);
   (useCreateCalendar as jest.Mock).mockReturnValue({
     createCalendar: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
@@ -1060,6 +1076,94 @@ describe("CalendarScreen", () => {
 
     await waitFor(() => expect(createEventMock).toHaveBeenCalled());
     expect(createDefaultEventRemindersMock).not.toHaveBeenCalled();
+  });
+
+  it("does not offer to add a memory photo while the create form's date is still in the future (default)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+
+    expect(queryByTestId("event-create-memory-photo-section")).toBeNull();
+  });
+
+  it("offers to add a memory photo once the create form's date is set to the past, and attaches it to the newly created event (regression: no way to record a memory while backdating an event)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+    (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+    const attachPhotoMock = jest.fn().mockResolvedValue(true);
+    (useAttachPhoto as jest.Mock).mockReturnValue({ attachPhoto: attachPhotoMock, isSubmitting: false, error: null });
+    const pickedPhoto = { fileName: "a.jpg", contentType: "image/jpeg", data: "blob" };
+    (pickPhotoFromLibrary as jest.Mock).mockResolvedValue(pickedPhoto);
+
+    const { getByTestId, getByText, queryByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.changeText(getByTestId("event-create-title-input"), "先週の集まり");
+
+    // "now" is fixed at 2026-08-18T12:00:00.000Z (see beforeEach).
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-08-01T10:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-08-01T12:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    expect(getByTestId("event-create-add-memory-photo")).toBeTruthy();
+    await fireEvent.press(getByTestId("event-create-add-memory-photo"));
+
+    await waitFor(() => expect(getByText("思い出の画像を選択しました")).toBeTruthy());
+    expect(queryByTestId("event-create-add-memory-photo")).toBeNull();
+    expect(attachPhotoMock).not.toHaveBeenCalled();
+
+    await fireEvent.press(getByTestId("event-create-submit"));
+
+    await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+    await waitFor(() => expect(attachPhotoMock).toHaveBeenCalledWith("event-created-1", pickedPhoto));
+  });
+
+  it("places the memory-photo section in the shared (メンバーと共有) frame for a shared calendar, matching EventDetailContent's own placement, and in the single personal frame for a personal calendar", async () => {
+    mockCommonHooks();
+    (useMyCalendars as jest.Mock).mockReturnValue({
+      calendars: [
+        { id: "cal-1", name: "Myカレンダー", kind: "personal", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
+        { id: "cal-2", name: "我が家", kind: "group", createdBy: "user-1", createdAt: "2026-08-17T01:00:00.000Z" },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+    await fireEvent.press(getByTestId("event-create-calendar-cal-2"));
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-08-01T10:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-08-01T12:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    expect(
+      within(getByTestId("event-create-shared-frame")).getByTestId("event-create-memory-photo-section")
+    ).toBeTruthy();
+
+    await fireEvent.press(getByTestId("event-create-calendar-cal-1"));
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-08-01T10:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+    await fireEvent.press(getByTestId("event-create-end-button"));
+    await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-08-01T12:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
+
+    expect(
+      within(getByTestId("event-create-personal-frame")).getByTestId("event-create-memory-photo-section")
+    ).toBeTruthy();
   });
 
   it("creates the event in a different calendar when picked from the create modal's calendar picker", async () => {

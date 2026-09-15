@@ -4,6 +4,7 @@ import { Tabs, useFocusEffect } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
 import { CalendarSwitchChip } from "../../src/features/calendars/components/CalendarSwitchChip";
+import { EventCreateModal } from "../../src/features/events/components/EventCreateModal";
 import { EventDetailModal } from "../../src/features/events/components/EventDetailModal";
 import { formatDayHeaderLabel } from "../../src/features/events/formatDayHeaderLabel";
 import { groupEventsByYearMonth } from "../../src/features/history/groupByYearMonth";
@@ -189,7 +190,15 @@ function TimelinePanel() {
   );
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const handleCloseDetail = () => setSelectedEventId(null);
+  const [isCreateEventModalVisible, setIsCreateEventModalVisible] = useState(false);
+  // 予定詳細(EventDetailModal)はこの画面から離れずにその場で開閉するだけ
+  // なので、フォーカス時のrefetchだけでは編集内容(タグの付け外しなど)が
+  // 一覧に反映されない不具合の修正 - 閉じた時点で明示的に取り直す。
+  const handleCloseDetail = () => {
+    setSelectedEventId(null);
+    refetchEventTags();
+    refetchEventsByTag();
+  };
 
   const isFilterActive =
     selectedCalendarIds !== null ||
@@ -390,6 +399,29 @@ function TimelinePanel() {
           onConfirm={handleConfirmBulkAction}
         />
       ) : null}
+
+      {bulk.isActive ? null : (
+        <TouchableOpacity
+          testID="history-add-event-fab"
+          style={styles.fab}
+          onPress={() => setIsCreateEventModalVisible(true)}
+        >
+          <Icon name="plus" size={22} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      <EventCreateModal
+        visible={isCreateEventModalVisible}
+        onClose={() => setIsCreateEventModalVisible(false)}
+        onCreated={() => {
+          refetchEventsByTag();
+          refetchEventTags();
+        }}
+        calendars={calendars}
+        defaultCalendarId={activeCalendarIds[0] ?? ""}
+        tagTree={tagTree}
+        initialDateKey={todayJstDateKey()}
+      />
 
       <EventDetailModal eventId={selectedEventId} onClose={handleCloseDetail} />
     </>
@@ -694,7 +726,14 @@ function PhotoGridPanel() {
         />
       )}
 
-      <EventDetailModal eventId={selectedEventId} onClose={() => setSelectedEventId(null)} />
+      <EventDetailModal
+        eventId={selectedEventId}
+        onClose={() => {
+          setSelectedEventId(null);
+          refetchEventTags();
+          refetchMemories();
+        }}
+      />
     </>
   );
 }
@@ -703,6 +742,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fafbfc",
+  },
+  fab: {
+    position: "absolute",
+    right: 16,
+    bottom: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#2f6fed",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   headerTagButton: {
     paddingHorizontal: 12,

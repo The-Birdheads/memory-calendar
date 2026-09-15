@@ -2,14 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
   PanResponder,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -18,24 +14,18 @@ import { Tabs, router, useFocusEffect, useLocalSearchParams } from "expo-router"
 
 import { useAuthSession } from "../../src/features/auth/hooks";
 import { useMyCalendars } from "../../src/features/calendars/hooks";
-import { CalendarLabel } from "../../src/features/calendars/components/CalendarLabel";
 import { CalendarSwitchChip } from "../../src/features/calendars/components/CalendarSwitchChip";
-import { EventFormFields, type EventFormValue } from "../../src/features/events/components/EventFormFields";
+import { EventCreateModal } from "../../src/features/events/components/EventCreateModal";
 import { computeDateKeyRange } from "../../src/features/events/dateRange";
 import { buildEventColorLegend } from "../../src/features/events/eventColorLegend";
 import { expandEventDateKeys } from "../../src/features/events/eventDateKeys";
 import { formatDayHeaderLabel } from "../../src/features/events/formatDayHeaderLabel";
-import {
-  useCreateDefaultEventReminders,
-  useCreateEvent,
-  useEventsInRangeForCalendars,
-} from "../../src/features/events/hooks";
+import { useEventsInRangeForCalendars } from "../../src/features/events/hooks";
 import { isJapaneseHoliday } from "../../src/features/events/japaneseHolidays";
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { buildMonthEventGroups } from "../../src/features/events/monthEventList";
 import { buildMultiDayBanners, excludeBannerEvents } from "../../src/features/events/multiDayBanners";
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
-import { getEventErrorMessageJa } from "../../src/features/events/service";
 import type { Event } from "../../src/features/events/types";
 import { SettingsHubModal } from "../../src/features/calendars/components/SettingsHubModal";
 import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
@@ -43,9 +33,7 @@ import { BulkTagAssignPanel } from "../../src/features/tags/components/BulkTagAs
 import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
 import { SelectionCircle } from "../../src/features/tags/components/SelectionCircle";
 import { TagIcon } from "../../src/features/tags/components/TagIcon";
-import { TagPickerRow } from "../../src/features/tags/components/TagPickerRow";
 import {
-  useAttachTagsToEvent,
   useAttachTagsToEvents,
   useBulkTagSelection,
   useEventTagsByEvents,
@@ -53,11 +41,9 @@ import {
   useTagTree,
 } from "../../src/features/tags/hooks";
 import { flattenTagTree, sortTagsHierarchically } from "../../src/features/tags/tagTree";
-import { useCreateTodo } from "../../src/features/todos/hooks";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
-import { PersonalOnlyBadge } from "../../src/shared/components/PersonalOnlyBadge";
-import { formatTime, jstNow, toJstDateKey, todayJstDateKey } from "../../src/shared/utils/formatDateTime";
+import { formatTime, jstNow } from "../../src/shared/utils/formatDateTime";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -192,9 +178,6 @@ export default function CalendarScreen() {
     return computeDateKeyRange(firstWeek[0].dateKey, lastWeek[lastWeek.length - 1].dateKey);
   }, [monthGrid]);
   const { events, refetch: refetchEvents } = useEventsInRangeForCalendars(activeCalendarIds, range);
-  const { createEvent, isSubmitting: isCreatingEvent, error: createEventError } = useCreateEvent();
-  const { createDefaultEventReminders } = useCreateDefaultEventReminders();
-  const { createTodo } = useCreateTodo();
 
   // 個人カレンダーの予定であることを、色とは別の要素(🔒)で見分けられるように
   // する。IDのSetにしておき、予定1件ごとにO(1)で判定できるようにしている。
@@ -238,29 +221,10 @@ export default function CalendarScreen() {
   // === 0は個人用カレンダーがサインアップ時に自動作成されるため実質発生
   // しない条件だったので、代わりにこちらを使う(2026-09)。
   const hasSharedCalendar = calendars.some((calendar) => calendar.kind !== "personal");
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   const [isDayEventsModalVisible, setIsDayEventsModalVisible] = useState(false);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
-  // Which calendar the event-being-created will belong to - defaults to the
-  // active tab (see openCreateModal) but is independently selectable, since
-  // an event's calendar no longer has to match whichever tab is focused.
-  const [newEventCalendarId, setNewEventCalendarId] = useState("");
-  const newEventCalendarKind = calendars.find((calendar) => calendar.id === newEventCalendarId)?.kind;
   const { tagTree, refetch: refetchTagTree } = useTagTree();
-  const { attachTagsToEvent } = useAttachTagsToEvent();
-  const [newEventForm, setNewEventForm] = useState<EventFormValue>(() => ({
-    title: "",
-    isAllDay: true,
-    start: new Date(),
-    end: new Date(),
-    location: "",
-    url: "",
-    memo: "",
-  }));
-  const [hasTodos, setHasTodos] = useState(false);
-  const [todoItems, setTodoItems] = useState<string[]>([]);
-  const [newTodoItemText, setNewTodoItemText] = useState("");
 
   // Relying on nested flex:1 alone to size the grid turned out unreliable in
   // practice (the grid could end up far shorter than the space actually
@@ -396,91 +360,7 @@ export default function CalendarScreen() {
   /* eslint-enable react-hooks/refs */
 
   const openCreateModal = () => {
-    const base = new Date(`${selectedDateKey}T09:00:00.000Z`);
-    setNewEventForm({
-      title: "",
-      isAllDay: true,
-      start: base,
-      end: base,
-      location: "",
-      url: "",
-      memo: "",
-    });
-    setHasTodos(false);
-    setTodoItems([]);
-    setNewTodoItemText("");
-    setSelectedTagIds([]);
-    setNewEventCalendarId(activeCalendarId);
     setIsCreateModalVisible(true);
-  };
-
-  const handleSelectEventCalendar = (calendarId: string) => {
-    setNewEventCalendarId(calendarId);
-    // The previously selected tags belong to the OLD calendar and won't
-    // exist in the new one's tag tree, so clear them.
-    setSelectedTagIds([]);
-  };
-
-  const handleToggleTagSelection = (tagId: string) => {
-    setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-    );
-  };
-
-  const handleAddTodoItem = () => {
-    if (!newTodoItemText.trim()) return;
-    setTodoItems((prev) => [...prev, newTodoItemText.trim()]);
-    setNewTodoItemText("");
-  };
-
-  const handleRemoveTodoItem = (index: number) => {
-    setTodoItems((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleCreateEvent = async () => {
-    // 連打で同じ予定が2件作られてしまう不具合の修正 - useCreateEventの
-    // isSubmittingが立っている間の再入をブロックする(下のボタン側の
-    // disabledと二重で防御する)。
-    if (isCreatingEvent) return;
-    const createdEvent = await createEvent({
-      calendarId: newEventCalendarId || activeCalendarId,
-      title: newEventForm.title,
-      startAt: newEventForm.start.toISOString(),
-      endAt: newEventForm.end.toISOString(),
-      isAllDay: newEventForm.isAllDay,
-      location: newEventForm.location || undefined,
-      url: newEventForm.url || undefined,
-      memo: newEventForm.memo || undefined,
-    });
-    if (createdEvent) {
-      if (hasTodos) {
-        for (const title of todoItems) {
-          await createTodo({ eventId: createdEvent.id, title });
-        }
-      }
-      if (selectedTagIds.length > 0) {
-        await attachTagsToEvent(createdEvent.id, selectedTagIds);
-      }
-      // 自分の意思でリマインドを設定しなくても最低限通知が届くよう、
-      // 作成直後に既定のリマインド(終日: 当日+1日前 / 時刻指定: 10分前)を設定する。
-      // ただし過去日で登録した予定(記録目的の後追い入力など)には設定しない -
-      // 既に終わったことへのリマインドは意味がなく、登録直後に届いてしまう
-      // (event_reminders.remind_atが既に過去になり、次回のnotification-dispatcher
-      // 実行で「期限到来」と判定されるため)。予定詳細画面でのリマインド枠自体も
-      // 過去の予定では非表示にしている(isPast)のと同じ考え方。終日予定は
-      // 「終了時刻」ではなくJSTの暦日で今日以降かどうかを見る - 終日予定の
-      // start/endは(このファイルの他の終日予定と同じ規約で)当日09:00Zに
-      // 固定しているため、素直に現在時刻と比較すると同日でも9時JST18時を
-      // 過ぎた時点で「過去」と誤判定してしまう。
-      const isPastEndDate = newEventForm.isAllDay
-        ? toJstDateKey(newEventForm.end.toISOString()) < todayJstDateKey()
-        : newEventForm.end.getTime() < Date.now();
-      if (!isPastEndDate) {
-        await createDefaultEventReminders(createdEvent.id, newEventForm.isAllDay);
-      }
-      setIsCreateModalVisible(false);
-      await refetchEvents();
-    }
   };
 
   const isFilterActive = selectedCalendarIds !== null;
@@ -593,52 +473,6 @@ export default function CalendarScreen() {
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleToggleCalendar is intentionally omitted (pre-existing, not part of this change): it's redefined every render, so including it would make this memo recompute every render too.
     [calendars, activeCalendarIds, isFilterActive, handleResetFilter, colorLegend, viewMode, bulk]
-  );
-
-  // 個人用/共有どちらの枠にも同じToDoチェックリストUIを出すので、1度だけ
-  // 組み立てておく(予定詳細画面のセクション変数と同じ考え方)。
-  // 「+ 場所を追加」「+ URLを追加」(RevealableTextField)と同じ、タップで
-  // 追加項目が現れるボタンの見た目に揃える(2026-09見直し - 元は「ToDoを
-  // 追加する」というスイッチ付きの行で、同じ「追加」操作なのに場所/URLと
-  // 表示が違っていた)。一度タップして現れたら、場所/URLと同様その場では
-  // 引っ込めない。
-  const todoSection = hasTodos ? (
-    <View style={styles.todoChecklist}>
-      {todoItems.map((item, index) => (
-        <View key={`${item}-${index}`} style={styles.todoChecklistRow} testID={`event-create-todo-item-${index}`}>
-          <Text style={styles.todoChecklistText}>{item}</Text>
-          <TouchableOpacity
-            testID={`event-create-todo-item-${index}-remove`}
-            onPress={() => handleRemoveTodoItem(index)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Icon name="trash" size={16} color="#d32f2f" />
-          </TouchableOpacity>
-        </View>
-      ))}
-      <View style={styles.todoAddRow}>
-        <TextInput
-          testID="event-create-todo-input"
-          style={styles.input}
-          placeholder="ToDoを入力"
-          value={newTodoItemText}
-          onChangeText={setNewTodoItemText}
-        />
-        <TouchableOpacity testID="event-create-todo-add" onPress={handleAddTodoItem}>
-          <Text>追加</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  ) : (
-    <TouchableOpacity
-      testID="event-create-has-todos-toggle"
-      style={styles.addFieldButton}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      onPress={() => setHasTodos(true)}
-    >
-      <Icon name="plus" size={12} color="#2f6fed" />
-      <Text style={styles.addFieldButtonText}>ToDoを追加</Text>
-    </TouchableOpacity>
   );
 
   return (
@@ -1116,126 +950,15 @@ export default function CalendarScreen() {
         <Icon name="plus" size={22} color="#fff" />
       </TouchableOpacity>
 
-      <Modal
+      <EventCreateModal
         visible={isCreateModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsCreateModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <TouchableOpacity
-            testID="event-create-backdrop"
-            style={styles.modalBackdropTouchable}
-            activeOpacity={1}
-            onPress={() => setIsCreateModalVisible(false)}
-          >
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.modalCard}>
-            <Text style={styles.modalTitle}>予定を作成</Text>
-
-            <View style={styles.eventCalendarPickerRow}>
-              {calendars.map((calendar) => (
-                <TouchableOpacity
-                  key={calendar.id}
-                  testID={`event-create-calendar-${calendar.id}`}
-                  style={[
-                    styles.eventCalendarChip,
-                    calendar.id === newEventCalendarId && styles.eventCalendarChipSelected,
-                  ]}
-                  onPress={() => handleSelectEventCalendar(calendar.id)}
-                >
-                  <CalendarLabel
-                    calendar={calendar}
-                    textStyle={
-                      calendar.id === newEventCalendarId
-                        ? styles.eventCalendarChipTextSelected
-                        : styles.eventCalendarChipText
-                    }
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {newEventCalendarKind === "personal" ? (
-              // 個人用カレンダーには共有相手がいないので、予定情報もタグ・
-              // ToDoもまとめて1つのグレーの個人用枠に入れる(予定詳細画面と
-              // 同じ考え方 - 2026-09追加)。
-              <View style={styles.personalFrame} testID="event-create-personal-frame">
-                <EventFormFields
-                  testIDPrefix="event-create"
-                  value={newEventForm}
-                  onChange={(patch) => setNewEventForm((prev) => ({ ...prev, ...patch }))}
-                />
-                <TagPickerRow
-                  testIDPrefix="event-create"
-                  tagTree={tagTree}
-                  selectedTagIds={selectedTagIds}
-                  onToggle={handleToggleTagSelection}
-                />
-                {todoSection}
-              </View>
-            ) : (
-              // 共有カレンダー向けの予定作成では、メンバー全員に見える予定
-              // 情報(青い共有枠)と、自分にしか効かないタグ・ToDo(グレーの
-              // 個人用枠)を、予定詳細画面と同じ枠・背景色で塗り分ける。
-              <>
-                <View style={styles.sharedFrame} testID="event-create-shared-frame">
-                  <Text testID="event-create-shared-label" style={styles.sharedFrameLabel}>
-                    メンバーと共有
-                  </Text>
-                  <EventFormFields
-                    testIDPrefix="event-create"
-                    value={newEventForm}
-                    onChange={(patch) => setNewEventForm((prev) => ({ ...prev, ...patch }))}
-                  />
-                </View>
-                <View style={styles.personalFrame} testID="event-create-personal-frame">
-                  <View testID="event-create-personal-group-label">
-                    <PersonalOnlyBadge />
-                  </View>
-                  <TagPickerRow
-                    testIDPrefix="event-create"
-                    tagTree={tagTree}
-                    selectedTagIds={selectedTagIds}
-                    onToggle={handleToggleTagSelection}
-                  />
-                  {todoSection}
-                </View>
-              </>
-            )}
-
-            {createEventError ? (
-              <Text style={styles.errorText}>{getEventErrorMessageJa(createEventError)}</Text>
-            ) : null}
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                testID="event-create-cancel"
-                onPress={() => setIsCreateModalVisible(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={styles.cancelText}>✕</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                testID="event-create-submit"
-                style={[styles.createButton, isCreatingEvent && styles.createButtonDisabled]}
-                disabled={isCreatingEvent}
-                onPress={handleCreateEvent}
-              >
-                <Text style={styles.createButtonText}>{isCreatingEvent ? "作成中…" : "作成"}</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-          </ScrollView>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </Modal>
+        onClose={() => setIsCreateModalVisible(false)}
+        onCreated={refetchEvents}
+        calendars={calendars}
+        defaultCalendarId={activeCalendarId}
+        tagTree={tagTree}
+        initialDateKey={selectedDateKey}
+      />
       </View>
     </>
   );
@@ -1659,145 +1382,5 @@ const styles = StyleSheet.create({
   },
   dayModalEventList: {
     flex: 1,
-  },
-  modalBackdropTouchable: {
-    flex: 1,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  modalScrollContent: {
-    flexGrow: 1,
-    justifyContent: "flex-end",
-  },
-  modalCard: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    gap: 12,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  // 予定詳細画面(EventDetailContent.tsx)と同じ色分け - メンバーと共有され
-  // る予定情報は薄い青、自分にしか効かないタグ・ToDoは薄いグレー。
-  sharedFrame: {
-    backgroundColor: "#e8f0fe",
-    borderWidth: 1,
-    borderColor: "#c7dcfb",
-    borderRadius: 14,
-    padding: 10,
-    gap: 10,
-  },
-  sharedFrameLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0c447c",
-  },
-  personalFrame: {
-    backgroundColor: "#f2f3f5",
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderRadius: 14,
-    padding: 10,
-    gap: 10,
-  },
-  // 「+ 場所を追加」等(RevealableTextField)と揃えた、任意項目を追加する
-  // ボタンの見た目。
-  addFieldButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    alignSelf: "flex-start",
-    paddingVertical: 4,
-  },
-  addFieldButtonText: {
-    color: "#2f6fed",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  errorText: {
-    color: "#d32f2f",
-  },
-  eventCalendarPickerRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  eventCalendarChip: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  eventCalendarChipSelected: {
-    borderColor: "#2f6fed",
-    backgroundColor: "#e8f0fe",
-  },
-  eventCalendarChipText: {
-    color: "#444",
-  },
-  eventCalendarChipTextSelected: {
-    color: "#2f6fed",
-    fontWeight: "700",
-  },
-  input: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  alldayRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  todoChecklist: {
-    gap: 8,
-  },
-  todoChecklistRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  todoChecklistText: {
-    flex: 1,
-  },
-  todoAddRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 20,
-    marginTop: 8,
-  },
-  cancelText: {
-    fontSize: 16,
-    color: "#666",
-  },
-  createButton: {
-    backgroundColor: "#2f6fed",
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  createButtonDisabled: {
-    backgroundColor: "#b7c6ea",
-  },
-  createButtonText: {
-    color: "#fff",
-    fontWeight: "600",
   },
 });

@@ -25,6 +25,7 @@ jest.mock("@react-native-community/datetimepicker", () => {
 jest.mock("expo-router", () => {
   const React = require("react");
   return {
+    router: { push: jest.fn() },
     Tabs: {
       Screen: ({ options }: any) =>
         React.createElement(React.Fragment, null, options?.headerLeft?.(), options?.headerRight?.()),
@@ -91,6 +92,39 @@ jest.mock("../../../src/features/events/components/EventDetailContent", () => {
         <Text>{showGoToCalendarButton ? "go-to-calendar-shown" : "go-to-calendar-hidden"}</Text>
       </TouchableOpacity>
     ),
+  };
+});
+
+// EventCreateModal has its own large, independently-tested suite
+// (app/(tabs)/__tests__/calendar.test.tsx) - mocking it here keeps this file
+// focused on HistoryScreen's own job (showing the + FAB, wiring it up with
+// this screen's calendars/tagTree, and refetching once a new event is
+// created) instead of re-mocking that component's own hook dependencies.
+jest.mock("../../../src/features/events/components/EventCreateModal", () => {
+  const { Text, TouchableOpacity } = require("react-native");
+  return {
+    EventCreateModal: ({
+      visible,
+      onClose,
+      onCreated,
+      defaultCalendarId,
+    }: {
+      visible: boolean;
+      onClose: () => void;
+      onCreated: () => void;
+      defaultCalendarId: string;
+    }) =>
+      visible ? (
+        <TouchableOpacity
+          testID="mock-event-create-modal"
+          onPress={() => {
+            onCreated();
+            onClose();
+          }}
+        >
+          <Text>{defaultCalendarId}</Text>
+        </TouchableOpacity>
+      ) : null,
   };
 });
 
@@ -520,7 +554,12 @@ describe("HistoryScreen", () => {
 
     it("opens the event detail in an in-tab modal (not navigation) when a past event row is pressed, showing its own go-to-calendar button, and closes it via onBack", async () => {
       mockCommonHooks();
-      (usePastEventsByTag as jest.Mock).mockReturnValue({ events: PAST_EVENTS, isLoading: false, error: null });
+      (usePastEventsByTag as jest.Mock).mockReturnValue({
+        events: PAST_EVENTS,
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
 
       const { getByTestId, getByText, queryByTestId } = await render(<HistoryScreen />);
 
@@ -538,6 +577,76 @@ describe("HistoryScreen", () => {
       await fireEvent.press(getByTestId("mock-event-detail-content"));
 
       expect(queryByTestId("mock-event-detail-content")).toBeNull();
+    });
+
+    it("refetches events and tags when the event detail modal closes, so a tag removed there shows up immediately (regression: closing the modal didn't refresh the timeline)", async () => {
+      mockCommonHooks();
+      const refetchEventsByTag = jest.fn();
+      const refetchEventTags = jest.fn();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({
+        events: PAST_EVENTS,
+        isLoading: false,
+        error: null,
+        refetch: refetchEventsByTag,
+      });
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        tagsByEventId: {},
+        isLoading: false,
+        error: null,
+        refetch: refetchEventTags,
+      });
+
+      const { getByTestId } = await render(<HistoryScreen />);
+
+      await fireEvent.press(getByTestId("history-event-event-1"));
+      refetchEventTags.mockClear();
+      refetchEventsByTag.mockClear();
+      await fireEvent.press(getByTestId("mock-event-detail-content"));
+
+      expect(refetchEventTags).toHaveBeenCalled();
+      expect(refetchEventsByTag).toHaveBeenCalled();
+    });
+
+    it("shows a + FAB that opens the create-event modal in place (not navigating away), hidden while まとめてタグ付与/削除 is active", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+      const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
+
+      expect(queryByTestId("mock-event-create-modal")).toBeNull();
+
+      await fireEvent.press(getByTestId("history-add-event-fab"));
+
+      // Still on the same screen (no navigation) - the in-tab modal is up.
+      expect(getByTestId("mock-event-create-modal")).toBeTruthy();
+      expect(getByTestId("history-mode-switch")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("history-bulk-tag-button"));
+      expect(queryByTestId("history-add-event-fab")).toBeNull();
+    });
+
+    it("refetches events and tags once a new event is created from the in-tab create modal", async () => {
+      mockCommonHooks();
+      const refetchEventsByTag = jest.fn();
+      const refetchEventTags = jest.fn();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: refetchEventsByTag });
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        tagsByEventId: {},
+        isLoading: false,
+        error: null,
+        refetch: refetchEventTags,
+      });
+
+      const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
+
+      await fireEvent.press(getByTestId("history-add-event-fab"));
+      refetchEventsByTag.mockClear();
+      refetchEventTags.mockClear();
+      await fireEvent.press(getByTestId("mock-event-create-modal"));
+
+      expect(refetchEventsByTag).toHaveBeenCalled();
+      expect(refetchEventTags).toHaveBeenCalled();
+      expect(queryByTestId("mock-event-create-modal")).toBeNull();
     });
 
     describe("まとめてタグ付与/削除", () => {
@@ -856,6 +965,34 @@ describe("HistoryScreen", () => {
       await fireEvent.press(getByTestId("mock-event-detail-content"));
 
       expect(queryByTestId("mock-event-detail-content")).toBeNull();
+    });
+
+    it("refetches memories and tags when the event detail modal closes, so a tag removed there shows up immediately (regression)", async () => {
+      mockCommonHooks();
+      const refetchMemories = jest.fn();
+      const refetchEventTags = jest.fn();
+      (useMemoriesTimeline as jest.Mock).mockReturnValue({
+        entries: MEMORY_ENTRIES,
+        isLoading: false,
+        error: null,
+        refetch: refetchMemories,
+      });
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        tagsByEventId: {},
+        isLoading: false,
+        error: null,
+        refetch: refetchEventTags,
+      });
+
+      const { getByTestId } = await renderPhotoPanel();
+
+      await fireEvent.press(getByTestId("memory-item-event-1"));
+      refetchMemories.mockClear();
+      refetchEventTags.mockClear();
+      await fireEvent.press(getByTestId("mock-event-detail-content"));
+
+      expect(refetchEventTags).toHaveBeenCalled();
+      expect(refetchMemories).toHaveBeenCalled();
     });
 
     it("shows a calendar switcher defaulting to all calendars selected, toggling a calendar off/on to narrow the timeline", async () => {
