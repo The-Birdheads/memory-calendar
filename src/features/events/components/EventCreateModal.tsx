@@ -18,6 +18,7 @@ import { pickPhotoFromLibrary } from "../../memories/imagePicker";
 import type { PhotoUploadInput } from "../../memories/types";
 import { TagPickerRow } from "../../tags/components/TagPickerRow";
 import { useAttachTagsToEvent } from "../../tags/hooks";
+import { getDescendantIds } from "../../tags/tagTree";
 import type { TagTreeNode } from "../../tags/types";
 import { useCreateTodo } from "../../../features/todos/hooks";
 import { Icon } from "../../../shared/components/Icon";
@@ -121,7 +122,15 @@ export function EventCreateModal({
   };
 
   const handleToggleTagSelection = (tagId: string) => {
-    setSelectedTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+    setSelectedTagIds((prev) => {
+      if (prev.includes(tagId)) {
+        // 親タグを外した時、その子孫タグ(中分類/小分類)も一緒に外す -
+        // 親だけ外して子だけが宙に浮いた状態のまま残ってしまわないように。
+        const descendantIds = getDescendantIds(tagId, tagTree);
+        return prev.filter((id) => id !== tagId && !descendantIds.includes(id));
+      }
+      return [...prev, tagId];
+    });
   };
 
   const handleAddTodoItem = () => {

@@ -45,6 +45,27 @@ export function sortTagsHierarchically<T extends Tag>(tags: T[], allTagsFlat: Ta
   return [...tags].sort((a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0));
 }
 
+/**
+ * Returns the ids of every descendant of `tagId` (children, grandchildren,
+ * ...), not including `tagId` itself. Returns [] if the tag isn't found or
+ * has no children. Used when a tag is removed from an event so its
+ * descendants are removed along with it, instead of leaving them attached
+ * with no visible parent.
+ */
+export function getDescendantIds(tagId: string, tagTree: TagTreeNode[]): string[] {
+  function findNode(nodes: TagTreeNode[]): TagTreeNode | undefined {
+    for (const node of nodes) {
+      if (node.id === tagId) return node;
+      const found = findNode(node.children);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  const node = findNode(tagTree);
+  return node ? flattenTagTree(node.children).map((tag) => tag.id) : [];
+}
+
 /** Returns [tagId, ...its ancestors' ids] by walking parentId pointers, or [] if tagId is not found. */
 export function getAncestorChainIds(tagId: string | undefined, allTags: Tag[]): string[] {
   const chain: string[] = [];

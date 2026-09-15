@@ -47,7 +47,7 @@ import { EventTagBadges } from "../../tags/components/EventTagBadges";
 import { PersonalOnlyBadge } from "../../../shared/components/PersonalOnlyBadge";
 import { TagPickerRow } from "../../tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useDetachTagFromEvent, useEventTags, useTagTree } from "../../tags/hooks";
-import { flattenTagTree, sortTagsHierarchically } from "../../tags/tagTree";
+import { flattenTagTree, getDescendantIds, sortTagsHierarchically } from "../../tags/tagTree";
 import { useCreateTodo, useDeleteTodo, useToggleDone, useTodosByEvent, useUpdateTodo } from "../../todos/hooks";
 import type { Todo } from "../../todos/types";
 import { EventTodoRow } from "./EventTodoRow";
@@ -181,9 +181,15 @@ export function EventDetailContent({
   };
 
   const handleToggleTagEditSelection = (tagId: string) => {
-    setTagEditSelection((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-    );
+    setTagEditSelection((prev) => {
+      if (prev.includes(tagId)) {
+        // 親タグを外した時、その子孫タグ(中分類/小分類)も一緒に外す -
+        // 親だけ外して子だけが宙に浮いた状態のまま残ってしまわないように。
+        const descendantIds = getDescendantIds(tagId, tagTree);
+        return prev.filter((id) => id !== tagId && !descendantIds.includes(id));
+      }
+      return [...prev, tagId];
+    });
   };
 
   const saveTagSelection = async (selection: string[]) => {

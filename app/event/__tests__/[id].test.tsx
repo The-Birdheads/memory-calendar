@@ -556,6 +556,33 @@ describe("EventDetailScreen", () => {
     expect(queryByTestId("event-tags-confirm-button")).toBeNull();
   });
 
+  it("also removes a tag's descendants when the tag itself is deselected during tag edit (regression: the mid tag was left attached with its major parent gone)", async () => {
+    const TAG_A1 = { id: "tag-a1", calendarId: "cal-1", parentId: "tag-a", level: "mid", name: "国内", color: "#ff8888", createdAt: "2026-08-01T00:00:00.000Z" };
+    mockCommonHooks({
+      tags: [TAG_A, TAG_A1],
+      tagTree: [{ ...TAG_A, children: [{ ...TAG_A1, children: [] }] }],
+    });
+    const detachTagFromEventMock = jest.fn().mockResolvedValue(true);
+    (useDetachTagFromEvent as jest.Mock).mockReturnValue({
+      detachTagFromEvent: detachTagFromEventMock,
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    await fireEvent.press(getByTestId("event-tags-edit-button"));
+    // tag-a1 (mid, child of tag-a) is already attached, so its chip is
+    // visible from the start (its parent is selected). Deselecting the
+    // major tag-a should drop tag-a1 along with it.
+    expect(getByTestId("event-tags-tag-tag-a1")).toBeTruthy();
+    await fireEvent.press(getByTestId("event-tags-tag-tag-a"));
+    await fireEvent.press(getByTestId("event-tags-confirm-button"));
+
+    await waitFor(() => expect(detachTagFromEventMock).toHaveBeenCalledWith("event-1", "tag-a"));
+    await waitFor(() => expect(detachTagFromEventMock).toHaveBeenCalledWith("event-1", "tag-a1"));
+  });
+
   it("does not attach or detach tags when confirming with the selection unchanged", async () => {
     mockCommonHooks({
       tags: [TAG_A],

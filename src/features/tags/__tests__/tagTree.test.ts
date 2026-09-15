@@ -1,4 +1,10 @@
-import { flattenTagTree, flattenVisibleTagTree, getAncestorChainIds, sortTagsHierarchically } from "../tagTree";
+import {
+  flattenTagTree,
+  flattenVisibleTagTree,
+  getAncestorChainIds,
+  getDescendantIds,
+  sortTagsHierarchically,
+} from "../tagTree";
 
 const TREE = [
   {
@@ -163,6 +169,30 @@ describe("flattenTagTree", () => {
       "mid-a2",
       "major-b",
     ]);
+  });
+});
+
+describe("getDescendantIds", () => {
+  it("returns every descendant (mid and minor) of a major tag, not itself", () => {
+    expect(getDescendantIds("major-a", ORDERING_TREE)).toEqual(
+      expect.arrayContaining(["mid-a1", "minor-a1a", "minor-a1b", "mid-a2"])
+    );
+    expect(getDescendantIds("major-a", ORDERING_TREE)).toHaveLength(4);
+  });
+
+  it("returns only the deeper descendants (minor tags) of a mid tag", () => {
+    expect(getDescendantIds("mid-a1", ORDERING_TREE)).toEqual(
+      expect.arrayContaining(["minor-a1a", "minor-a1b"])
+    );
+    expect(getDescendantIds("mid-a1", ORDERING_TREE)).toHaveLength(2);
+  });
+
+  it("returns an empty array for a leaf (minor) tag", () => {
+    expect(getDescendantIds("minor-a1a", ORDERING_TREE)).toEqual([]);
+  });
+
+  it("returns an empty array for a tag id that isn't in the tree", () => {
+    expect(getDescendantIds("missing", ORDERING_TREE)).toEqual([]);
   });
 });
 
