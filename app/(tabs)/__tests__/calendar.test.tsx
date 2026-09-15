@@ -515,6 +515,50 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-event-event-3")).toBeTruthy();
   });
 
+  it("does not push down other days' events in the same week when only some days have a multi-day banner (regression: every day in the week got an extra blank row)", async () => {
+    mockCommonHooks();
+    const multiDayEvent = {
+      id: "event-3",
+      calendarId: "cal-1",
+      title: "旅行",
+      categoryColor: "#43a047",
+      // 2026-08-18(Tue)〜08-20(Thu) - falls in the week of 08-16〜08-22.
+      startAt: "2026-08-18T09:00:00.000Z",
+      endAt: "2026-08-20T10:00:00.000Z",
+    };
+    // 08-16(Sun) is in the same week as the banner, but the banner doesn't
+    // touch it - its own event should sit flush at the top, not pushed
+    // down to make room for a banner that isn't over this day at all.
+    const sameWeekUnrelatedEvent = {
+      ...TODAY_EVENT,
+      id: "event-4",
+      title: "無関係",
+      startAt: "2026-08-16T09:00:00.000Z",
+      endAt: "2026-08-16T10:00:00.000Z",
+    };
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [multiDayEvent, sameWeekUnrelatedEvent],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const unrelatedDayEventList = flattenStyle(
+      getByTestId("calendar-grid-cell-events-2026-08-16").props.style
+    );
+    expect(unrelatedDayEventList.marginTop ?? 0).toBe(0);
+
+    // A day the banner actually covers still reserves room for it.
+    const bannerDayEventList = flattenStyle(
+      getByTestId("calendar-grid-cell-events-2026-08-18").props.style
+    );
+    expect((bannerDayEventList.marginTop as number) ?? 0).toBeGreaterThan(0);
+  });
+
   it("splits a multi-day event that crosses a week boundary into a banner per week, without per-day dots", async () => {
     mockCommonHooks();
     const multiDayEvent = {

@@ -120,18 +120,19 @@ describe("buildMultiDayBanners", () => {
     expect(banners.some((b) => overflowEventIds.has(b.event.id))).toBe(false);
   });
 
-  it("reports how many lanes are in use per week, for the caller to reserve vertical space", () => {
+  it("reports how many lanes are in use per date, for the caller to reserve vertical space only on days a bar actually crosses (regression: previously reserved space for every day in the week, even ones with no overlapping bar)", () => {
     const events = [
       makeEvent("e1", "2026-08-03T09:00:00.000Z", "2026-08-04T10:00:00.000Z"),
       makeEvent("e2", "2026-08-03T09:00:00.000Z", "2026-08-04T10:00:00.000Z"),
     ];
 
-    const { laneCountByWeek } = buildMultiDayBanners(events, AUGUST_2026_GRID);
+    const { laneCountByDateKey } = buildMultiDayBanners(events, AUGUST_2026_GRID);
 
-    const weekIndexOfAug3 = AUGUST_2026_GRID.findIndex((week) =>
-      week.some((cell) => cell.dateKey === "2026-08-03")
-    );
-    expect(laneCountByWeek[weekIndexOfAug3]).toBe(2);
-    expect(laneCountByWeek[0]).toBe(0);
+    // 08-03/08-04 (Mon-Tue) は2つの複数日予定が重なっているのでlane数2。
+    expect(laneCountByDateKey["2026-08-03"]).toBe(2);
+    expect(laneCountByDateKey["2026-08-04"]).toBe(2);
+    // 同じ週の他の日(バーが通らない日)には値が入らない。
+    expect(laneCountByDateKey["2026-08-02"]).toBeUndefined();
+    expect(laneCountByDateKey["2026-08-05"]).toBeUndefined();
   });
 });

@@ -28,9 +28,12 @@ export interface MultiDayBannerLayout<T extends Event = Event> {
   banners: MultiDayBanner<T>[];
   /** lane数の上限を超えたため、バーではなく従来のピル表示に回す予定のid。 */
   overflowEventIds: Set<string>;
-  /** 週(monthGridのインデックス)ごとに使われているlane数 - 呼び出し側が
-   * その週のセル内ピル表示を何段目から開始するか計算するのに使う。 */
-  laneCountByWeek: number[];
+  /** 日付キー("YYYY-MM-DD")ごとに、その日に実際に重なっているバーが使う
+   * lane数(=そのセルのピル表示を何段目から開始すべきか)。バーが1件も
+   * 重ならない日は含まれない(呼び出し側は`?? 0`で扱う) - 同じ週の中でも
+   * バーが通らない日まで一律に空けてしまわないよう、週単位ではなく日付
+   * 単位で持つ。 */
+  laneCountByDateKey: Record<string, number>;
 }
 
 /**
@@ -103,12 +106,16 @@ export function buildMultiDayBanners<T extends Event>(
     }
   });
 
-  const laneCountByWeek = monthGrid.map((_, weekIndex) => {
-    const lanesThisWeek = banners.filter((banner) => banner.weekIndex === weekIndex).map((banner) => banner.lane);
-    return lanesThisWeek.length === 0 ? 0 : Math.max(...lanesThisWeek) + 1;
-  });
+  const laneCountByDateKey: Record<string, number> = {};
+  for (const banner of banners) {
+    const week = monthGrid[banner.weekIndex];
+    for (let col = banner.colStart; col <= banner.colEnd; col++) {
+      const dateKey = week[col].dateKey;
+      laneCountByDateKey[dateKey] = Math.max(laneCountByDateKey[dateKey] ?? 0, banner.lane + 1);
+    }
+  }
 
-  return { banners, overflowEventIds, laneCountByWeek };
+  return { banners, overflowEventIds, laneCountByDateKey };
 }
 
 /** 単日の予定と同じ(セル内ピル)表示に回すべき予定だけを残す - バー表示に

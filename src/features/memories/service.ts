@@ -98,6 +98,10 @@ export async function attachPhoto(
     return err({ type: "Forbidden" });
   }
 
+  // is_thumbnailは明示的に指定しない - その予定にまだサムネイルが無ければ
+  // このDB側トリガー(set_first_photo_as_thumbnail_trigger)が自動で
+  // trueにする。既にある場合はfalseのまま(2人目以降の写真は明示的な
+  // サムネイル選択に委ねる)。
   const { data, error } = await client
     .from("event_photos")
     .insert({ event_id: eventId, storage_path: storagePath })

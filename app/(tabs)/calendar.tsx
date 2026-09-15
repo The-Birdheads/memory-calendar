@@ -288,7 +288,7 @@ export default function CalendarScreen() {
   // 横長バーとして月グリッドの上に重ねて表示する(下記のmultiDayBanners)。
   // セル内の通常ピル表示(eventsByDate)には、単日の予定と、lane数の上限を
   // 超えてバー表示に乗れなかった複数日の予定だけを残す。
-  const { banners: multiDayBanners, overflowEventIds: multiDayOverflowEventIds, laneCountByWeek } = useMemo(
+  const { banners: multiDayBanners, overflowEventIds: multiDayOverflowEventIds, laneCountByDateKey } = useMemo(
     () => buildMultiDayBanners(events, monthGrid),
     [events, monthGrid]
   );
@@ -758,11 +758,14 @@ export default function CalendarScreen() {
             >
             {monthGrid.map((week, weekIndex) => {
               const weekBanners = bannersByWeekIndex.get(weekIndex) ?? [];
-              const laneCount = laneCountByWeek[weekIndex] ?? 0;
               return (
                 <View key={weekIndex} testID={`calendar-grid-row-${weekIndex}`} style={styles.gridRow}>
                   {week.map((cell) => {
                     const cellEvents = eventsByDate.get(cell.dateKey) ?? [];
+                    // その日に実際に重なっているバーの分だけ空ける(週全体では
+                    // なくセル単位 - バーが通らない日まで一律に空けてしまうと
+                    // 「関係ない日の予定が1行分下がって見える」不具合になる)。
+                    const laneCount = laneCountByDateKey[cell.dateKey] ?? 0;
                     const isToday = cell.dateKey === todayDateKey();
                     const isSelected = cell.dateKey === selectedDateKey;
                     const dayOfWeek = new Date(`${cell.dateKey}T00:00:00.000Z`).getUTCDay();
@@ -792,6 +795,7 @@ export default function CalendarScreen() {
                           </Text>
                         </View>
                         <View
+                          testID={`calendar-grid-cell-events-${cell.dateKey}`}
                           style={[
                             styles.gridEventList,
                             laneCount > 0 && { marginTop: laneCount * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP) },
