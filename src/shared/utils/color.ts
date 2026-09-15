@@ -18,3 +18,24 @@ export function lightenHexColor(hex: string, amount: number): string {
 
   return `#${toHex(lighten(r))}${toHex(lighten(g))}${toHex(lighten(b))}`;
 }
+
+/**
+ * Converts a "#rrggbb" (or shorthand "#rgb") hex color to an "rgba(r, g, b, a)"
+ * string, for a translucent background derived from an event's solid color.
+ */
+export function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "");
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : normalized;
+
+  const r = parseInt(expanded.substring(0, 2), 16);
+  const g = parseInt(expanded.substring(2, 4), 16);
+  const b = parseInt(expanded.substring(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

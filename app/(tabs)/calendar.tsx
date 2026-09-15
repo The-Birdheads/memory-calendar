@@ -24,7 +24,7 @@ import { useEventsInRangeForCalendars } from "../../src/features/events/hooks";
 import { isJapaneseHoliday } from "../../src/features/events/japaneseHolidays";
 import { buildMonthGrid } from "../../src/features/events/monthGrid";
 import { buildMonthEventGroups } from "../../src/features/events/monthEventList";
-import { buildMultiDayBanners, excludeBannerEvents } from "../../src/features/events/multiDayBanners";
+import { buildMultiDayBanners, excludeBannerEvents, fillBannerGaps } from "../../src/features/events/multiDayBanners";
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
 import type { Event } from "../../src/features/events/types";
 import { SettingsHubModal } from "../../src/features/calendars/components/SettingsHubModal";
@@ -43,6 +43,7 @@ import {
 import { flattenTagTree, sortTagsHierarchically } from "../../src/features/tags/tagTree";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
+import { hexToRgba } from "../../src/shared/utils/color";
 import { formatTime, jstNow } from "../../src/shared/utils/formatDateTime";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -91,6 +92,22 @@ function resolveEventColor(
   calendarColorById: Record<string, string>
 ): string {
   return event.tagColor ?? calendarColorById[event.calendarId] ?? "#999999";
+}
+
+// TimeTree風に、時間指定のある予定(終日でない)は背景を薄い半透明にして
+// 文字をその予定の色にし、背景を予定の色で塗りつぶす終日の予定と見分けが
+// つくようにする(2026-09)。
+const TIMED_EVENT_BACKGROUND_ALPHA = 0.18;
+
+function resolveEventPillStyle(
+  event: Pick<Event, "calendarId" | "isAllDay"> & { tagColor?: string | null },
+  calendarColorById: Record<string, string>
+): { backgroundColor: string; textColor: string } {
+  const color = resolveEventColor(event, calendarColorById);
+  if (event.isAllDay) {
+    return { backgroundColor: color, textColor: "#fff" };
+  }
+  return { backgroundColor: hexToRgba(color, TIMED_EVENT_BACKGROUND_ALPHA), textColor: color };
 }
 
 export default function CalendarScreen() {
@@ -296,9 +313,40 @@ export default function CalendarScreen() {
     return map;
   }, [multiDayBanners]);
 
+  // 複数日バーの上にできる空きlane(隣の日までバーが届かない日)を、その日の
+  // 単日の予定で埋める(fillBannerGaps参照) - 埋まった予定はcellPillEvents
+  // 側の通常ピル表示から除外し、二重に表示されないようにする。
+  const singleDayEventsByDate = useMemo(() => {
+    const map = new Map<string, Event[]>();
+    cellPillEvents.forEach((event) => {
+      const dateKeys = expandEventDateKeys(event.startAt, event.endAt);
+      if (dateKeys.length !== 1) return;
+      const list = map.get(dateKeys[0]) ?? [];
+      list.push(event);
+      map.set(dateKeys[0], list);
+    });
+    return map;
+  }, [cellPillEvents]);
+
+  const { gapFills: bannerGapFills, filledEventIds: bannerGapFilledEventIds } = useMemo(
+    () => fillBannerGaps(multiDayBanners, laneCountByDateKey, monthGrid, singleDayEventsByDate),
+    [multiDayBanners, laneCountByDateKey, monthGrid, singleDayEventsByDate]
+  );
+
+  const gapFillsByWeekIndex = useMemo(() => {
+    const map = new Map<number, typeof bannerGapFills>();
+    bannerGapFills.forEach((gapFill) => {
+      const list = map.get(gapFill.weekIndex) ?? [];
+      list.push(gapFill);
+      map.set(gapFill.weekIndex, list);
+    });
+    return map;
+  }, [bannerGapFills]);
+
   const eventsByDate = useMemo(() => {
     const map = new Map<string, Event[]>();
     cellPillEvents.forEach((event) => {
+      if (bannerGapFilledEventIds.has(event.id)) return;
       for (const key of expandEventDateKeys(event.startAt, event.endAt)) {
         const list = map.get(key) ?? [];
         list.push(event);
@@ -306,7 +354,7 @@ export default function CalendarScreen() {
       }
     });
     return map;
-  }, [cellPillEvents]);
+  }, [cellPillEvents, bannerGapFilledEventIds]);
 
   const handleToday = () => {
     setFocusedDate(jstNow());
@@ -525,6 +573,7 @@ export default function CalendarScreen() {
     paneEventsByDate: typeof eventsByDate,
     paneBannersByWeekIndex: typeof bannersByWeekIndex,
     paneLaneCountByDateKey: typeof laneCountByDateKey,
+    paneGapFillsByWeekIndex: typeof gapFillsByWeekIndex,
     // 前月/翌月パネルは今月パネルと同じ日付(週をまたぐ余白日)を含み得る
     // ため、testIDが衝突しないようパネルごとに接頭辞を変える(今月パネルは
     // 既存テストと互換のデフォルト接頭辞のまま)。
@@ -532,6 +581,7 @@ export default function CalendarScreen() {
   ) =>
     grid.map((week, weekIndex) => {
       const weekBanners = paneBannersByWeekIndex.get(weekIndex) ?? [];
+      const weekGapFills = paneGapFillsByWeekIndex.get(weekIndex) ?? [];
       return (
         <View key={weekIndex} testID={`${testIDPrefix}-row-${weekIndex}`} style={styles.gridRow}>
           {week.map((cell) => {
@@ -575,26 +625,29 @@ export default function CalendarScreen() {
                     laneCount > 0 && { marginTop: laneCount * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP) },
                   ]}
                 >
-                  {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => (
-                    <View
-                      key={event.id}
-                      testID={`${testIDPrefix}-dot-${event.id}`}
-                      style={[styles.gridEventBar, { backgroundColor: resolveEventColor(event, calendarColorById) }]}
-                    >
-                      {personalCalendarIds.has(event.calendarId) ? (
-                        <Icon
-                          testID={`${testIDPrefix}-dot-personal-${event.id}`}
-                          name="lock"
-                          size={7}
-                          color="#fff"
-                          style={styles.gridEventBarLockIcon}
-                        />
-                      ) : null}
-                      <Text style={styles.gridEventBarText} numberOfLines={1} ellipsizeMode="clip">
-                        {event.title}
-                      </Text>
-                    </View>
-                  ))}
+                  {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => {
+                    const { backgroundColor, textColor } = resolveEventPillStyle(event, calendarColorById);
+                    return (
+                      <View
+                        key={event.id}
+                        testID={`${testIDPrefix}-dot-${event.id}`}
+                        style={[styles.gridEventBar, { backgroundColor }]}
+                      >
+                        {personalCalendarIds.has(event.calendarId) ? (
+                          <Icon
+                            testID={`${testIDPrefix}-dot-personal-${event.id}`}
+                            name="lock"
+                            size={7}
+                            color={textColor}
+                            style={styles.gridEventBarLockIcon}
+                          />
+                        ) : null}
+                        <Text style={[styles.gridEventBarText, { color: textColor }]} numberOfLines={1} ellipsizeMode="clip">
+                          {event.title}
+                        </Text>
+                      </View>
+                    );
+                  })}
                   {cellEvents.length > MAX_DOTS_PER_CELL ? (
                     <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
                   ) : null}
@@ -602,38 +655,68 @@ export default function CalendarScreen() {
               </TouchableOpacity>
             );
           })}
-          {weekBanners.length > 0 ? (
+          {weekBanners.length > 0 || weekGapFills.length > 0 ? (
             <View style={styles.gridBannerOverlay} pointerEvents="box-none">
-              {weekBanners.map((banner) => (
-                <TouchableOpacity
-                  key={`${banner.event.id}-${weekIndex}`}
-                  testID={`${testIDPrefix}-banner-${banner.event.id}-week-${weekIndex}`}
-                  onPress={() => handleSelectDateCell(week[banner.colStart].dateKey)}
-                  style={[
-                    styles.gridBanner,
-                    {
-                      // 通常ピルと同じ「セルの左右端からGRID_CELL_PILL_INSET
-                      // だけ内側」の見た目に揃える(上のコメント参照)。
-                      left: (banner.colStart / 7) * paneWidth + GRID_CELL_PILL_INSET,
-                      width:
-                        ((banner.colEnd - banner.colStart + 1) / 7) * paneWidth - GRID_CELL_PILL_INSET * 2,
-                      top: BANNER_AREA_TOP + banner.lane * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP),
-                      backgroundColor: resolveEventColor(banner.event, calendarColorById),
-                      borderTopLeftRadius: banner.isStart ? 3 : 0,
-                      borderBottomLeftRadius: banner.isStart ? 3 : 0,
-                      borderTopRightRadius: banner.isEnd ? 3 : 0,
-                      borderBottomRightRadius: banner.isEnd ? 3 : 0,
-                    },
-                  ]}
-                >
-                  {personalCalendarIds.has(banner.event.calendarId) ? (
-                    <Icon name="lock" size={7} color="#fff" style={styles.gridEventBarLockIcon} />
-                  ) : null}
-                  <Text style={styles.gridEventBarText} numberOfLines={1} ellipsizeMode="clip">
-                    {banner.event.title}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {weekBanners.map((banner) => {
+                const { backgroundColor, textColor } = resolveEventPillStyle(banner.event, calendarColorById);
+                return (
+                  <TouchableOpacity
+                    key={`${banner.event.id}-${weekIndex}`}
+                    testID={`${testIDPrefix}-banner-${banner.event.id}-week-${weekIndex}`}
+                    onPress={() => handleSelectDateCell(week[banner.colStart].dateKey)}
+                    style={[
+                      styles.gridBanner,
+                      {
+                        // 通常ピルと同じ「セルの左右端からGRID_CELL_PILL_INSET
+                        // だけ内側」の見た目に揃える(上のコメント参照)。
+                        left: (banner.colStart / 7) * paneWidth + GRID_CELL_PILL_INSET,
+                        width:
+                          ((banner.colEnd - banner.colStart + 1) / 7) * paneWidth - GRID_CELL_PILL_INSET * 2,
+                        top: BANNER_AREA_TOP + banner.lane * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP),
+                        backgroundColor,
+                        borderTopLeftRadius: banner.isStart ? 3 : 0,
+                        borderBottomLeftRadius: banner.isStart ? 3 : 0,
+                        borderTopRightRadius: banner.isEnd ? 3 : 0,
+                        borderBottomRightRadius: banner.isEnd ? 3 : 0,
+                      },
+                    ]}
+                  >
+                    {personalCalendarIds.has(banner.event.calendarId) ? (
+                      <Icon name="lock" size={7} color={textColor} style={styles.gridEventBarLockIcon} />
+                    ) : null}
+                    <Text style={[styles.gridEventBarText, { color: textColor }]} numberOfLines={1} ellipsizeMode="clip">
+                      {banner.event.title}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {weekGapFills.map((gapFill) => {
+                const { backgroundColor, textColor } = resolveEventPillStyle(gapFill.event, calendarColorById);
+                return (
+                  <TouchableOpacity
+                    key={`gapfill-${gapFill.event.id}-${weekIndex}`}
+                    testID={`${testIDPrefix}-gapfill-${gapFill.event.id}-week-${weekIndex}`}
+                    onPress={() => handleSelectDateCell(week[gapFill.col].dateKey)}
+                    style={[
+                      styles.gridBanner,
+                      {
+                        left: (gapFill.col / 7) * paneWidth + GRID_CELL_PILL_INSET,
+                        width: (1 / 7) * paneWidth - GRID_CELL_PILL_INSET * 2,
+                        top: BANNER_AREA_TOP + gapFill.lane * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP),
+                        backgroundColor,
+                        borderRadius: 3,
+                      },
+                    ]}
+                  >
+                    {personalCalendarIds.has(gapFill.event.calendarId) ? (
+                      <Icon name="lock" size={7} color={textColor} style={styles.gridEventBarLockIcon} />
+                    ) : null}
+                    <Text style={[styles.gridEventBarText, { color: textColor }]} numberOfLines={1} ellipsizeMode="clip">
+                      {gapFill.event.title}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : null}
         </View>
@@ -643,6 +726,7 @@ export default function CalendarScreen() {
   const EMPTY_EVENTS_BY_DATE: typeof eventsByDate = new Map();
   const EMPTY_BANNERS_BY_WEEK: typeof bannersByWeekIndex = new Map();
   const EMPTY_LANE_COUNT: typeof laneCountByDateKey = {};
+  const EMPTY_GAP_FILLS_BY_WEEK: typeof gapFillsByWeekIndex = new Map();
 
   return (
     <>
@@ -771,11 +855,12 @@ export default function CalendarScreen() {
                   EMPTY_EVENTS_BY_DATE,
                   EMPTY_BANNERS_BY_WEEK,
                   EMPTY_LANE_COUNT,
+                  EMPTY_GAP_FILLS_BY_WEEK,
                   "calendar-grid-prev"
                 )}
               </View>
               <View testID="calendar-weeks-pane-current" style={{ width: paneWidth }}>
-                {renderGridPane(monthGrid, eventsByDate, bannersByWeekIndex, laneCountByDateKey)}
+                {renderGridPane(monthGrid, eventsByDate, bannersByWeekIndex, laneCountByDateKey, gapFillsByWeekIndex)}
               </View>
               <View testID="calendar-weeks-pane-next" style={{ width: paneWidth }}>
                 {renderGridPane(
@@ -783,6 +868,7 @@ export default function CalendarScreen() {
                   EMPTY_EVENTS_BY_DATE,
                   EMPTY_BANNERS_BY_WEEK,
                   EMPTY_LANE_COUNT,
+                  EMPTY_GAP_FILLS_BY_WEEK,
                   "calendar-grid-next"
                 )}
               </View>
@@ -1395,7 +1481,6 @@ const styles = StyleSheet.create({
   eventTime: {
     color: "#666",
     fontSize: 13,
-    width: 92,
   },
   eventTitle: {
     flex: 1,

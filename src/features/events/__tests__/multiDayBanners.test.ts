@@ -1,4 +1,4 @@
-import { buildMultiDayBanners, MAX_MULTI_DAY_LANES } from "../multiDayBanners";
+import { buildMultiDayBanners, fillBannerGaps, MAX_MULTI_DAY_LANES } from "../multiDayBanners";
 import { buildMonthGrid } from "../monthGrid";
 import type { Event } from "../types";
 
@@ -134,5 +134,77 @@ describe("buildMultiDayBanners", () => {
     // 同じ週の他の日(バーが通らない日)には値が入らない。
     expect(laneCountByDateKey["2026-08-02"]).toBeUndefined();
     expect(laneCountByDateKey["2026-08-05"]).toBeUndefined();
+  });
+});
+
+describe("fillBannerGaps", () => {
+  it("fills a lane left empty by a multi-day bar that doesn't reach this date with a single-day event from that date (regression: this lane was previously left blank even when an event existed to fill it)", () => {
+    // e1 (lane0) covers 08-02..08-03 only; e2 (lane1, forced there since it
+    // overlaps e1 on 08-03) covers 08-03..08-04. So on 08-04, only e2 (lane1)
+    // is active - lane0 is free even though laneCountByDateKey reserves 2 rows.
+    const events = [
+      makeEvent("e1", "2026-08-02T09:00:00.000Z", "2026-08-03T10:00:00.000Z"),
+      makeEvent("e2", "2026-08-03T09:00:00.000Z", "2026-08-04T10:00:00.000Z"),
+    ];
+    const { banners, laneCountByDateKey } = buildMultiDayBanners(events, AUGUST_2026_GRID);
+    const singleDayEvent = makeEvent("single-1", "2026-08-04T09:00:00.000Z", "2026-08-04T10:00:00.000Z");
+    const singleDayEventsByDateKey = new Map([["2026-08-04", [singleDayEvent]]]);
+
+    const { gapFills, filledEventIds } = fillBannerGaps(
+      banners,
+      laneCountByDateKey,
+      AUGUST_2026_GRID,
+      singleDayEventsByDateKey
+    );
+
+    expect(gapFills).toHaveLength(1);
+    expect(gapFills[0]).toMatchObject({ event: singleDayEvent, lane: 0, col: 2 }); // 08-04 is a Tuesday
+    expect(filledEventIds.has("single-1")).toBe(true);
+  });
+
+  it("leaves the gap unfilled when no single-day event exists on that date", () => {
+    const events = [
+      makeEvent("e1", "2026-08-03T09:00:00.000Z", "2026-08-04T10:00:00.000Z"),
+      makeEvent("e2", "2026-08-03T09:00:00.000Z", "2026-08-05T10:00:00.000Z"),
+    ];
+    const { banners, laneCountByDateKey } = buildMultiDayBanners(events, AUGUST_2026_GRID);
+
+    const { gapFills } = fillBannerGaps(banners, laneCountByDateKey, AUGUST_2026_GRID, new Map());
+
+    expect(gapFills).toHaveLength(0);
+  });
+
+  it("does not touch dates with no reserved lanes at all, even if single-day events exist there", () => {
+    const singleDayEvent = makeEvent("single-1", "2026-08-10T09:00:00.000Z", "2026-08-10T10:00:00.000Z");
+    const singleDayEventsByDateKey = new Map([["2026-08-10", [singleDayEvent]]]);
+
+    const { gapFills } = fillBannerGaps([], {}, AUGUST_2026_GRID, singleDayEventsByDateKey);
+
+    expect(gapFills).toHaveLength(0);
+  });
+
+  it("fills only as many gap lanes as there are free, leaving extra events on that date unfilled", () => {
+    // Same setup as above: only lane0 is free on 08-04 (lane1 is occupied by
+    // e2), so only one of the two single-day candidates should be placed.
+    const events = [
+      makeEvent("e1", "2026-08-02T09:00:00.000Z", "2026-08-03T10:00:00.000Z"),
+      makeEvent("e2", "2026-08-03T09:00:00.000Z", "2026-08-04T10:00:00.000Z"),
+    ];
+    const { banners, laneCountByDateKey } = buildMultiDayBanners(events, AUGUST_2026_GRID);
+    const first = makeEvent("single-1", "2026-08-04T09:00:00.000Z", "2026-08-04T10:00:00.000Z");
+    const second = makeEvent("single-2", "2026-08-04T11:00:00.000Z", "2026-08-04T12:00:00.000Z");
+    const singleDayEventsByDateKey = new Map([["2026-08-04", [first, second]]]);
+
+    const { gapFills, filledEventIds } = fillBannerGaps(
+      banners,
+      laneCountByDateKey,
+      AUGUST_2026_GRID,
+      singleDayEventsByDateKey
+    );
+
+    expect(gapFills).toHaveLength(1);
+    expect(gapFills[0]).toMatchObject({ event: first, lane: 0 });
+    expect(filledEventIds.has("single-1")).toBe(true);
+    expect(filledEventIds.has("single-2")).toBe(false);
   });
 });

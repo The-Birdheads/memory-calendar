@@ -118,6 +118,57 @@ export function buildMultiDayBanners<T extends Event>(
   return { banners, overflowEventIds, laneCountByDateKey };
 }
 
+export interface BannerGapFill<T extends Event = Event> {
+  event: T;
+  weekIndex: number;
+  /** 0(日)〜6(土)、その週内でのこの予定の列(単日のため開始・終了とも同じ)。 */
+  col: number;
+  lane: number;
+}
+
+/**
+ * 複数日バーが同じ日まで届いていないせいで空いたlaneに、その日の単日の
+ * 予定を1件だけ差し込んで埋める(TimeTree風に、バーの上に無駄な空白を
+ * 残さないようにする - 2026-09)。laneCountByDateKeyはバーが実際に通る日
+ * にしか値を持たないため、値がある日だけを対象にする - バーが1本も通らな
+ * い日まで単日の予定をバー表示に昇格させると見た目が変わりすぎるため。
+ */
+export function fillBannerGaps<T extends Event>(
+  banners: MultiDayBanner<T>[],
+  laneCountByDateKey: Record<string, number>,
+  monthGrid: MonthGridCell[][],
+  singleDayEventsByDateKey: Map<string, T[]>
+): { gapFills: BannerGapFill<T>[]; filledEventIds: Set<string> } {
+  const gapFills: BannerGapFill<T>[] = [];
+  const filledEventIds = new Set<string>();
+
+  monthGrid.forEach((week, weekIndex) => {
+    week.forEach((cell, col) => {
+      const laneCount = laneCountByDateKey[cell.dateKey];
+      if (!laneCount) return;
+
+      const occupiedLanes = new Set(
+        banners
+          .filter((banner) => banner.weekIndex === weekIndex && banner.colStart <= col && col <= banner.colEnd)
+          .map((banner) => banner.lane)
+      );
+
+      const candidates = singleDayEventsByDateKey.get(cell.dateKey) ?? [];
+      let candidateIndex = 0;
+      for (let lane = 0; lane < laneCount; lane++) {
+        if (occupiedLanes.has(lane)) continue;
+        const event = candidates[candidateIndex];
+        if (!event) break;
+        candidateIndex++;
+        gapFills.push({ event, weekIndex, col, lane });
+        filledEventIds.add(event.id);
+      }
+    });
+  });
+
+  return { gapFills, filledEventIds };
+}
+
 /** 単日の予定と同じ(セル内ピル)表示に回すべき予定だけを残す - バー表示に
  * なった複数日予定は除外し、lane超過でオーバーフローした複数日予定は
  * (従来通りその日ごとに)残す。 */

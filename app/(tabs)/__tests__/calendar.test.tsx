@@ -496,7 +496,7 @@ describe("CalendarScreen", () => {
   it("colors the grid marker and day-list dot with the event's primary tag color when tagged", async () => {
     mockCommonHooks();
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
-      events: [{ ...TODAY_EVENT, categoryColor: "#2f6fed", tagColor: "#e53935" }],
+      events: [{ ...TODAY_EVENT, categoryColor: "#2f6fed", tagColor: "#e53935", isAllDay: true }],
       isLoading: false,
       error: null,
       refetch: jest.fn(),
@@ -620,6 +620,52 @@ describe("CalendarScreen", () => {
       getByTestId("calendar-grid-cell-events-2026-08-18").props.style
     );
     expect((bannerDayEventList.marginTop as number) ?? 0).toBeGreaterThan(0);
+  });
+
+  it("fills the lane left blank above a day's events, once the multi-day bar occupying a lower lane no longer reaches that day, with that day's own single-day event instead of leaving it blank (regression)", async () => {
+    mockCommonHooks();
+    // e-lane0 (lane0) covers only 08-02..08-03; e-lane1 (forced to lane1
+    // since it overlaps e-lane0 on 08-03) covers 08-03..08-04. So on 08-04,
+    // lane0 is free even though the day still reserves 2 rows of space.
+    const laneZeroEvent = {
+      id: "event-lane0",
+      calendarId: "cal-1",
+      title: "前半だけ",
+      categoryColor: "#43a047",
+      startAt: "2026-08-02T09:00:00.000Z",
+      endAt: "2026-08-03T10:00:00.000Z",
+    };
+    const laneOneEvent = {
+      id: "event-lane1",
+      calendarId: "cal-1",
+      title: "後半まで",
+      categoryColor: "#43a047",
+      startAt: "2026-08-03T09:00:00.000Z",
+      endAt: "2026-08-04T10:00:00.000Z",
+    };
+    const gapFillCandidate = {
+      ...TODAY_EVENT,
+      id: "event-gapfill",
+      title: "単日の予定",
+      startAt: "2026-08-04T09:00:00.000Z",
+      endAt: "2026-08-04T10:00:00.000Z",
+      isAllDay: true,
+    };
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [laneZeroEvent, laneOneEvent, gapFillCandidate],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    // 08-02..08-08 is week index 1 (see the banner tests above for the week
+    // numbering); 08-04 is column 2 (Tuesday).
+    const gapFillBanner = getByTestId("calendar-grid-gapfill-event-gapfill-week-1");
+    expect(within(gapFillBanner).getByText("単日の予定")).toBeTruthy();
+    // It no longer renders as a normal below-the-banners pill/dot.
+    expect(queryByTestId("calendar-grid-dot-event-gapfill")).toBeNull();
   });
 
   it("splits a multi-day event that crosses a week boundary into a banner per week, without per-day dots", async () => {
@@ -761,6 +807,54 @@ describe("CalendarScreen", () => {
       Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
     const titleStyle = flattenStyle(within(getByTestId("calendar-event-event-1")).getByText("朝会").props.style);
     expect(titleStyle.fontSize).toBeGreaterThanOrEqual(15);
+  });
+
+  it("doesn't reserve a fixed-width column for the time text in the day's event list, so the title's indent follows the time text's own length instead of always starting from the same x (regression: a fixed width left extra empty space after '終日')", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [{ ...TODAY_EVENT, isAllDay: true }],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const timeStyle = flattenStyle(within(getByTestId("calendar-event-event-1")).getByText("終日").props.style);
+    expect(timeStyle.width).toBeUndefined();
+  });
+
+  it("shows a timed (non all-day) event's grid pill with a translucent background and colored title text, distinguishing it from an all-day event's solid background and white text (regression: both looked the same)", async () => {
+    mockCommonHooks();
+    const timedEvent = { ...TODAY_EVENT, id: "event-timed", tagColor: "#e53935", isAllDay: false };
+    const allDayEvent = { ...TODAY_EVENT, id: "event-allday", tagColor: "#e53935", isAllDay: true };
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [timedEvent, allDayEvent],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const timedPillStyle = flattenStyle(getByTestId("calendar-grid-dot-event-timed").props.style);
+    const timedTitleStyle = flattenStyle(
+      within(getByTestId("calendar-grid-dot-event-timed")).getByText("朝会").props.style
+    );
+    const allDayPillStyle = flattenStyle(getByTestId("calendar-grid-dot-event-allday").props.style);
+    const allDayTitleStyle = flattenStyle(
+      within(getByTestId("calendar-grid-dot-event-allday")).getByText("朝会").props.style
+    );
+
+    expect(allDayPillStyle.backgroundColor).toBe("#e53935");
+    expect(allDayTitleStyle.color).toBe("#fff");
+    expect(timedPillStyle.backgroundColor).toBe("rgba(229, 57, 53, 0.18)");
+    expect(timedTitleStyle.color).toBe("#e53935");
   });
 
   it("shows the day-events modal as a fixed-size card centered over a dimmed backdrop, not a full-screen sheet", async () => {
@@ -1054,7 +1148,7 @@ describe("CalendarScreen", () => {
   it("colors an untagged event with its calendar's own default color", async () => {
     mockCommonHooks();
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
-      events: [{ ...TODAY_EVENT, tagColor: null }],
+      events: [{ ...TODAY_EVENT, tagColor: null, isAllDay: true }],
       isLoading: false,
       error: null,
       refetch: jest.fn(),
