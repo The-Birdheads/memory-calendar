@@ -59,6 +59,12 @@ const GRID_HORIZONTAL_PADDING = 8;
 const BANNER_AREA_TOP = 30;
 const BANNER_ROW_HEIGHT = 14;
 const BANNER_ROW_GAP = 2;
+// 通常ピル(gridEventBar)は各セルのgridEventListが持つpaddingHorizontal:2の
+// 分だけセルの左右端から内側に余白を取って表示される。バーはセルをまたいで
+// 絶対配置するため、同じ見た目に揃うようこの余白を左右端にも適用する
+// (2026-09修正 - 元はセル境界にぴったり合わせていたため、単日の予定の
+// ピルより横に広がって見えるずれがあった)。
+const GRID_CELL_PILL_INSET = 2;
 
 // focusedDate/"today" represent a CALENDAR DAY, not an absolute instant - by
 // convention here their UTC-* accessors are read as if they were the
@@ -194,7 +200,10 @@ export default function CalendarScreen() {
     const lastWeek = monthGrid[monthGrid.length - 1];
     return computeDateKeyRange(firstWeek[0].dateKey, lastWeek[lastWeek.length - 1].dateKey);
   }, [monthGrid]);
-  const { events, refetch: refetchEvents } = useEventsInRangeForCalendars(activeCalendarIds, range);
+  const { events, isLoading: isLoadingEvents, refetch: refetchEvents } = useEventsInRangeForCalendars(
+    activeCalendarIds,
+    range
+  );
 
   // 個人カレンダーの予定であることを、色とは別の要素(🔒)で見分けられるように
   // する。IDのSetにしておき、予定1件ごとにO(1)で判定できるようにしている。
@@ -333,6 +342,14 @@ export default function CalendarScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const paneWidth = screenWidth - GRID_HORIZONTAL_PADDING * 2;
   const gridTranslateXRef = useRef(new Animated.Value(-paneWidth));
+  // スライド完了→shiftFocusedDate の直後にそのままgridTranslateXを基準位置へ
+  // 戻すと、focusedDate の更新がまだ再レンダーに反映されていない(=中央
+  // パネルの中身がまだ古い月のまま)タイミングで表示上「今月」の位置に
+  // 戻ってしまい、次のレンダーで正しい月に切り替わるまでの一瞬、前の月の
+  // 日付・予定がチラつく(2026-09修正)。そのため位置のリセットは
+  // shiftFocusedDate の直後ではなく、focusedDate の変化を受けて実際に
+  // 再レンダーがコミットされた後(下のuseEffect)まで遅らせる。
+  const pendingSwipeResetRef = useRef(false);
 
   const animateMonthSwipe = (direction: 1 | -1) => {
     Animated.timing(gridTranslateXRef.current, {
@@ -340,10 +357,19 @@ export default function CalendarScreen() {
       duration: 220,
       useNativeDriver: true,
     }).start(() => {
+      pendingSwipeResetRef.current = true;
       shiftFocusedDate(direction);
-      gridTranslateXRef.current.setValue(-paneWidth);
     });
   };
+
+  // focusedDateが実際に切り替わり、その値を使ったmonthGrid等の再レンダーが
+  // コミットされた後にだけ、中央パネルの位置へ戻す(上のコメント参照)。
+  useEffect(() => {
+    if (!pendingSwipeResetRef.current) return;
+    pendingSwipeResetRef.current = false;
+    gridTranslateXRef.current.setValue(-paneWidth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- paneWidthはfocusedDateの変化では変わらない(画面回転時のみ変わるが、そのためだけにこのeffectを再定義する価値は薄い)
+  }, [focusedDate]);
 
   // 初回レンダーで1度だけ生成する(依存配列は空)。生成時の shiftFocusedDate の
   // クロージャを掴み続けるが、shiftFocusedDate は関数型 setState で常に最新の
@@ -586,8 +612,11 @@ export default function CalendarScreen() {
                   style={[
                     styles.gridBanner,
                     {
-                      left: `${(banner.colStart / 7) * 100}%`,
-                      width: `${((banner.colEnd - banner.colStart + 1) / 7) * 100}%`,
+                      // 通常ピルと同じ「セルの左右端からGRID_CELL_PILL_INSET
+                      // だけ内側」の見た目に揃える(上のコメント参照)。
+                      left: (banner.colStart / 7) * paneWidth + GRID_CELL_PILL_INSET,
+                      width:
+                        ((banner.colEnd - banner.colStart + 1) / 7) * paneWidth - GRID_CELL_PILL_INSET * 2,
                       top: BANNER_AREA_TOP + banner.lane * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP),
                       backgroundColor: resolveEventColor(banner.event, calendarColorById),
                       borderTopLeftRadius: banner.isStart ? 3 : 0,
@@ -774,7 +803,11 @@ export default function CalendarScreen() {
             />
           ) : null}
 
-          {monthEventGroups.length === 0 ? (
+          {isLoadingEvents ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>読み込み中…</Text>
+            </View>
+          ) : monthEventGroups.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>この月に予定はありません</Text>
             </View>

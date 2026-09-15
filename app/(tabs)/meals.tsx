@@ -187,7 +187,7 @@ function useMealFormController(createTargetCalendarId: string, refetch: () => Pr
 function PlanPanel() {
   const { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter } =
     useCalendarFilter();
-  const { mealRecords, refetch } = useMealRecordsByCalendars(activeCalendarIds);
+  const { mealRecords, isLoading, refetch } = useMealRecordsByCalendars(activeCalendarIds);
   const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
     createTargetCalendarId,
     refetch
@@ -234,7 +234,11 @@ function PlanPanel() {
         }}
       />
 
-      {dateGroups.length === 0 ? (
+      {isLoading ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>読み込み中…</Text>
+        </View>
+      ) : dateGroups.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateEmoji}>🍽️</Text>
           <Text style={styles.emptyStateText}>まだ献立の予定がありません</Text>
@@ -287,7 +291,7 @@ function LogPanel() {
     handleToggleCalendar,
     handleResetFilter: handleResetCalendarFilter,
   } = useCalendarFilter();
-  const { mealRecords, refetch } = useMealRecordsByCalendars(activeCalendarIds);
+  const { mealRecords, isLoading, refetch } = useMealRecordsByCalendars(activeCalendarIds);
   const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
     createTargetCalendarId,
     refetch
@@ -366,7 +370,11 @@ function LogPanel() {
         }}
       />
 
-      {monthGroups.length === 0 ? (
+      {isLoading ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>読み込み中…</Text>
+        </View>
+      ) : monthGroups.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateEmoji}>📝</Text>
           <Text style={styles.emptyStateText}>記録がありません</Text>

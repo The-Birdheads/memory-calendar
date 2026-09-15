@@ -131,6 +131,16 @@ describe("MealsScreen", () => {
       expect(getByText("まだ献立の予定がありません")).toBeTruthy();
     });
 
+    it("shows a loading message instead of the empty state while records are still loading (regression)", async () => {
+      mockCommonHooks([]);
+      (useMealRecordsByCalendars as jest.Mock).mockReturnValue({ mealRecords: [], isLoading: true, error: null, refetch: jest.fn() });
+
+      const { getByText, queryByText } = await renderPlanPanel();
+
+      expect(getByText("読み込み中…")).toBeTruthy();
+      expect(queryByText("まだ献立の予定がありません")).toBeNull();
+    });
+
     it("opens the create form (today, dinner by default) from the + button, and creates on save", async () => {
       const refetch = jest.fn();
       mockCommonHooks(RECORDS, refetch);
@@ -326,6 +336,16 @@ describe("MealsScreen", () => {
       const { getByText } = await renderLogPanel();
 
       expect(getByText("記録がありません")).toBeTruthy();
+    });
+
+    it("shows a loading message instead of the empty state while records are still loading (regression)", async () => {
+      mockCommonHooks([]);
+      (useMealRecordsByCalendars as jest.Mock).mockReturnValue({ mealRecords: [], isLoading: true, error: null, refetch: jest.fn() });
+
+      const { getByText, queryByText } = await renderLogPanel();
+
+      expect(getByText("読み込み中…")).toBeTruthy();
+      expect(queryByText("記録がありません")).toBeNull();
     });
 
     it("shows a 🔗/📝 icon (not the raw text) when a url/memo is set, and neither when absent", async () => {

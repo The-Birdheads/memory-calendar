@@ -544,6 +544,40 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-event-event-3")).toBeTruthy();
   });
 
+  it("insets the banner's left/right edges by the same margin a normal pill has within its cell, so the two line up (regression: the banner touched the cell edges while pills had a small margin, making it look wider/misaligned)", async () => {
+    mockCommonHooks();
+    const multiDayEvent = {
+      id: "event-3",
+      calendarId: "cal-1",
+      title: "旅行",
+      categoryColor: "#43a047",
+      startAt: "2026-08-18T09:00:00.000Z",
+      endAt: "2026-08-20T10:00:00.000Z",
+    };
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [multiDayEvent],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const bannerStyle = flattenStyle(getByTestId("calendar-grid-banner-event-3-week-3").props.style);
+
+    // Tue (colStart=2) - Thu (colEnd=4). The test window is 750pt wide (see
+    // useWindowDimensions' jest-expo default) minus the grid's own 8pt
+    // horizontal padding on each side (GRID_HORIZONTAL_PADDING) -> paneWidth
+    // = 750 - 16 = 734, split into 7 equal day columns.
+    const paneWidth = 750 - 16;
+    const colWidth = paneWidth / 7;
+    const pillInset = 2; // GRID_CELL_PILL_INSET, matching gridEventList's own paddingHorizontal
+    expect(bannerStyle.left).toBeCloseTo(2 * colWidth + pillInset);
+    expect(bannerStyle.width).toBeCloseTo(3 * colWidth - pillInset * 2);
+  });
+
   it("does not push down other days' events in the same week when only some days have a multi-day banner (regression: every day in the week got an extra blank row)", async () => {
     mockCommonHooks();
     const multiDayEvent = {
@@ -1858,6 +1892,17 @@ describe("CalendarScreen", () => {
 
       expect(queryByTestId("calendar-list-event-event-padding")).toBeNull();
       expect(queryByTestId("calendar-month-list")).toBeNull(); // 8月内の予定が0件なので空状態
+    });
+
+    it("shows a loading message instead of the empty state while events are still loading (regression)", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: true, error: null, refetch: jest.fn() });
+
+      const { getByTestId, getByText, queryByText } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+      expect(getByText("読み込み中…")).toBeTruthy();
+      expect(queryByText("この月に予定はありません")).toBeNull();
     });
 
     it("navigates straight to the event detail screen when a list row is pressed (no intermediate day modal)", async () => {

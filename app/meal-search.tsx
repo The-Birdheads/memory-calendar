@@ -31,7 +31,7 @@ export default function MealSearchScreen() {
   const { calendars } = useMyCalendars();
   const [selectedSlot, setSelectedSlot] = useState<MealSlot | undefined>(undefined);
   const filter = selectedSlot ? { slot: selectedSlot } : undefined;
-  const { mealRecords, refetch } = useMealRecords(activeCalendarId, filter);
+  const { mealRecords, isLoading, refetch } = useMealRecords(activeCalendarId, filter);
 
   // 検索結果は献立タブの一覧と同じ行(MealRow)をそのまま使い、タップすると
   // 同じ編集フォームが開く - 「さがして終わり」ではなく、見つけた献立の
@@ -206,7 +206,11 @@ export default function MealSearchScreen() {
           </View>
         ) : null}
 
-        {results.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.emptyState}>
+            <Text>読み込み中…</Text>
+          </View>
+        ) : results.length === 0 ? (
           <View style={styles.emptyState}>
             <Text>該当する献立がありません</Text>
           </View>

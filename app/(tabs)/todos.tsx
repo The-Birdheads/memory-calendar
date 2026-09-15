@@ -459,7 +459,7 @@ export default function TodosScreen() {
     });
   };
 
-  const { todos, refetch } = useTodosByCalendars(activeCalendarIds);
+  const { todos, isLoading, refetch } = useTodosByCalendars(activeCalendarIds);
   const { todos: orphanedTodos, refetch: refetchOrphaned } = useOrphanedTodos();
   const [reattachTargetTodo, setReattachTargetTodo] = useState<Todo | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -752,7 +752,11 @@ export default function TodosScreen() {
           </View>
         ) : null}
 
-        {groups.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.emptyState}>
+            <Text>読み込み中…</Text>
+          </View>
+        ) : groups.length === 0 ? (
           <View style={styles.emptyState}>
             <Text>ToDoがありません</Text>
           </View>

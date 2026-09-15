@@ -445,6 +445,16 @@ describe("HistoryScreen", () => {
       expect(getByText("該当する予定がありません")).toBeTruthy();
     });
 
+    it("shows a loading message instead of the empty state while events are still loading (regression)", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({ events: [], isLoading: true, error: null, refetch: jest.fn() });
+
+      const { getByText, queryByText } = await render(<HistoryScreen />);
+
+      expect(getByText("読み込み中…")).toBeTruthy();
+      expect(queryByText("該当する予定がありません")).toBeNull();
+    });
+
     it("shows a calendar filter defaulting to all calendars selected, toggling a calendar off/on to narrow the list", async () => {
       mockCommonHooks();
 
@@ -796,6 +806,16 @@ describe("HistoryScreen", () => {
       const { getByText } = await renderPhotoPanel();
 
       expect(getByText("思い出がありません")).toBeTruthy();
+    });
+
+    it("shows a loading message instead of the empty state while memories are still loading (regression)", async () => {
+      mockCommonHooks();
+      (useMemoriesTimeline as jest.Mock).mockReturnValue({ entries: [], isLoading: true, error: null, refetch: jest.fn() });
+
+      const { getByText, queryByText } = await renderPhotoPanel();
+
+      expect(getByText("読み込み中…")).toBeTruthy();
+      expect(queryByText("思い出がありません")).toBeNull();
     });
 
     it("refetches memories when the panel regains focus, so a photo added elsewhere (e.g. from the calendar) shows up (regression)", async () => {

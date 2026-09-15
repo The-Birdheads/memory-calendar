@@ -147,7 +147,11 @@ function TimelinePanel() {
 
   // タグでの絞り込み(未設定/複数選択のAND条件)はすべてクライアント側で行う
   // ので、RPCへは常にタグ指定なし(全件)を渡す。
-  const { events: eventsByTag, refetch: refetchEventsByTag } = usePastEventsByTag(undefined, activeCalendarIds);
+  const {
+    events: eventsByTag,
+    isLoading: isLoadingEventsByTag,
+    refetch: refetchEventsByTag,
+  } = usePastEventsByTag(undefined, activeCalendarIds);
   const periodFilteredEvents = useMemo(
     () => eventsByTag.filter((event) => isDateKeyInRange(toJstDateKey(event.startAt), periodStart, periodEnd)),
     [eventsByTag, periodStart, periodEnd]
@@ -321,7 +325,11 @@ function TimelinePanel() {
         />
       ) : null}
 
-      {events.length === 0 ? (
+      {isLoadingEventsByTag ? (
+        <View style={styles.emptyState}>
+          <Text>読み込み中…</Text>
+        </View>
+      ) : events.length === 0 ? (
         <View style={styles.emptyState}>
           <Text>該当する予定がありません</Text>
         </View>
@@ -493,7 +501,11 @@ function PhotoGridPanel() {
     }, [refetchCalendars, handleResetFilter])
   );
 
-  const { entries: memoriesEntries, refetch: refetchMemories } = useMemoriesTimeline(activeCalendarIds, memoriesFilter);
+  const {
+    entries: memoriesEntries,
+    isLoading: isLoadingMemories,
+    refetch: refetchMemories,
+  } = useMemoriesTimeline(activeCalendarIds, memoriesFilter);
   // カレンダー画面など他の画面で写真を追加/削除してこのタブに戻ってきても
   // 反映されない不具合の修正 - イベントID一覧が変わらない限り自動では
   // 取り直されないため、フォーカスのたびに明示的に取り直す(タグの
@@ -650,7 +662,11 @@ function PhotoGridPanel() {
         }}
       />
 
-      {entries.length === 0 ? (
+      {isLoadingMemories ? (
+        <View style={styles.emptyState}>
+          <Text>読み込み中…</Text>
+        </View>
+      ) : entries.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateEmoji}>📷</Text>
           <Text>思い出がありません</Text>

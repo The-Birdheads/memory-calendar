@@ -943,6 +943,16 @@ describe("TodosScreen", () => {
     expect(getByTestId("todo-section-container-event-2")).toBeTruthy();
   });
 
+  it("shows a loading message instead of the empty state while todos are still loading (regression)", async () => {
+    mockCommonHooks([]);
+    (useTodosByCalendars as jest.Mock).mockReturnValue({ todos: [], isLoading: true, error: null, refetch: jest.fn() });
+
+    const { getByText, queryByText } = await render(<TodosScreen />);
+
+    expect(getByText("読み込み中…")).toBeTruthy();
+    expect(queryByText("ToDoがありません")).toBeNull();
+  });
+
   const ORPHANED_TODO = { id: "orphan-1", eventId: null, title: "宛名を書く", isDone: false, completedAt: null, reminderAt: null };
 
   it("shows a section of orphaned (unlinked) todos, hidden when there are none", async () => {

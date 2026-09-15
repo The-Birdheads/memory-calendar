@@ -146,6 +146,19 @@ describe("MealSearchScreen", () => {
     expect(getByText("該当する献立がありません")).toBeTruthy();
   });
 
+  it("shows a loading message instead of the empty state while records are still loading (regression)", async () => {
+    (useLocalSearchParams as jest.Mock).mockReturnValue({ calendarId: "cal-1" });
+    (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null, refetch: jest.fn() });
+    (useMealRecords as jest.Mock).mockReturnValue({ mealRecords: [], isLoading: true, error: null, refetch: jest.fn() });
+    (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: jest.fn(), isSubmitting: false, error: null });
+    (useDeleteMealRecord as jest.Mock).mockReturnValue({ deleteMealRecord: jest.fn(), isSubmitting: false, error: null });
+
+    const { getByText, queryByText } = await render(<MealSearchScreen />);
+
+    expect(getByText("読み込み中…")).toBeTruthy();
+    expect(queryByText("該当する献立がありません")).toBeNull();
+  });
+
   describe("結果のタップで編集（献立タブの一覧と同じ挙動）", () => {
     it("opens the edit form pre-filled when a result is tapped", async () => {
       mockCommonHooks();
