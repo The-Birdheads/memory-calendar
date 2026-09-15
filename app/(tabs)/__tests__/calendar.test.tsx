@@ -389,6 +389,19 @@ describe("CalendarScreen", () => {
     expect(getByTestId("calendar-grid-cell-2026-08-31")).toBeTruthy();
   });
 
+  it("pre-renders the adjacent month's grid structure on both sides, so a swipe reveals it immediately instead of a blank gap (regression)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    // Focused month is 2026-08 (see beforeEach's fixed "now") - the
+    // previous/next panes should already have July/September's own day
+    // cells rendered, not be empty placeholders.
+    expect(getByTestId("calendar-grid-prev-cell-2026-07-15")).toBeTruthy();
+    expect(getByTestId("calendar-grid-next-cell-2026-09-15")).toBeTruthy();
+  });
+
   it("sizes the grid area from the measured container minus the space above/below it, so a 6-week month always fits", async () => {
     mockCommonHooks();
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
