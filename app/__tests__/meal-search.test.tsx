@@ -23,6 +23,7 @@ jest.mock("../../src/features/meals/hooks", () => ({
 const CALENDARS = [
   { id: "cal-1", name: "我が家", kind: "group" as const, color: "#2f6fed", createdBy: "user-1", createdAt: "2026-08-01T00:00:00.000Z" },
 ];
+const CALENDAR_2 = { id: "cal-2", name: "友人グループ", kind: "group" as const, color: "#43a047", createdBy: "user-2", createdAt: "2026-08-01T00:00:00.000Z" };
 
 const RECORDS = [
   { id: "meal-1", calendarId: "cal-1", mealDate: "2026-08-10", slot: "breakfast", title: "トースト", rating: 4, url: null, memo: null, createdBy: "user-1" },
@@ -195,6 +196,34 @@ describe("MealSearchScreen", () => {
       );
       await waitFor(() => expect(refetch).toHaveBeenCalled());
       await waitFor(() => expect(queryByTestId("meal-form-title-input")).toBeNull());
+    });
+
+    it("shows a calendar picker in the edit form when there's more than one calendar, and saves with the newly chosen calendarId (regression: the calendar used to be locked in edit mode)", async () => {
+      mockCommonHooks();
+      (useMyCalendars as jest.Mock).mockReturnValue({
+        calendars: [...CALENDARS, CALENDAR_2],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      const updateMealRecordMock = jest.fn().mockResolvedValue(true);
+      (useUpdateMealRecord as jest.Mock).mockReturnValue({
+        updateMealRecord: updateMealRecordMock,
+        isSubmitting: false,
+        error: null,
+      });
+
+      const { getByTestId } = await render(<MealSearchScreen />);
+
+      await fireEvent.press(getByTestId("meal-item-meal-1")); // meal-1 is on cal-1
+      expect(getByTestId("meal-form-calendar-picker")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("meal-form-calendar-cal-2"));
+      await fireEvent.press(getByTestId("meal-form-save"));
+
+      await waitFor(() =>
+        expect(updateMealRecordMock).toHaveBeenCalledWith("meal-1", expect.objectContaining({ calendarId: "cal-2" }))
+      );
     });
 
     it("deletes a record after confirming, closing the form and refetching", async () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router } from "expo-router";
 
 import MealsScreen from "../meals";
@@ -123,6 +123,23 @@ describe("MealsScreen", () => {
       expect(queryByTestId("meal-item-meal-1")).toBeNull();
     });
 
+    it("shows which calendar each meal belongs to when more than one calendar is in view, but not when there's only one (regression)", async () => {
+      mockCommonHooks(RECORDS); // meal-2 (the only future record) is on cal-1 ("我が家")
+
+      const { getByTestId } = await renderPlanPanel();
+
+      expect(within(getByTestId("meal-item-meal-2")).getByText("我が家")).toBeTruthy();
+    });
+
+    it("doesn't show a calendar label when there's only one calendar to begin with", async () => {
+      mockCommonHooks(RECORDS);
+      (useMyCalendars as jest.Mock).mockReturnValue({ calendars: [CALENDARS[0]], isLoading: false, error: null, refetch: jest.fn() });
+
+      const { getByTestId } = await renderPlanPanel();
+
+      expect(within(getByTestId("meal-item-meal-2")).queryByText("我が家")).toBeNull();
+    });
+
     it("shows an empty state with a hint to use the + button when there are no upcoming meals", async () => {
       mockCommonHooks([]);
 
@@ -213,6 +230,25 @@ describe("MealsScreen", () => {
         )
       );
       await waitFor(() => expect(refetch).toHaveBeenCalled());
+    });
+
+    it("shows a calendar picker in the edit form and saves with the newly chosen calendarId (regression: the calendar used to be locked in edit mode)", async () => {
+      const refetch = jest.fn();
+      mockCommonHooks(RECORDS, refetch);
+      const updateMealRecordMock = jest.fn().mockResolvedValue(true);
+      (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
+
+      const { getByTestId } = await renderPlanPanel();
+
+      await fireEvent.press(getByTestId("meal-item-meal-2")); // meal-2 is on cal-1
+      expect(getByTestId("meal-form-calendar-picker")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("meal-form-calendar-cal-2"));
+      await fireEvent.press(getByTestId("meal-form-save"));
+
+      await waitFor(() =>
+        expect(updateMealRecordMock).toHaveBeenCalledWith("meal-2", expect.objectContaining({ calendarId: "cal-2" }))
+      );
     });
 
     it("deletes a record (after confirming) from the edit form, closing the form and refetching", async () => {

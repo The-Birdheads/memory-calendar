@@ -2,6 +2,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { RatingStars } from "./RatingStars";
 import type { MealRecord, MealSlot } from "../types";
+import { CalendarLabel } from "../../calendars/components/CalendarLabel";
+import type { Calendar } from "../../calendars/types";
 import { Icon } from "../../../shared/components/Icon";
 
 export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
@@ -20,11 +22,17 @@ export interface MealRowProps {
    * まとめる代わりに行の中に短い日付ラベル(例: "2026/09/01")を添える。
    */
   dateLabel?: string;
+  /**
+   * 所属カレンダー(渡された場合のみ表示 - 呼び出し側でrecord.calendarIdから
+   * 解決する)。複数カレンダーを横断する一覧でどのカレンダーの献立か一目で
+   * わかるようにする(2026-09)。
+   */
+  calendar?: Calendar;
 }
 
 /** 献立1件分の行 - 献立タブ(予定/記録パネル)と献立をさがす画面の検索結果、
  * どちらも同じ見た目・同じ「タップで編集」の挙動にするための共通部品。 */
-export function MealRow({ record, onPress, dateLabel }: MealRowProps) {
+export function MealRow({ record, onPress, dateLabel, calendar }: MealRowProps) {
   return (
     <TouchableOpacity testID={`meal-item-${record.id}`} style={styles.mealRow} onPress={onPress}>
       <View style={styles.mealRowSlotChip}>
@@ -36,6 +44,13 @@ export function MealRow({ record, onPress, dateLabel }: MealRowProps) {
         </Text>
         <View style={styles.mealRowMetaRow}>
           {dateLabel ? <Text style={styles.mealRowDateLabel}>{dateLabel}</Text> : null}
+          {calendar ? (
+            <CalendarLabel
+              calendar={calendar}
+              textStyle={styles.mealRowCalendarLabel}
+              iconSize={11}
+            />
+          ) : null}
           <RatingStars rating={record.rating} testIDPrefix={`meal-item-rating-${record.id}`} size={12} />
           {record.url ? <Icon testID={`meal-url-icon-${record.id}`} name="link" size={12} color="#2f6fed" /> : null}
           {record.memo ? <Icon testID={`meal-memo-icon-${record.id}`} name="note" size={12} color="#666" /> : null}
@@ -80,6 +95,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   mealRowDateLabel: {
+    fontSize: 12,
+    color: "#999",
+  },
+  mealRowCalendarLabel: {
     fontSize: 12,
     color: "#999",
   },

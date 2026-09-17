@@ -320,8 +320,8 @@ describe("MealFormModal", () => {
   });
 
   describe("追加先カレンダーの表示/選択", () => {
-    it("shows the target calendar as a read-only label in edit mode (the calendar can't be changed after creation)", async () => {
-      const { getByTestId, getByText, queryByTestId } = await render(
+    it("shows a calendar picker in edit mode too when there are multiple calendars, so the meal's calendar can be changed (regression: edit mode used to lock the calendar as a read-only label)", async () => {
+      const { getByTestId, queryByTestId } = await render(
         <MealFormModal
           target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
           calendars={CALENDARS}
@@ -330,12 +330,30 @@ describe("MealFormModal", () => {
         />
       );
 
-      expect(getByTestId("meal-form-calendar-label")).toBeTruthy();
-      expect(getByText("友人グループ")).toBeTruthy(); // EDIT_INITIAL_VALUES.calendarId = "cal-2"
-      expect(queryByTestId("meal-form-calendar-picker")).toBeNull();
+      expect(getByTestId("meal-form-calendar-picker")).toBeTruthy();
+      expect(getByTestId("meal-form-calendar-cal-2-check")).toBeTruthy(); // EDIT_INITIAL_VALUES.calendarId = "cal-2"
+      expect(queryByTestId("meal-form-calendar-cal-1-check")).toBeNull();
+      expect(queryByTestId("meal-form-calendar-label")).toBeNull();
     });
 
-    it("shows a read-only label (no picker) in create mode when there's only one calendar to choose from", async () => {
+    it("switches the target calendar when a different chip is tapped in edit mode, and saves with that calendarId (regression)", async () => {
+      const onSave = jest.fn();
+      const { getByTestId } = await render(
+        <MealFormModal
+          target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
+          calendars={CALENDARS}
+          onClose={jest.fn()}
+          onSave={onSave}
+        />
+      );
+
+      await fireEvent.press(getByTestId("meal-form-calendar-cal-1"));
+      await fireEvent.press(getByTestId("meal-form-save"));
+
+      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ calendarId: "cal-1" }));
+    });
+
+    it("shows a read-only label (no picker) when there's only one calendar to choose from, in either mode", async () => {
       const { getByTestId, getByText, queryByTestId } = await render(
         <MealFormModal
           target={{ mode: "create", initialValues: CREATE_INITIAL_VALUES }}

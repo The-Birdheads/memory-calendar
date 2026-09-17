@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
@@ -412,7 +412,12 @@ export default function CalendarScreen() {
 
   // focusedDateが実際に切り替わり、その値を使ったmonthGrid等の再レンダーが
   // コミットされた後にだけ、中央パネルの位置へ戻す(上のコメント参照)。
-  useEffect(() => {
+  // useEffectではなくuseLayoutEffectを使う - useEffectは画面に描画された
+  // 「後」に(非同期に)実行されるため、一瞬だけ位置リセット前の(=スワイプ
+  // 先の隣パネルがまだ表示された)フレームが見えてしまうチラつきが残っていた
+  // (2026-09修正)。useLayoutEffectなら描画がユーザーに見える前に同期的に
+  // リセットが反映されるため、そのフレームが見えることはない。
+  useLayoutEffect(() => {
     if (!pendingSwipeResetRef.current) return;
     pendingSwipeResetRef.current = false;
     gridTranslateXRef.current.setValue(-paneWidth);

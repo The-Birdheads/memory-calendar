@@ -193,6 +193,7 @@ export async function updateMealRecord(
   if (input.rating !== undefined) payload.rating = input.rating;
   if (input.url !== undefined) payload.url = input.url;
   if (input.memo !== undefined) payload.memo = input.memo;
+  if (input.calendarId !== undefined) payload.calendar_id = input.calendarId;
 
   const { data, error } = await client
     .from("meal_records")

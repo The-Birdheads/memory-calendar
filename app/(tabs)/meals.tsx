@@ -153,6 +153,7 @@ function useMealFormController(createTargetCalendarId: string, refetch: () => Pr
             mealDate: values.mealDate,
             slot: values.slot,
             rating: values.rating,
+            calendarId: values.calendarId,
           })
         : await createMealRecord({
             // 作成時はフォーム内のカレンダーピッカーで選び直せる - 呼び出し
@@ -188,6 +189,9 @@ function PlanPanel() {
   const { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter } =
     useCalendarFilter();
   const { mealRecords, isLoading, refetch } = useMealRecordsByCalendars(activeCalendarIds);
+  // 表示中のカレンダーが複数ある時だけ、行にどのカレンダーの献立かを添える
+  // (1つしかない時はどうせ全部同じなので出さない)。
+  const calendarById = useMemo(() => new Map(calendars.map((calendar) => [calendar.id, calendar])), [calendars]);
   const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
     createTargetCalendarId,
     refetch
@@ -254,7 +258,12 @@ function PlanPanel() {
             <View testID={`meals-plan-date-group-${group.mealDate}`}>
               <Text style={styles.dateHeader}>{group.label}</Text>
               {group.records.map((record) => (
-                <MealRow key={record.id} record={record} onPress={() => openEdit(record)} />
+                <MealRow
+                  key={record.id}
+                  record={record}
+                  onPress={() => openEdit(record)}
+                  calendar={calendars.length > 1 ? calendarById.get(record.calendarId) : undefined}
+                />
               ))}
             </View>
           )}
@@ -296,6 +305,7 @@ function LogPanel() {
     createTargetCalendarId,
     refetch
   );
+  const calendarById = useMemo(() => new Map(calendars.map((calendar) => [calendar.id, calendar])), [calendars]);
 
   const [periodStart, setPeriodStart] = useState<string | null>(null);
   const [periodEnd, setPeriodEnd] = useState<string | null>(null);
@@ -393,7 +403,12 @@ function LogPanel() {
                 <View key={dateGroup.mealDate} testID={`meals-log-date-group-${dateGroup.mealDate}`}>
                   <Text style={styles.dateSubHeader}>{dateGroup.label}</Text>
                   {dateGroup.records.map((record) => (
-                    <MealRow key={record.id} record={record} onPress={() => openEdit(record)} />
+                    <MealRow
+                      key={record.id}
+                      record={record}
+                      onPress={() => openEdit(record)}
+                      calendar={calendars.length > 1 ? calendarById.get(record.calendarId) : undefined}
+                    />
                   ))}
                 </View>
               ))}

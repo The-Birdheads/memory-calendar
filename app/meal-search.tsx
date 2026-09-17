@@ -67,6 +67,7 @@ export default function MealSearchScreen() {
       mealDate: values.mealDate,
       slot: values.slot,
       rating: values.rating,
+      calendarId: values.calendarId,
     });
     if (success) {
       closeForm();

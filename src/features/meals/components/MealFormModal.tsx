@@ -48,10 +48,10 @@ export interface MealFormModalProps {
   /** null keeps the modal closed; set it to open in create or edit mode. */
   target: MealFormTarget | null;
   /**
-   * The calendars the meal could belong to - shown so it's always clear
-   * which calendar a new meal is about to be added to (edit shows the
-   * record's own calendar, read-only; create shows a picker when there's
-   * more than one to choose from).
+   * The calendars the meal could belong to - shown as a picker (both modes)
+   * when there's more than one, so it's always clear which calendar the
+   * meal is in and lets it be moved to another one; a single calendar shows
+   * as a read-only label instead.
    */
   calendars: Calendar[];
   onClose: () => void;
@@ -193,7 +193,7 @@ function MealFormModalContent({
             {target.mode === "create" ? "献立を追加" : "献立の詳細"}
           </Text>
 
-          {target.mode === "create" && calendars.length > 1 ? (
+          {calendars.length > 1 ? (
             <View
               style={styles.calendarPickerField}
               testID="meal-form-calendar-picker"

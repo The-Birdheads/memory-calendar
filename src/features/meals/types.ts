@@ -50,6 +50,7 @@ export interface UpdateMealRecordInput {
   rating?: number | null;
   url?: string | null;
   memo?: string | null;
+  calendarId?: string;
 }
 
 export type MealError =

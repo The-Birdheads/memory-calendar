@@ -463,6 +463,34 @@ describe("updateMealRecord", () => {
     expect(eq).toHaveBeenCalledWith("id", "meal-1");
   });
 
+  it("includes calendar_id in the update payload when calendarId is given, so a meal record can be moved to another calendar (regression)", async () => {
+    const row = {
+      id: "meal-1",
+      calendar_id: "cal-2",
+      meal_date: "2026-08-20",
+      slot: "breakfast",
+      title: "トーストとコーヒー",
+      rating: null,
+      url: null,
+      memo: null,
+      created_by: "user-1",
+      created_at: "2026-08-18T00:00:00.000Z",
+      updated_at: "2026-08-19T00:00:00.000Z",
+    };
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await updateMealRecord(client, "meal-1", { calendarId: "cal-2" });
+
+    expect(result.ok).toBe(true);
+    expect(update).toHaveBeenCalledWith({ calendar_id: "cal-2" });
+  });
+
   it("returns a ValidationError without calling Supabase when the title is emptied", async () => {
     const client = { from: jest.fn() } as unknown as SupabaseClient;
 
