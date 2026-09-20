@@ -22,7 +22,7 @@ import { expandEventDateKeys } from "../../src/features/events/eventDateKeys";
 import { formatDayHeaderLabel } from "../../src/features/events/formatDayHeaderLabel";
 import { useEventsInRangeForCalendars } from "../../src/features/events/hooks";
 import { isJapaneseHoliday } from "../../src/features/events/japaneseHolidays";
-import { buildMonthGrid } from "../../src/features/events/monthGrid";
+import { buildMonthGrid, type MonthGridCell } from "../../src/features/events/monthGrid";
 import { buildMonthEventGroups } from "../../src/features/events/monthEventList";
 import { buildMultiDayBanners, excludeBannerEvents, fillBannerGaps } from "../../src/features/events/multiDayBanners";
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
@@ -92,6 +92,15 @@ function resolveEventColor(
   calendarColorById: Record<string, string>
 ): string {
   return event.tagColor ?? calendarColorById[event.calendarId] ?? "#999999";
+}
+
+// グリッドは前後月の数日を含めて週を埋めるので、予定の取得範囲もその
+// パディング分を含む必要がある(そうしないと見えている日なのに予定が
+// 表示されない)。
+function rangeForGrid(grid: MonthGridCell[][]) {
+  const firstWeek = grid[0];
+  const lastWeek = grid[grid.length - 1];
+  return computeDateKeyRange(firstWeek[0].dateKey, lastWeek[lastWeek.length - 1].dateKey);
 }
 
 // TimeTree風に、時間指定のある予定(終日でない)は背景を薄い半透明にして
@@ -208,18 +217,19 @@ export default function CalendarScreen() {
     date.setUTCMonth(date.getUTCMonth() + 1);
     return buildMonthGrid(date);
   }, [focusedDate]);
-  // The grid shows a few leading/trailing days from the adjacent months to
-  // pad out full weeks, so the query range must span the whole padded grid
-  // (not just the focused calendar month) or events on those visible days
-  // silently fail to show up.
-  const range = useMemo(() => {
-    const firstWeek = monthGrid[0];
-    const lastWeek = monthGrid[monthGrid.length - 1];
-    return computeDateKeyRange(firstWeek[0].dateKey, lastWeek[lastWeek.length - 1].dateKey);
-  }, [monthGrid]);
+  const range = useMemo(() => rangeForGrid(monthGrid), [monthGrid]);
+  // 前月・翌月の予定もバックグラウンドで先読みしておくと、実際にスワイプ/
+  // 矢印でそちらへ移動した瞬間には既にキャッシュ済みになっていて、毎回
+  // 読み込み待ちにならずに済む(2026-09、月送り後の予定表示が遅く感じる
+  // のを改善)。
+  const prefetchRanges = useMemo(
+    () => [rangeForGrid(prevMonthGrid), rangeForGrid(nextMonthGrid)],
+    [prevMonthGrid, nextMonthGrid]
+  );
   const { events, isLoading: isLoadingEvents, refetch: refetchEvents } = useEventsInRangeForCalendars(
     activeCalendarIds,
-    range
+    range,
+    prefetchRanges
   );
 
   // 個人カレンダーの予定であることを、色とは別の要素(🔒)で見分けられるように
@@ -403,7 +413,10 @@ export default function CalendarScreen() {
     Animated.timing(gridTranslateXRef.current, {
       toValue: -paneWidth - direction * paneWidth,
       duration: 220,
-      useNativeDriver: true,
+      // useNativeDriver: false (下のuseLayoutEffectのコメント参照) - このアニメー
+      // ション自体はネイティブ駆動でも問題ないが、位置リセットのsetValueと
+      // 同じノードを同じ駆動方式で扱わないとRNがエラーを投げるため揃える。
+      useNativeDriver: false,
     }).start(() => {
       pendingSwipeResetRef.current = true;
       shiftFocusedDate(direction);
@@ -416,7 +429,14 @@ export default function CalendarScreen() {
   // 「後」に(非同期に)実行されるため、一瞬だけ位置リセット前の(=スワイプ
   // 先の隣パネルがまだ表示された)フレームが見えてしまうチラつきが残っていた
   // (2026-09修正)。useLayoutEffectなら描画がユーザーに見える前に同期的に
-  // リセットが反映されるため、そのフレームが見えることはない。
+  // リセットが反映されるため、そのフレームが見えることはない…はずだったが、
+  // 実機ではそれでもまだチラついた(2026-09再修正)。原因はuseNativeDriver:
+  // trueだと、このsetValueによる位置変更がJSスレッドの(useLayoutEffectを
+  // 含む)コミットとは別に、ネイティブスレッド側で非同期に反映されるため、
+  // Reactの再レンダー(新しい月のパネル内容の差し替え)と同じフレームに
+  // 揃う保証が無かったこと。useNativeDriver: falseにすると、アニメーションも
+  // このsetValueも同じJS駆動の経路(Reactのコミット/描画と同期)を通るように
+  // なり、両者が必ず同じフレームで反映されるようになる。
   useLayoutEffect(() => {
     if (!pendingSwipeResetRef.current) return;
     pendingSwipeResetRef.current = false;
@@ -443,7 +463,7 @@ export default function CalendarScreen() {
           if (direction !== null) {
             animateMonthSwipe(direction);
           } else {
-            Animated.spring(gridTranslateXRef.current, { toValue: -paneWidth, useNativeDriver: true }).start();
+            Animated.spring(gridTranslateXRef.current, { toValue: -paneWidth, useNativeDriver: false }).start();
           }
         },
       }),

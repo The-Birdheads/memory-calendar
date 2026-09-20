@@ -1,7 +1,8 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import MealsScreen from "../../app/(tabs)/meals";
-import { useMyCalendars } from "../../src/features/calendars/hooks";
+import { useAuthSession } from "../../src/features/auth/hooks";
+import { useCalendarMembersByCalendars, useMyCalendars } from "../../src/features/calendars/hooks";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
@@ -29,6 +30,11 @@ jest.mock("../../src/shared/api/supabaseClient", () => ({
 
 jest.mock("../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
+  useCalendarMembersByCalendars: jest.fn(),
+}));
+
+jest.mock("../../src/features/auth/hooks", () => ({
+  useAuthSession: jest.fn(),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => {
@@ -52,6 +58,8 @@ describe("13.4 献立記録フローの検証", () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-08-18T12:00:00.000Z"));
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null, refetch: jest.fn() });
+    (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1", email: "user1@example.com" } }, isLoading: false });
+    (useCalendarMembersByCalendars as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
   });
 
   afterEach(() => {

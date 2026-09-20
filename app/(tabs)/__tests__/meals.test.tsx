@@ -2,7 +2,8 @@ import { fireEvent, render, waitFor, within } from "@testing-library/react-nativ
 import { router } from "expo-router";
 
 import MealsScreen from "../meals";
-import { useMyCalendars } from "../../../src/features/calendars/hooks";
+import { useAuthSession } from "../../../src/features/auth/hooks";
+import { useCalendarMembersByCalendars, useMyCalendars } from "../../../src/features/calendars/hooks";
 import {
   useCreateMealRecord,
   useDeleteMealRecord,
@@ -30,6 +31,11 @@ jest.mock("expo-router", () => {
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
   useMyCalendars: jest.fn(),
+  useCalendarMembersByCalendars: jest.fn(),
+}));
+
+jest.mock("../../../src/features/auth/hooks", () => ({
+  useAuthSession: jest.fn(),
 }));
 
 jest.mock("../../../src/features/meals/hooks", () => ({
@@ -62,12 +68,14 @@ const RECORDS = [
   { id: "meal-2", calendarId: "cal-1", mealDate: "2026-08-25", slot: "dinner", title: "カレー", rating: null, url: "https://example.com/curry", memo: "スパイスから作る", createdBy: "user-2" },
 ];
 
-function mockCommonHooks(mealRecords: typeof RECORDS, refetch = jest.fn()) {
-  (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null, refetch: jest.fn() });
+function mockCommonHooks(mealRecords: typeof RECORDS, refetch = jest.fn(), calendars: typeof CALENDARS = CALENDARS) {
+  (useMyCalendars as jest.Mock).mockReturnValue({ calendars, isLoading: false, error: null, refetch: jest.fn() });
   (useMealRecordsByCalendars as jest.Mock).mockReturnValue({ mealRecords, isLoading: false, error: null, refetch });
   (useCreateMealRecord as jest.Mock).mockReturnValue({ createMealRecord: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useDeleteMealRecord as jest.Mock).mockReturnValue({ deleteMealRecord: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
+  (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1", email: "user1@example.com" } }, isLoading: false });
+  (useCalendarMembersByCalendars as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
 }
 
 describe("MealsScreen", () => {
@@ -138,6 +146,29 @@ describe("MealsScreen", () => {
       const { getByTestId } = await renderPlanPanel();
 
       expect(within(getByTestId("meal-item-meal-2")).queryByText("我が家")).toBeNull();
+    });
+
+    it("shows who added a meal on a shared (group) calendar (regression)", async () => {
+      const groupCalendars = [{ ...CALENDARS[0], kind: "group" as const }, CALENDARS[1]];
+      mockCommonHooks(RECORDS, jest.fn(), groupCalendars); // meal-2 (cal-1, "group") was created by user-2
+      (useCalendarMembersByCalendars as jest.Mock).mockReturnValue({
+        members: [{ calendarId: "cal-1", userId: "user-2", role: "member", joinedAt: "2026-08-01", displayName: "はなこ" }],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await renderPlanPanel();
+
+      expect(within(getByTestId("meal-item-meal-2")).getByText("はなこが追加")).toBeTruthy();
+    });
+
+    it("does not show who added a meal on a personal calendar (no one to share the info with)", async () => {
+      mockCommonHooks(RECORDS); // CALENDARS has no "kind" (not "group")
+
+      const { getByTestId } = await renderPlanPanel();
+
+      expect(within(getByTestId("meal-item-meal-2")).queryByTestId("meal-item-creator-meal-2")).toBeNull();
     });
 
     it("shows an empty state with a hint to use the + button when there are no upcoming meals", async () => {

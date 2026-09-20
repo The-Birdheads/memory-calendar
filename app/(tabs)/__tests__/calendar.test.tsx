@@ -320,7 +320,7 @@ describe("CalendarScreen", () => {
     await fireEvent.press(getByTestId("calendar-filter"));
 
     await waitFor(() =>
-      expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(["cal-1", "cal-2"], expect.anything())
+      expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(["cal-1", "cal-2"], expect.anything(), expect.anything())
     );
     expect(getByTestId("calendar-switch-cal-1").props.style).toEqual(
       expect.objectContaining({ borderColor: "#2f6fed" })
@@ -340,7 +340,7 @@ describe("CalendarScreen", () => {
     // Both calendars start selected; tapping cal-2's chip toggles just it off.
     await fireEvent.press(getByTestId("calendar-switch-cal-2"));
 
-    await waitFor(() => expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(["cal-1"], expect.anything()));
+    await waitFor(() => expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(["cal-1"], expect.anything(), expect.anything()));
   });
 
   it("reselects a calendar (toggling it back on) when its deselected chip is pressed again", async () => {
@@ -351,12 +351,12 @@ describe("CalendarScreen", () => {
     await fireEvent.press(getByTestId("calendar-filter"));
 
     await fireEvent.press(getByTestId("calendar-switch-cal-2"));
-    await waitFor(() => expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(["cal-1"], expect.anything()));
+    await waitFor(() => expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(["cal-1"], expect.anything(), expect.anything()));
 
     await fireEvent.press(getByTestId("calendar-switch-cal-2"));
 
     await waitFor(() =>
-      expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(["cal-1", "cal-2"], expect.anything())
+      expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(["cal-1", "cal-2"], expect.anything(), expect.anything())
     );
   });
 
@@ -373,7 +373,8 @@ describe("CalendarScreen", () => {
     await waitFor(() =>
       expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(
         ["cal-1", "cal-2"],
-        computeDateKeyRange("2026-07-26", "2026-09-05")
+        computeDateKeyRange("2026-07-26", "2026-09-05"),
+        expect.anything()
       )
     );
   });
@@ -985,7 +986,8 @@ describe("CalendarScreen", () => {
     await waitFor(() =>
       expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(
         ["cal-1", "cal-2"],
-        computeDateKeyRange("2026-08-30", "2026-10-03")
+        computeDateKeyRange("2026-08-30", "2026-10-03"),
+        expect.anything()
       )
     );
 
@@ -1006,7 +1008,8 @@ describe("CalendarScreen", () => {
     await waitFor(() =>
       expect(useEventsInRangeForCalendars).toHaveBeenLastCalledWith(
         ["cal-2"],
-        computeDateKeyRange("2026-08-30", "2026-10-03")
+        computeDateKeyRange("2026-08-30", "2026-10-03"),
+        expect.anything()
       )
     );
 

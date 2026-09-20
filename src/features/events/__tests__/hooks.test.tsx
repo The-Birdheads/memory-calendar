@@ -333,6 +333,89 @@ describe("useEventsInRangeForCalendars", () => {
       expect(listEventsInRangeForCalendars).toHaveBeenLastCalledWith({}, ["cal-1", "cal-2"], range)
     );
   });
+
+  describe("先読み(隣の月への切り替えを速く感じさせる)", () => {
+    const rangeB = { start: "2026-10-01T00:00:00.000Z", end: "2026-10-31T23:59:59.999Z" };
+
+    it("prefetches the given ranges in the background, without delaying or reflecting in the visible loading state", async () => {
+      (getSupabaseClient as jest.Mock).mockReturnValue({});
+      const eventsA = [{ id: "event-a", calendarId: "cal-1", title: "A" }];
+      const eventsB = [{ id: "event-b", calendarId: "cal-1", title: "B" }];
+      (listEventsInRangeForCalendars as jest.Mock).mockImplementation((_client, _ids, r) =>
+        Promise.resolve({ ok: true, value: r === range ? eventsA : eventsB })
+      );
+
+      const { result } = await renderHook(() => useEventsInRangeForCalendars(["cal-1"], range, [rangeB]));
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.events).toEqual(eventsA); // the visible range, not the prefetched one
+      await waitFor(() =>
+        expect(listEventsInRangeForCalendars).toHaveBeenCalledWith({}, ["cal-1"], rangeB)
+      );
+    });
+
+    it("serves a prefetched range's events immediately (no loading flicker) once the caller navigates to it, then quietly refreshes it (regression: switching months always showed a loading state even for an already-warmed range)", async () => {
+      (getSupabaseClient as jest.Mock).mockReturnValue({});
+      const eventsA = [{ id: "event-a", calendarId: "cal-1", title: "A" }];
+      const staleEventsB = [{ id: "event-b", calendarId: "cal-1", title: "B (stale)" }];
+      const freshEventsB = [{ id: "event-b", calendarId: "cal-1", title: "B (fresh)" }];
+      (listEventsInRangeForCalendars as jest.Mock).mockImplementation((_client, _ids, r) =>
+        Promise.resolve({ ok: true, value: r === range ? eventsA : staleEventsB })
+      );
+
+      const { result, rerender } = await renderHook(
+        ({ r, prefetch }: { r: typeof range; prefetch: typeof range[] }) =>
+          useEventsInRangeForCalendars(["cal-1"], r, prefetch),
+        { initialProps: { r: range, prefetch: [rangeB] } }
+      );
+      // Let the initial load (range A) and the background prefetch (range B) both settle.
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      await waitFor(() =>
+        expect(listEventsInRangeForCalendars).toHaveBeenCalledWith({}, ["cal-1"], rangeB)
+      );
+
+      // Now the caller "navigates" to B (e.g. swiped a month forward) - B should already be warm.
+      // The background refresh's fetch is held open (a deferred promise) so the
+      // "instant from cache" moment can be observed before it resolves.
+      let resolveFreshFetch!: (value: { ok: true; value: typeof freshEventsB }) => void;
+      const freshFetch = new Promise<{ ok: true; value: typeof freshEventsB }>((resolve) => {
+        resolveFreshFetch = resolve;
+      });
+      (listEventsInRangeForCalendars as jest.Mock).mockImplementation((_client, _ids, r) =>
+        r === rangeB ? freshFetch : Promise.resolve({ ok: true, value: eventsA })
+      );
+      await rerender({ r: rangeB, prefetch: [range] });
+
+      // Served from cache instantly - no loading state, and not the pre-navigation range's data.
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.events).toEqual(staleEventsB);
+
+      // ...then quietly refreshed with the latest data once the background fetch resolves.
+      resolveFreshFetch({ ok: true, value: freshEventsB });
+      await waitFor(() => expect(result.current.events).toEqual(freshEventsB));
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    it("does not re-request a prefetch range that's already cached", async () => {
+      (getSupabaseClient as jest.Mock).mockReturnValue({});
+      (listEventsInRangeForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+
+      const { rerender } = await renderHook(
+        ({ prefetch }: { prefetch: typeof range[] }) => useEventsInRangeForCalendars(["cal-1"], range, prefetch),
+        { initialProps: { prefetch: [rangeB] } }
+      );
+      await waitFor(() =>
+        expect(listEventsInRangeForCalendars).toHaveBeenCalledWith({}, ["cal-1"], rangeB)
+      );
+      const callCountAfterFirstPrefetch = (listEventsInRangeForCalendars as jest.Mock).mock.calls.length;
+
+      await rerender({ prefetch: [rangeB] });
+
+      // give any errant re-fetch a chance to fire before asserting it didn't
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect((listEventsInRangeForCalendars as jest.Mock).mock.calls.length).toBe(callCountAfterFirstPrefetch);
+    });
+  });
 });
 
 describe("useEventReminders", () => {

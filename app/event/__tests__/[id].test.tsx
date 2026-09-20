@@ -1014,6 +1014,66 @@ describe("EventDetailScreen", () => {
     expect(getByText(/https:\/\/example\.com/)).toBeTruthy();
   });
 
+  describe("サムネイル画像のヘッダー表示", () => {
+    it("shows the thumbnail photo as a header image at the top when one is set", async () => {
+      mockCommonHooks({
+        photos: [
+          { id: "photo-1", eventId: "event-1", storagePath: "event-1/a.jpg", uploadedBy: "user-1", isThumbnail: false, createdAt: "2026-01-01", url: "https://example.com/a.jpg" },
+          { id: "photo-2", eventId: "event-1", storagePath: "event-1/b.jpg", uploadedBy: "user-1", isThumbnail: true, createdAt: "2026-01-01", url: "https://example.com/thumb.jpg" },
+        ],
+      });
+
+      const { getByTestId } = await render(<EventDetailScreen />);
+
+      expect(getByTestId("event-detail-header-image").props.source).toEqual({ uri: "https://example.com/thumb.jpg" });
+    });
+
+    it("shows no header image when no photo is marked as the thumbnail", async () => {
+      mockCommonHooks({
+        photos: [
+          { id: "photo-1", eventId: "event-1", storagePath: "event-1/a.jpg", uploadedBy: "user-1", isThumbnail: false, createdAt: "2026-01-01", url: "https://example.com/a.jpg" },
+        ],
+      });
+
+      const { queryByTestId } = await render(<EventDetailScreen />);
+
+      expect(queryByTestId("event-detail-header-image")).toBeNull();
+    });
+
+    it("shows no header image when there are no photos at all", async () => {
+      mockCommonHooks({ photos: [] });
+
+      const { queryByTestId } = await render(<EventDetailScreen />);
+
+      expect(queryByTestId("event-detail-header-image")).toBeNull();
+    });
+  });
+
+  describe("追加者の表示(共有カレンダー)", () => {
+    it("shows who added the event for a shared (group) calendar", async () => {
+      mockCommonHooks({
+        calendarKind: "group",
+        event: { ...FUTURE_EVENT, createdBy: "user-2" },
+        members: [
+          { userId: "user-1", role: "owner", displayName: "自分" },
+          { userId: "user-2", role: "member", displayName: "はなこ" },
+        ],
+      });
+
+      const { getByTestId } = await render(<EventDetailScreen />);
+
+      expect(getByTestId("event-detail-created-by").props.children.join("")).toContain("はなこ");
+    });
+
+    it("does not show who added the event for a personal calendar (no one to share the info with)", async () => {
+      mockCommonHooks({ calendarKind: "personal" });
+
+      const { queryByTestId } = await render(<EventDetailScreen />);
+
+      expect(queryByTestId("event-detail-created-by")).toBeNull();
+    });
+  });
+
   it("uses icons instead of text for the 編集/追加 buttons (title edit, tag edit, ToDo add, photo add)", async () => {
     mockCommonHooks({ event: PAST_EVENT }); // past event, so the photo-add button also renders
 

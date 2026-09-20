@@ -8,6 +8,7 @@ import {
   joinByInvite,
   leaveOrDeleteCalendar,
   listMembers,
+  listMembersForCalendars,
   listMyCalendars,
   removeMember,
   updateCalendar,
@@ -208,6 +209,42 @@ export function useCalendarMembers(calendarId: string): UseCalendarMembersResult
     }
     setIsLoading(false);
   }, [calendarId]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { members, isLoading, error, refetch };
+}
+
+export interface UseCalendarMembersByCalendarsResult {
+  members: CalendarMember[];
+  isLoading: boolean;
+  error: CalendarError | null;
+  refetch: () => Promise<void>;
+}
+
+/** Same as useCalendarMembers but across several calendars at once - for
+ * screens (like the meal tab) that show items from more than one calendar
+ * and need to resolve a creator's display name regardless of which one. */
+export function useCalendarMembersByCalendars(calendarIds: string[]): UseCalendarMembersByCalendarsResult {
+  const [members, setMembers] = useState<CalendarMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<CalendarError | null>(null);
+  const calendarIdsKey = calendarIds.join(",");
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const result = await listMembersForCalendars(getSupabaseClient(), calendarIds);
+    if (result.ok) {
+      setMembers(result.value);
+      setError(null);
+    } else {
+      setError(result.error);
+    }
+    setIsLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarIdsKey stands in for calendarIds.
+  }, [calendarIdsKey]);
 
   useEffect(() => {
     refetch();

@@ -2,7 +2,8 @@ import { useCallback, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Tabs, router, useFocusEffect } from "expo-router";
 
-import { useMyCalendars } from "../../src/features/calendars/hooks";
+import { useAuthSession } from "../../src/features/auth/hooks";
+import { useCalendarMembersByCalendars, useMyCalendars } from "../../src/features/calendars/hooks";
 import { CalendarSwitchChip } from "../../src/features/calendars/components/CalendarSwitchChip";
 import { groupMealsByDate, groupMealsByMonth } from "../../src/features/meals/grouping";
 import {
@@ -62,6 +63,7 @@ export default function MealsScreen() {
  * =アンマウントされるたびにリセットされる、共通フィルターの決まり)。
  */
 function useCalendarFilter() {
+  const { session } = useAuthSession();
   const { calendars, refetch: refetchCalendars } = useMyCalendars();
   // 他画面と同じ「デフォルトで全カレンダー選択、タップで表示/非表示切り替え」方式。
   // null = まだ明示的に選択を触っていない(=全カレンダー)。
@@ -71,6 +73,21 @@ function useCalendarFilter() {
   // 新規記録は複数カレンダーへ同時に作れないので、選択中(なければ先頭)の
   // カレンダーを保存先にする。
   const createTargetCalendarId = activeCalendarIds[0] ?? calendars[0]?.id ?? "";
+
+  // 「誰が追加したか」の表示は共有カレンダーの献立にだけ意味があるので、
+  // メンバー一覧も共有カレンダーの分だけ取得する(2026-09)。
+  const groupCalendarIds = useMemo(
+    () => calendars.filter((calendar) => calendar.kind === "group").map((calendar) => calendar.id),
+    [calendars]
+  );
+  const { members } = useCalendarMembersByCalendars(groupCalendarIds);
+  const resolveMemberLabel = (userId: string | null): string => {
+    if (userId === null) return "元メンバー";
+    const member = members.find((m) => m.userId === userId);
+    if (member?.displayName) return member.displayName;
+    if (userId === session?.user.id) return session?.user.email ?? "メンバー";
+    return "メンバー";
+  };
 
   const handleToggleCalendar = (calendarId: string) => {
     setSelectedCalendarIds((prev) => {
@@ -100,7 +117,15 @@ function useCalendarFilter() {
     }, [refetchCalendars, handleResetFilter])
   );
 
-  return { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter };
+  return {
+    calendars,
+    activeCalendarIds,
+    createTargetCalendarId,
+    isFilterActive,
+    handleToggleCalendar,
+    handleResetFilter,
+    resolveMemberLabel,
+  };
 }
 
 /**
@@ -186,8 +211,15 @@ function useMealFormController(createTargetCalendarId: string, refetch: () => Pr
 }
 
 function PlanPanel() {
-  const { calendars, activeCalendarIds, createTargetCalendarId, isFilterActive, handleToggleCalendar, handleResetFilter } =
-    useCalendarFilter();
+  const {
+    calendars,
+    activeCalendarIds,
+    createTargetCalendarId,
+    isFilterActive,
+    handleToggleCalendar,
+    handleResetFilter,
+    resolveMemberLabel,
+  } = useCalendarFilter();
   const { mealRecords, isLoading, refetch } = useMealRecordsByCalendars(activeCalendarIds);
   // 表示中のカレンダーが複数ある時だけ、行にどのカレンダーの献立かを添える
   // (1つしかない時はどうせ全部同じなので出さない)。
@@ -263,6 +295,11 @@ function PlanPanel() {
                   record={record}
                   onPress={() => openEdit(record)}
                   calendar={calendars.length > 1 ? calendarById.get(record.calendarId) : undefined}
+                  creatorLabel={
+                    calendarById.get(record.calendarId)?.kind === "group"
+                      ? resolveMemberLabel(record.createdBy)
+                      : undefined
+                  }
                 />
               ))}
             </View>
@@ -299,6 +336,7 @@ function LogPanel() {
     isFilterActive: isCalendarFilterActive,
     handleToggleCalendar,
     handleResetFilter: handleResetCalendarFilter,
+    resolveMemberLabel,
   } = useCalendarFilter();
   const { mealRecords, isLoading, refetch } = useMealRecordsByCalendars(activeCalendarIds);
   const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
@@ -408,6 +446,11 @@ function LogPanel() {
                       record={record}
                       onPress={() => openEdit(record)}
                       calendar={calendars.length > 1 ? calendarById.get(record.calendarId) : undefined}
+                      creatorLabel={
+                        calendarById.get(record.calendarId)?.kind === "group"
+                          ? resolveMemberLabel(record.createdBy)
+                          : undefined
+                      }
                     />
                   ))}
                 </View>

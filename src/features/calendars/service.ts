@@ -227,6 +227,29 @@ export async function listMembers(
   return ok((data as CalendarMembershipRow[]).map(mapCalendarMembershipRow));
 }
 
+/** Same as listMembers, but across several calendars at once - for screens
+ * (like the meal tab) that show items from more than one calendar and need
+ * to resolve a creator's display name regardless of which one it's in. */
+export async function listMembersForCalendars(
+  client: SupabaseClient,
+  calendarIds: string[]
+): Promise<Result<CalendarMember[], CalendarError>> {
+  if (calendarIds.length === 0) {
+    return ok([]);
+  }
+
+  const { data, error } = await client
+    .from("calendar_members")
+    .select("*, profiles(display_name)")
+    .in("calendar_id", calendarIds);
+
+  if (error || !data) {
+    return err(mapCalendarError(error as PostgrestError));
+  }
+
+  return ok((data as CalendarMembershipRow[]).map(mapCalendarMembershipRow));
+}
+
 export async function removeMember(
   client: SupabaseClient,
   calendarId: string,

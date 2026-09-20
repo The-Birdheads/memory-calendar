@@ -8,12 +8,14 @@ import {
   joinByInvite,
   leaveOrDeleteCalendar,
   listMembers,
+  listMembersForCalendars,
   listMyCalendars,
   removeMember,
   updateCalendar,
 } from "../service";
 import {
   useCalendarMembers,
+  useCalendarMembersByCalendars,
   useCreateCalendar,
   useCreateInvite,
   useJoinByInvite,
@@ -31,6 +33,7 @@ jest.mock("../../../shared/api/supabaseClient", () => ({
 jest.mock("../service", () => ({
   listMyCalendars: jest.fn(),
   listMembers: jest.fn(),
+  listMembersForCalendars: jest.fn(),
   removeMember: jest.fn(),
   createCalendar: jest.fn(),
   updateCalendar: jest.fn(),
@@ -287,6 +290,52 @@ describe("useCalendarMembers", () => {
     });
 
     expect(result.current.members).toEqual([members[0]]);
+  });
+});
+
+describe("useCalendarMembersByCalendars", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("loads members across the given calendars", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const members = [
+      { calendarId: "cal-1", userId: "u1", role: "owner", joinedAt: "2026-08-17", displayName: "たろう" },
+      { calendarId: "cal-2", userId: "u2", role: "owner", joinedAt: "2026-08-17", displayName: "はなこ" },
+    ];
+    (listMembersForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: members });
+
+    const { result } = await renderHook(() => useCalendarMembersByCalendars(["cal-1", "cal-2"]));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.members).toEqual(members);
+    expect(listMembersForCalendars).toHaveBeenCalledWith({}, ["cal-1", "cal-2"]);
+  });
+
+  it("returns an empty list when given no calendar ids", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (listMembersForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+
+    const { result } = await renderHook(() => useCalendarMembersByCalendars([]));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.members).toEqual([]);
+  });
+
+  it("reloads when the set of calendar ids changes", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (listMembersForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+
+    const { rerender } = await renderHook(
+      ({ ids }: { ids: string[] }) => useCalendarMembersByCalendars(ids),
+      { initialProps: { ids: ["cal-1"] } }
+    );
+    await waitFor(() => expect(listMembersForCalendars).toHaveBeenCalledWith({}, ["cal-1"]));
+
+    await rerender({ ids: ["cal-1", "cal-2"] });
+
+    await waitFor(() => expect(listMembersForCalendars).toHaveBeenLastCalledWith({}, ["cal-1", "cal-2"]));
   });
 });
 

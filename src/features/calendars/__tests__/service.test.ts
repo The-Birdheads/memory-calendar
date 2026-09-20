@@ -8,6 +8,7 @@ import {
   joinByInvite,
   leaveOrDeleteCalendar,
   listMembers,
+  listMembersForCalendars,
   listMyCalendars,
   removeMember,
   updateCalendar,
@@ -436,6 +437,54 @@ describe("listMembers", () => {
     } as unknown as SupabaseClient;
 
     const result = await listMembers(client, "cal-1");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("listMembersForCalendars", () => {
+  it("returns the members across every given calendar", async () => {
+    const rows = [
+      { calendar_id: "cal-1", user_id: "user-1", role: "owner", joined_at: "2026-08-17T00:00:00.000Z", profiles: { display_name: "たろう" } },
+      { calendar_id: "cal-2", user_id: "user-2", role: "owner", joined_at: "2026-08-17T01:00:00.000Z", profiles: { display_name: "はなこ" } },
+    ];
+    const in_ = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const select = jest.fn().mockReturnValue({ in: in_ });
+    const client = {
+      from: jest.fn().mockReturnValue({ select }),
+    } as unknown as SupabaseClient;
+
+    const result = await listMembersForCalendars(client, ["cal-1", "cal-2"]);
+
+    expect(result).toEqual({
+      ok: true,
+      value: [
+        { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう" },
+        { calendarId: "cal-2", userId: "user-2", role: "owner", joinedAt: "2026-08-17T01:00:00.000Z", displayName: "はなこ" },
+      ],
+    });
+    expect(client.from).toHaveBeenCalledWith("calendar_members");
+    expect(select).toHaveBeenCalledWith("*, profiles(display_name)");
+    expect(in_).toHaveBeenCalledWith("calendar_id", ["cal-1", "cal-2"]);
+  });
+
+  it("returns an empty list without querying when given no calendar ids", async () => {
+    const client = { from: jest.fn() } as unknown as SupabaseClient;
+
+    const result = await listMembersForCalendars(client, []);
+
+    expect(result).toEqual({ ok: true, value: [] });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("maps a Supabase error to Forbidden", async () => {
+    const in_ = jest.fn().mockResolvedValue({ data: null, error: { message: "network down", code: "500" } });
+    const select = jest.fn().mockReturnValue({ in: in_ });
+    const client = {
+      from: jest.fn().mockReturnValue({ select }),
+    } as unknown as SupabaseClient;
+
+    const result = await listMembersForCalendars(client, ["cal-1"]);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

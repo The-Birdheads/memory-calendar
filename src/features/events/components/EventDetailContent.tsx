@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -155,6 +156,9 @@ export function EventDetailContent({
   const { setPhotoThumbnail } = useSetPhotoThumbnail();
 
   const isPast = event ? new Date(event.endAt) < new Date() : false;
+  // 思い出のサムネイルに設定された写真があれば、画面上部にヘッダー画像として
+  // 見せる(2026-09)。
+  const thumbnailPhoto = photos.find((photo) => photo.isThumbnail) ?? null;
 
   const resolveMemberLabel = (userId: string | null): string => {
     // 投稿者が退会してuser_idがNULL化されたコメントも、この汎用フォールバックでカバーされる
@@ -544,6 +548,9 @@ export function EventDetailContent({
       contentContainerStyle={styles.contentContainer}
       keyboardShouldPersistTaps="handled"
     >
+    {thumbnailPhoto?.url ? (
+      <Image testID="event-detail-header-image" source={{ uri: thumbnailPhoto.url }} style={styles.headerImage} />
+    ) : null}
     <View style={styles.headerCard}>
       {currentCalendar ? (
         <TouchableOpacity
@@ -569,6 +576,12 @@ export function EventDetailContent({
           <Icon name="edit" size={16} color="#2f6fed" />
         </TouchableOpacity>
       </View>
+
+      {!isPersonalCalendar ? (
+        <Text testID="event-detail-created-by" style={styles.createdByText}>
+          {resolveMemberLabel(event.createdBy)}が追加
+        </Text>
+      ) : null}
 
       <View style={styles.detailInfo}>
         <View style={styles.detailRow}>
@@ -751,6 +764,11 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingVertical: 12,
   },
+  headerImage: {
+    width: "100%",
+    height: 200,
+    marginBottom: 10,
+  },
   headerCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -782,6 +800,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 16,
+  },
+  createdByText: {
+    fontSize: 12,
+    color: "#999",
+    paddingHorizontal: 16,
+    paddingTop: 2,
   },
   title: {
     fontSize: 20,

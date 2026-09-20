@@ -28,11 +28,17 @@ export interface MealRowProps {
    * わかるようにする(2026-09)。
    */
   calendar?: Calendar;
+  /**
+   * 追加者(渡された場合のみ表示 - 呼び出し側で共有カレンダーの献立にだけ
+   * record.createdByから解決して渡す。個人用カレンダーでは共有相手が
+   * いないため呼び出し側が渡さない)。
+   */
+  creatorLabel?: string;
 }
 
 /** 献立1件分の行 - 献立タブ(予定/記録パネル)と献立をさがす画面の検索結果、
  * どちらも同じ見た目・同じ「タップで編集」の挙動にするための共通部品。 */
-export function MealRow({ record, onPress, dateLabel, calendar }: MealRowProps) {
+export function MealRow({ record, onPress, dateLabel, calendar, creatorLabel }: MealRowProps) {
   return (
     <TouchableOpacity testID={`meal-item-${record.id}`} style={styles.mealRow} onPress={onPress}>
       <View style={styles.mealRowSlotChip}>
@@ -50,6 +56,11 @@ export function MealRow({ record, onPress, dateLabel, calendar }: MealRowProps) 
               textStyle={styles.mealRowCalendarLabel}
               iconSize={11}
             />
+          ) : null}
+          {creatorLabel ? (
+            <Text testID={`meal-item-creator-${record.id}`} style={styles.mealRowCreatorLabel}>
+              {creatorLabel}が追加
+            </Text>
           ) : null}
           <RatingStars rating={record.rating} testIDPrefix={`meal-item-rating-${record.id}`} size={12} />
           {record.url ? <Icon testID={`meal-url-icon-${record.id}`} name="link" size={12} color="#2f6fed" /> : null}
@@ -99,6 +110,10 @@ const styles = StyleSheet.create({
     color: "#999",
   },
   mealRowCalendarLabel: {
+    fontSize: 12,
+    color: "#999",
+  },
+  mealRowCreatorLabel: {
     fontSize: 12,
     color: "#999",
   },
