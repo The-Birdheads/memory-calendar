@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import {
   createCalendar,
@@ -214,6 +215,31 @@ export function useCalendarMembers(calendarId: string): UseCalendarMembersResult
     refetch();
   }, [refetch]);
 
+  // メンバーの追加/削除だけでなく、メンバーの表示名(プロフィール設定で
+  // 変更可能)が変わった時も「◯◯さんが追加」等の表示に反映されるよう、
+  // profilesテーブルの変更も購読する(calendar_id列を持たないため絞り込み
+  // なしで購読する - 2026-09、名前を変更しても画面を開き直すまで反映
+  // されなかった不具合の修正)。
+  useEffect(() => {
+    const unsubscribeMembers = subscribeToTableChanges(
+      getSupabaseClient(),
+      `calendar-members-${calendarId}`,
+      "calendar_members",
+      refetch,
+      `calendar_id=eq.${calendarId}`
+    );
+    const unsubscribeProfiles = subscribeToTableChanges(
+      getSupabaseClient(),
+      "calendar-members-profiles",
+      "profiles",
+      refetch
+    );
+    return () => {
+      unsubscribeMembers();
+      unsubscribeProfiles();
+    };
+  }, [calendarId, refetch]);
+
   return { members, isLoading, error, refetch };
 }
 
@@ -249,6 +275,31 @@ export function useCalendarMembersByCalendars(calendarIds: string[]): UseCalenda
   useEffect(() => {
     refetch();
   }, [refetch]);
+
+  // useCalendarMembers同様、メンバーの追加/削除に加え表示名の変更も反映する。
+  useEffect(() => {
+    if (calendarIds.length === 0) return;
+    const unsubscribeMembers = calendarIds.map((calendarId) =>
+      subscribeToTableChanges(
+        getSupabaseClient(),
+        `calendar-members-by-calendars-${calendarId}`,
+        "calendar_members",
+        refetch,
+        `calendar_id=eq.${calendarId}`
+      )
+    );
+    const unsubscribeProfiles = subscribeToTableChanges(
+      getSupabaseClient(),
+      "calendar-members-by-calendars-profiles",
+      "profiles",
+      refetch
+    );
+    return () => {
+      unsubscribeMembers.forEach((unsubscribe) => unsubscribe());
+      unsubscribeProfiles();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarIdsKey stands in for calendarIds (see refetch above).
+  }, [calendarIdsKey, refetch]);
 
   return { members, isLoading, error, refetch };
 }

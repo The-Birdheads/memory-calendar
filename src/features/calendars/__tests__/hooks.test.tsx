@@ -291,6 +291,40 @@ describe("useCalendarMembers", () => {
 
     expect(result.current.members).toEqual([members[0]]);
   });
+
+  it("refetches when a member is added/removed for this calendar, and when any profile's display name changes (regression: renaming your account didn't update '◯◯さんが追加' until the screen was freshly remounted)", async () => {
+    const channel = { on: jest.fn(), subscribe: jest.fn(), unsubscribe: jest.fn() };
+    channel.on.mockReturnValue(channel);
+    channel.subscribe.mockReturnValue(channel);
+    const client = { channel: jest.fn(() => channel) };
+    (getSupabaseClient as jest.Mock).mockReturnValue(client);
+    (listMembers as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+
+    await renderHook(() => useCalendarMembers("cal-1"));
+
+    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^calendar-members-cal-1-/)));
+    expect(channel.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "calendar_members", filter: "calendar_id=eq.cal-1" },
+      expect.any(Function)
+    );
+    expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^calendar-members-profiles-/));
+    expect(channel.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "profiles" },
+      expect.any(Function)
+    );
+
+    const profilesOnChange = channel.on.mock.calls.find(
+      (call) => call[1].table === "profiles"
+    )?.[2];
+    (listMembers as jest.Mock).mockClear();
+    await act(async () => {
+      await profilesOnChange();
+    });
+
+    expect(listMembers).toHaveBeenCalledWith(client, "cal-1");
+  });
 });
 
 describe("useCalendarMembersByCalendars", () => {
@@ -336,6 +370,43 @@ describe("useCalendarMembersByCalendars", () => {
     await rerender({ ids: ["cal-1", "cal-2"] });
 
     await waitFor(() => expect(listMembersForCalendars).toHaveBeenLastCalledWith({}, ["cal-1", "cal-2"]));
+  });
+
+  it("refetches when any profile's display name changes (regression: same as useCalendarMembers)", async () => {
+    const channel = { on: jest.fn(), subscribe: jest.fn(), unsubscribe: jest.fn() };
+    channel.on.mockReturnValue(channel);
+    channel.subscribe.mockReturnValue(channel);
+    const client = { channel: jest.fn(() => channel) };
+    (getSupabaseClient as jest.Mock).mockReturnValue(client);
+    (listMembersForCalendars as jest.Mock).mockResolvedValue({ ok: true, value: [] });
+
+    await renderHook(() => useCalendarMembersByCalendars(["cal-1", "cal-2"]));
+
+    await waitFor(() =>
+      expect(channel.on).toHaveBeenCalledWith(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles" },
+        expect.any(Function)
+      )
+    );
+    expect(channel.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "calendar_members", filter: "calendar_id=eq.cal-1" },
+      expect.any(Function)
+    );
+    expect(channel.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "calendar_members", filter: "calendar_id=eq.cal-2" },
+      expect.any(Function)
+    );
+
+    const profilesOnChange = channel.on.mock.calls.find((call) => call[1].table === "profiles")?.[2];
+    (listMembersForCalendars as jest.Mock).mockClear();
+    await act(async () => {
+      await profilesOnChange();
+    });
+
+    expect(listMembersForCalendars).toHaveBeenCalledWith(client, ["cal-1", "cal-2"]);
   });
 });
 
