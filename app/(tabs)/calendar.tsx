@@ -27,7 +27,7 @@ import { buildMonthGrid, type MonthGridCell } from "../../src/features/events/mo
 import { buildMonthEventGroups } from "../../src/features/events/monthEventList";
 import { buildMultiDayBanners, excludeBannerEvents, fillBannerGaps } from "../../src/features/events/multiDayBanners";
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
-import type { Event } from "../../src/features/events/types";
+import type { Event, EventWithTagColor } from "../../src/features/events/types";
 import { SettingsHubModal } from "../../src/features/calendars/components/SettingsHubModal";
 import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
 import { BulkTagAssignPanel } from "../../src/features/tags/components/BulkTagAssignPanel";
@@ -109,6 +109,12 @@ function rangeForGrid(grid: MonthGridCell[][]) {
 // 文字をその予定の色にし、背景を予定の色で塗りつぶす終日の予定と見分けが
 // つくようにする(2026-09)。
 const TIMED_EVENT_BACKGROUND_ALPHA = 0.18;
+
+// 場所・メモ・URLのサマリー行を、同じ行にある「終日」/時刻テキストの開始位置に
+// 段落インデントとして揃える(丸10px+gap8px、個人カレンダーの鍵アイコンが
+// 挟まる行はさらに鍵アイコン12px+gap8px分)。
+const EVENT_SUMMARY_INDENT = 18;
+const EVENT_SUMMARY_INDENT_PERSONAL = EVENT_SUMMARY_INDENT + 20;
 
 function resolveEventPillStyle(
   event: Pick<Event, "calendarId" | "isAllDay"> & { tagColor?: string | null },
@@ -484,9 +490,10 @@ export default function CalendarScreen() {
   // (外側の行タップ=予定詳細へ、と衝突しないようネストしたTouchableOpacityにする)。
   const renderEventSummaryLines = (
     event: Pick<Event, "id" | "location" | "memo" | "url">,
-    testIDPrefix: string
+    testIDPrefix: string,
+    isPersonal: boolean
   ) => (
-    <>
+    <View style={{ marginLeft: isPersonal ? EVENT_SUMMARY_INDENT_PERSONAL : EVENT_SUMMARY_INDENT, gap: 4 }}>
       {event.location ? (
         <View style={styles.eventSummaryLine}>
           <Icon name="location" size={12} color="#999" />
@@ -515,8 +522,46 @@ export default function CalendarScreen() {
           </Text>
         </TouchableOpacity>
       ) : null}
-    </>
+    </View>
   );
+
+  // タイトル行の右側に、写真/コメント同様の軽い気づきバッジとしてタグの有無・
+  // 未達成ToDoの件数も表示する(タグは名前や色までは出さず、有無だけのマーク)。
+  const renderEventCounts = (
+    event: Pick<Event, "id"> & Pick<EventWithTagColor, "photoCount" | "commentCount" | "hasTags" | "incompleteTodoCount">,
+    testIDPrefix: string
+  ) => {
+    if (!(event.photoCount > 0 || event.commentCount > 0 || event.hasTags || event.incompleteTodoCount > 0)) {
+      return null;
+    }
+    return (
+      <View testID={`${testIDPrefix}-counts-${event.id}`} style={styles.eventCountsRow}>
+        {event.photoCount > 0 ? (
+          <View style={styles.eventCountBadge}>
+            <Icon name="photo" size={11} color="#999" />
+            <Text style={styles.eventCountText}>{event.photoCount}</Text>
+          </View>
+        ) : null}
+        {event.commentCount > 0 ? (
+          <View style={styles.eventCountBadge}>
+            <Icon name="comment" size={11} color="#999" />
+            <Text style={styles.eventCountText}>{event.commentCount}</Text>
+          </View>
+        ) : null}
+        {event.hasTags ? (
+          <View testID={`${testIDPrefix}-tag-mark-${event.id}`} style={styles.eventCountBadge}>
+            <Icon name="tag" size={11} color="#999" />
+          </View>
+        ) : null}
+        {event.incompleteTodoCount > 0 ? (
+          <View style={styles.eventCountBadge}>
+            <Icon name="checklist" size={11} color="#999" />
+            <Text style={styles.eventCountText}>{event.incompleteTodoCount}</Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
 
   const isFilterActive = selectedCalendarIds !== null;
   const handleResetFilter = useCallback(() => {
@@ -1010,8 +1055,13 @@ export default function CalendarScreen() {
                             <Text style={styles.eventTitle} numberOfLines={1}>
                               {event.title}
                             </Text>
+                            {renderEventCounts(event, "calendar-list-event")}
                           </View>
-                          {renderEventSummaryLines(event, "calendar-list-event")}
+                          {renderEventSummaryLines(
+                            event,
+                            "calendar-list-event",
+                            personalCalendarIds.has(event.calendarId)
+                          )}
                           {tags.length > 0 ? (
                             <EventTagBadges tags={tags} fallbackColor={calendarColorById[event.calendarId]} />
                           ) : null}
@@ -1163,24 +1213,9 @@ export default function CalendarScreen() {
                         <Text style={styles.eventTitle} numberOfLines={1}>
                           {item.title}
                         </Text>
-                        {item.photoCount > 0 || item.commentCount > 0 ? (
-                          <View testID={`calendar-event-counts-${item.id}`} style={styles.eventCountsRow}>
-                            {item.photoCount > 0 ? (
-                              <View style={styles.eventCountBadge}>
-                                <Icon name="photo" size={11} color="#999" />
-                                <Text style={styles.eventCountText}>{item.photoCount}</Text>
-                              </View>
-                            ) : null}
-                            {item.commentCount > 0 ? (
-                              <View style={styles.eventCountBadge}>
-                                <Icon name="comment" size={11} color="#999" />
-                                <Text style={styles.eventCountText}>{item.commentCount}</Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        ) : null}
+                        {renderEventCounts(item, "calendar-event")}
                       </View>
-                      {renderEventSummaryLines(item, "calendar-event")}
+                      {renderEventSummaryLines(item, "calendar-event", personalCalendarIds.has(item.calendarId))}
                     </View>
                   </TouchableOpacity>
                 )}

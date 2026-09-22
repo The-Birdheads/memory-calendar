@@ -36,7 +36,11 @@ export function TagPickerRow({ testIDPrefix, tagTree, selectedTagIds, onToggle, 
             <TouchableOpacity
               key={tag.id}
               testID={`${testIDPrefix}-tag-${tag.id}`}
-              style={[styles.chip, { backgroundColor: tag.color ?? "#999999" }, selected && styles.chipSelected]}
+              style={[
+                styles.chip,
+                { backgroundColor: tag.color ?? "#999999", borderColor: tag.color ?? "#999999" },
+                selected && styles.chipSelected,
+              ]}
               onPress={() => onToggle(tag.id)}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
@@ -67,24 +71,30 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  // カレンダー/すべて・未設定の絞り込みチップ(CalendarSwitchChip、history.tsx
+  // のfilterChip)と同じ大きさ・角丸に揃える - 選択時はborderWidthが1→2に
+  // 太くなる分だけpaddingを1px減らし、見た目の外形サイズを変えない。
   chip: {
     flexDirection: "row",
     alignItems: "center",
+    borderWidth: 1,
     borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   chipSelected: {
     borderWidth: 2,
     borderColor: "#222",
+    paddingHorizontal: 13,
+    paddingVertical: 9,
   },
   chipText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 15,
   },
   check: {
     color: "#fff",
     fontWeight: "700",
-    fontSize: 12,
+    fontSize: 15,
   },
 });

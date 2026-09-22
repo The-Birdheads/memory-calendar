@@ -16,20 +16,27 @@ export interface EventColorLegendEntry {
  * unrecognized (calendar not found) reads as "その他" rather than showing
  * nothing.
  */
-function resolveEventLegendLabel(event: EventWithTagColor, tags: Tag[], calendars: Calendar[]): string {
+function resolveEventLegendLabel(
+  event: EventWithTagColor,
+  tags: Tag[],
+  calendars: Calendar[]
+): { label: string; isTagLabel: boolean } {
   if (event.tagColor) {
     const matchingTag = tags.find((tag) => tag.color === event.tagColor);
-    if (matchingTag) return matchingTag.name;
+    if (matchingTag) return { label: matchingTag.name, isTagLabel: true };
   }
   const calendar = calendars.find((c) => c.id === event.calendarId);
-  return calendar ? calendar.name : "その他";
+  return { label: calendar ? calendar.name : "その他", isTagLabel: false };
 }
 
 /**
  * Builds a de-duplicated (color, label) legend from a set of events, for
  * the「一目で予定の種類が見分けられる」ための凡例(カレンダー画面のフィル
- * ターシート内に表示)。同じ色は最初に出てきたラベルを採用し、出現順を
- * 保つ(呼び出し側でそのまま並べればよい)。
+ * ターシート内に表示)。同じ色は出現順を保って1エントリにまとめるが、ラベル
+ * は「タグ名」を「カレンダー名(タグなしのフォールバック)」より常に優先する
+ * - タグの色がたまたま何かのカレンダーのデフォルト色と一致した場合、その
+ * カレンダーの未タグ付け予定が先に出現していると、タグを設定しているのに
+ * カレンダー名が表示されてしまう不具合があったため(2026-09)。
  */
 export function buildEventColorLegend(
   events: EventWithTagColor[],
@@ -37,15 +44,23 @@ export function buildEventColorLegend(
   calendars: Calendar[]
 ): EventColorLegendEntry[] {
   const calendarColorById = Object.fromEntries(calendars.map((calendar) => [calendar.id, calendar.color]));
-  const seenColors = new Set<string>();
-  const legend: EventColorLegendEntry[] = [];
+  const order: string[] = [];
+  const labelByColor: Record<string, string> = {};
+  const isTagLabelByColor: Record<string, boolean> = {};
 
   for (const event of events) {
     const color = event.tagColor ?? calendarColorById[event.calendarId] ?? "#999999";
-    if (seenColors.has(color)) continue;
-    seenColors.add(color);
-    legend.push({ color, label: resolveEventLegendLabel(event, tagsByEventId[event.id] ?? [], calendars) });
+    const { label, isTagLabel } = resolveEventLegendLabel(event, tagsByEventId[event.id] ?? [], calendars);
+
+    if (!(color in labelByColor)) {
+      order.push(color);
+      labelByColor[color] = label;
+      isTagLabelByColor[color] = isTagLabel;
+    } else if (isTagLabel && !isTagLabelByColor[color]) {
+      labelByColor[color] = label;
+      isTagLabelByColor[color] = true;
+    }
   }
 
-  return legend;
+  return order.map((color) => ({ color, label: labelByColor[color] }));
 }

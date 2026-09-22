@@ -786,12 +786,14 @@ describe("listEventsInRange", () => {
           tagColor: null,
           photoCount: 0,
           commentCount: 0,
+          hasTags: false,
+          incompleteTodoCount: 0,
         },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("events");
     expect(select).toHaveBeenCalledWith(
-      "*, event_tags(tags(color, level)), event_photos(count), event_comments(count)"
+      "*, event_tags(tags(color, level)), event_photos(count), event_comments(count), todos(is_done)"
     );
     expect(eq).toHaveBeenCalledWith("calendar_id", "cal-1");
     expect(lte).toHaveBeenCalledWith("start_at", "2026-09-30T23:59:59.999Z");
@@ -837,6 +839,67 @@ describe("listEventsInRange", () => {
 
     expect(result.ok && result.value[0].photoCount).toBe(2);
     expect(result.ok && result.value[0].commentCount).toBe(4);
+  });
+
+  it("sets hasTags and counts only the not-yet-done todos, from the embedded joins", async () => {
+    const rows = [
+      {
+        id: "event-1",
+        calendar_id: "cal-1",
+        series_id: null,
+        title: "会議",
+        location: null,
+        memo: null,
+        category_color: "#2f6fed",
+        start_at: "2026-09-01T10:00:00.000Z",
+        end_at: "2026-09-01T11:00:00.000Z",
+        is_all_day: false,
+        reminder_at: null,
+        created_by: "user-1",
+        updated_by: "user-1",
+        created_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000Z",
+        event_tags: [{ tags: { color: "#ff0000", level: "minor" } }],
+        todos: [{ is_done: false }, { is_done: false }, { is_done: true }],
+      },
+      {
+        id: "event-2",
+        calendar_id: "cal-1",
+        series_id: null,
+        title: "タグなし",
+        location: null,
+        memo: null,
+        category_color: "#2f6fed",
+        start_at: "2026-09-01T10:00:00.000Z",
+        end_at: "2026-09-01T11:00:00.000Z",
+        is_all_day: false,
+        reminder_at: null,
+        created_by: "user-1",
+        updated_by: "user-1",
+        created_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000Z",
+        event_tags: [],
+        todos: [],
+      },
+    ];
+    const select = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const lte = jest.fn().mockReturnThis();
+    const gte = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, eq, lte, gte, order }),
+    } as unknown as SupabaseClient;
+
+    const result = await listEventsInRange(client, "cal-1", {
+      start: "2026-09-01T00:00:00.000Z",
+      end: "2026-09-30T23:59:59.999Z",
+    });
+
+    expect(result.ok && result.value[0].hasTags).toBe(true);
+    expect(result.ok && result.value[0].incompleteTodoCount).toBe(2);
+    expect(result.ok && result.value[1].hasTags).toBe(false);
+    expect(result.ok && result.value[1].incompleteTodoCount).toBe(0);
   });
 
   it("uses the 大分類 tag's color as tagColor when the event has multiple attached tags", async () => {

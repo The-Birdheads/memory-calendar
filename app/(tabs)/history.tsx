@@ -806,19 +806,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fff",
   },
+  // カレンダー選択チップ(CalendarSwitchChip)・タグ選択チップ(TagPickerRow)と
+  // 同じ大きさ・角丸に揃える(選択時はborder 1→2の分だけpaddingを1px減らす)。
   filterChip: {
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 16,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   filterChipActive: {
     borderWidth: 2,
     borderColor: "#2f6fed",
     backgroundColor: "#e8f0fe",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
   },
   filterChipText: {
     fontSize: 15,

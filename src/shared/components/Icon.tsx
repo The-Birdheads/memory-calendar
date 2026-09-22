@@ -29,6 +29,7 @@ const ICONS = {
   list: require("../../../assets/icons/list.png"),
   edit: require("../../../assets/icons/edit.png"),
   comment: require("../../../assets/icons/comment.png"),
+  tag: require("../../../assets/icons/tag.png"),
 } as const;
 
 export type IconName = keyof typeof ICONS;

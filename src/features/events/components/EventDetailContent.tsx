@@ -603,7 +603,7 @@ export function EventDetailContent({
         {event.url ? (
           <TouchableOpacity style={styles.detailRow} onPress={() => Linking.openURL(normalizeUrl(event.url!))}>
             <Icon name="link" size={14} color="#2f6fed" />
-            <Text testID="event-detail-url" style={styles.detailLink}>
+            <Text testID="event-detail-url" style={styles.detailLink} numberOfLines={1} ellipsizeMode="tail">
               {event.url}
             </Text>
           </TouchableOpacity>
@@ -848,6 +848,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   detailLink: {
+    flex: 1,
     color: "#2f6fed",
     fontSize: 14,
   },

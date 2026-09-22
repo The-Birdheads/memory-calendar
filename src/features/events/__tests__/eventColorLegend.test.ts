@@ -24,6 +24,8 @@ function makeEvent(id: string, overrides: Partial<EventWithTagColor> = {}): Even
     tagColor: null,
     photoCount: 0,
     commentCount: 0,
+    hasTags: false,
+    incompleteTodoCount: 0,
     ...overrides,
   };
 }
@@ -77,6 +79,18 @@ describe("buildEventColorLegend", () => {
     const legend = buildEventColorLegend(events, tagsByEventId, CALENDARS);
 
     expect(legend).toHaveLength(1);
+  });
+
+  it("labels a color with its tag's name even when an earlier untagged event's calendar happens to share that color (regression)", () => {
+    const events = [
+      makeEvent("e1", { calendarId: "cal-1", tagColor: null }),
+      makeEvent("e2", { calendarId: "cal-2", tagColor: "#2f6fed" }),
+    ];
+    const tagsByEventId = { e2: [makeTag("tag-1", "旅行", "#2f6fed")] };
+
+    const legend = buildEventColorLegend(events, tagsByEventId, CALENDARS);
+
+    expect(legend).toEqual([{ color: "#2f6fed", label: "旅行" }]);
   });
 
   it("returns entries in first-seen order across a mix of tagged and untagged events", () => {

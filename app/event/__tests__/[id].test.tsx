@@ -1025,6 +1025,17 @@ describe("EventDetailScreen", () => {
     expect(openURLSpy).toHaveBeenCalledWith("https://example.com");
   });
 
+  it("truncates a long url to a single line with an ellipsis instead of wrapping", async () => {
+    const longUrl = "https://example.com/" + "a".repeat(200);
+    mockCommonHooks({ event: { ...FUTURE_EVENT, url: longUrl } });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+    const urlText = getByTestId("event-detail-url");
+
+    expect(urlText.props.numberOfLines).toBe(1);
+    expect(urlText.props.ellipsizeMode).toBe("tail");
+  });
+
   describe("サムネイル画像のヘッダー表示", () => {
     it("shows the thumbnail photo as a header image at the top when one is set", async () => {
       mockCommonHooks({

@@ -392,13 +392,20 @@ export async function createDefaultEventReminders(
 
 // 一覧系クエリで毎回使う埋め込みセレクト - タグ色に加えて、写真/コメントの
 // 件数バッジ用に件数だけをそれぞれ埋め込む(中身は取らない、軽量な集計)。
+// todosはis_doneだけ取り、未完了件数をJS側で数える(件数だけの絞り込みは
+// PostgRESTの埋め込みフィルタ構文では他の埋め込みと共存しづらいため)。
 const EVENT_LIST_SELECT =
-  "*, event_tags(tags(color, level)), event_photos(count), event_comments(count)";
+  "*, event_tags(tags(color, level)), event_photos(count), event_comments(count), todos(is_done)";
+
+interface TodoJoinRow {
+  is_done: boolean;
+}
 
 interface EventListRow extends EventRow {
   event_tags: EventTagJoinRow[];
   event_photos: CountJoinRow[];
   event_comments: CountJoinRow[];
+  todos: TodoJoinRow[];
 }
 
 function mapEventRowsWithTagColor(data: EventListRow[]): EventWithTagColor[] {
@@ -407,6 +414,8 @@ function mapEventRowsWithTagColor(data: EventListRow[]): EventWithTagColor[] {
     tagColor: pickPrimaryTagColor(row.event_tags ?? []),
     photoCount: extractCount(row.event_photos),
     commentCount: extractCount(row.event_comments),
+    hasTags: (row.event_tags ?? []).length > 0,
+    incompleteTodoCount: (row.todos ?? []).filter((todo) => !todo.is_done).length,
   }));
 }
 

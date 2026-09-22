@@ -2265,6 +2265,58 @@ describe("CalendarScreen", () => {
     });
   });
 
+  describe("予定一覧でのタグの有無・未達成ToDo件数バッジ(日別モーダル・月の一覧表示)", () => {
+    it("shows a tag mark and the incomplete-todo count next to the title, in the day-events modal", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [{ ...TODAY_EVENT, hasTags: true, incompleteTodoCount: 2 }],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+      const counts = getByTestId("calendar-event-counts-event-1");
+      expect(getByTestId("calendar-event-tag-mark-event-1")).toBeTruthy();
+      expect(within(counts).getByText("2")).toBeTruthy();
+    });
+
+    it("shows the same badges in the month list view", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [{ ...TODAY_EVENT, hasTags: true, incompleteTodoCount: 1 }],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+      const counts = getByTestId("calendar-list-event-counts-event-1");
+      expect(getByTestId("calendar-list-event-tag-mark-event-1")).toBeTruthy();
+      expect(within(counts).getByText("1")).toBeTruthy();
+    });
+
+    it("omits the todo count badge when there are no incomplete todos, and the tag mark when untagged", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [{ ...TODAY_EVENT, hasTags: false, incompleteTodoCount: 0 }],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+      expect(queryByTestId("calendar-event-counts-event-1")).toBeNull();
+      expect(queryByTestId("calendar-event-tag-mark-event-1")).toBeNull();
+    });
+  });
+
   describe("予定一覧での場所・メモ・URLの表示(日別モーダル・月の一覧表示)", () => {
     const EVENT_WITH_DETAILS = {
       ...TODAY_EVENT,

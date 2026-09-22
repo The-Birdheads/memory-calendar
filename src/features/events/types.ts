@@ -25,6 +25,11 @@ export interface EventWithTagColor extends Event {
    * 分からない中身がある」ことに気づけるよう件数バッジとして表示する。 */
   photoCount: number;
   commentCount: number;
+  /** タグが1件でも付いているか(タグ自体の色未設定でtagColorがnullになる場合と
+   * 区別するため、tagColorとは別に持つ)。 */
+  hasTags: boolean;
+  /** 未完了のToDoの件数。 */
+  incompleteTodoCount: number;
 }
 
 export interface CreateEventInput {
