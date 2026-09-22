@@ -1,5 +1,6 @@
 import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { Linking } from "react-native";
 
 import CalendarScreen from "../calendar";
 import { useAuthSession } from "../../../src/features/auth/hooks";
@@ -2261,6 +2262,102 @@ describe("CalendarScreen", () => {
       await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
 
       expect(queryByTestId("calendar-event-counts-event-1")).toBeNull();
+    });
+  });
+
+  describe("予定一覧での場所・メモ・URLの表示(日別モーダル・月の一覧表示)", () => {
+    const EVENT_WITH_DETAILS = {
+      ...TODAY_EVENT,
+      location: "渋谷カフェ",
+      memo: "試食あり",
+      url: "example.com/menu",
+    };
+
+    it("shows an icon+1-line summary for each of location/memo/url below the title, in the day-events modal", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [EVENT_WITH_DETAILS],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+      const row = getByTestId("calendar-event-event-1");
+      expect(within(row).getByText("渋谷カフェ")).toBeTruthy();
+      expect(within(row).getByText("試食あり")).toBeTruthy();
+      expect(within(row).getByText("example.com/menu")).toBeTruthy();
+    });
+
+    it("shows the same summary lines in the month list view", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [EVENT_WITH_DETAILS],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+      const row = getByTestId("calendar-list-event-event-1");
+      expect(within(row).getByText("渋谷カフェ")).toBeTruthy();
+      expect(within(row).getByText("試食あり")).toBeTruthy();
+      expect(within(row).getByText("example.com/menu")).toBeTruthy();
+    });
+
+    it("shows no summary lines when location/memo/url are all unset", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [TODAY_EVENT],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+      expect(queryByTestId("calendar-event-url-event-1")).toBeNull();
+    });
+
+    it("opens the url (normalizing a scheme-less one) when its summary line is tapped, in the day-events modal, without also navigating to the event detail (regression)", async () => {
+      const openURLSpy = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [EVENT_WITH_DETAILS],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+      await fireEvent.press(getByTestId("calendar-event-url-event-1"));
+
+      expect(openURLSpy).toHaveBeenCalledWith("https://example.com/menu");
+      expect(router.push).not.toHaveBeenCalledWith("/event/event-1");
+    });
+
+    it("opens the url when its summary line is tapped, in the month list view, without navigating to the event detail (regression)", async () => {
+      const openURLSpy = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [EVENT_WITH_DETAILS],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+      await fireEvent.press(getByTestId("calendar-list-event-url-event-1"));
+
+      expect(openURLSpy).toHaveBeenCalledWith("https://example.com/menu");
+      expect(router.push).not.toHaveBeenCalledWith("/event/event-1");
     });
   });
 

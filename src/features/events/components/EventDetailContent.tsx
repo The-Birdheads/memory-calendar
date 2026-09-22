@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -54,6 +55,7 @@ import type { Todo } from "../../todos/types";
 import { EventTodoRow } from "./EventTodoRow";
 import { Icon } from "../../../shared/components/Icon";
 import { formatDateTimeRange, toJstDateKey } from "../../../shared/utils/formatDateTime";
+import { normalizeUrl } from "../../../shared/utils/url";
 
 export interface EventDetailContentProps {
   eventId: string;
@@ -599,12 +601,12 @@ export function EventDetailContent({
           </View>
         ) : null}
         {event.url ? (
-          <View style={styles.detailRow}>
+          <TouchableOpacity style={styles.detailRow} onPress={() => Linking.openURL(normalizeUrl(event.url!))}>
             <Icon name="link" size={14} color="#2f6fed" />
             <Text testID="event-detail-url" style={styles.detailLink}>
               {event.url}
             </Text>
-          </View>
+          </TouchableOpacity>
         ) : null}
         {event.memo ? (
           <View style={styles.detailRow}>

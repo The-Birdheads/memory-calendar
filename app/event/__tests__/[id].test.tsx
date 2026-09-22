@@ -1,5 +1,6 @@
 import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { Linking } from "react-native";
 
 import EventDetailScreen from "../[id]";
 import { useAuthSession } from "../../../src/features/auth/hooks";
@@ -1012,6 +1013,16 @@ describe("EventDetailScreen", () => {
 
     expect(getByText(/渋谷/)).toBeTruthy();
     expect(getByText(/https:\/\/example\.com/)).toBeTruthy();
+  });
+
+  it("opens the url in the browser when tapped, normalizing a scheme-less url (regression)", async () => {
+    const openURLSpy = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+    mockCommonHooks({ event: { ...FUTURE_EVENT, url: "example.com" } });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+    await fireEvent.press(getByTestId("event-detail-url"));
+
+    expect(openURLSpy).toHaveBeenCalledWith("https://example.com");
   });
 
   describe("サムネイル画像のヘッダー表示", () => {

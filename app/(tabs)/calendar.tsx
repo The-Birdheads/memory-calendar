@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   Animated,
   FlatList,
+  Linking,
   Modal,
   PanResponder,
   StyleSheet,
@@ -45,6 +46,7 @@ import { FilterButton, FilterSection } from "../../src/shared/components/FilterB
 import { Icon } from "../../src/shared/components/Icon";
 import { hexToRgba } from "../../src/shared/utils/color";
 import { formatTime, jstNow } from "../../src/shared/utils/formatDateTime";
+import { normalizeUrl } from "../../src/shared/utils/url";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -475,6 +477,46 @@ export default function CalendarScreen() {
   const openCreateModal = () => {
     setIsCreateModalVisible(true);
   };
+
+  // 予定一覧(日別モーダル・月の一覧表示)の各行で、タイトルの下に場所/メモ/URLを
+  // 1行ずつアイコン付きで見せる(TimeTree同様、2026-09)。あれば全て表示する
+  // - はみ出た分は各行独立で…省略。URLだけはタップでその場で開けるようにする
+  // (外側の行タップ=予定詳細へ、と衝突しないようネストしたTouchableOpacityにする)。
+  const renderEventSummaryLines = (
+    event: Pick<Event, "id" | "location" | "memo" | "url">,
+    testIDPrefix: string
+  ) => (
+    <>
+      {event.location ? (
+        <View style={styles.eventSummaryLine}>
+          <Icon name="location" size={12} color="#999" />
+          <Text style={styles.eventSummaryText} numberOfLines={1} ellipsizeMode="tail">
+            {event.location}
+          </Text>
+        </View>
+      ) : null}
+      {event.memo ? (
+        <View style={styles.eventSummaryLine}>
+          <Icon name="note" size={12} color="#999" />
+          <Text style={styles.eventSummaryText} numberOfLines={1} ellipsizeMode="tail">
+            {event.memo}
+          </Text>
+        </View>
+      ) : null}
+      {event.url ? (
+        <TouchableOpacity
+          testID={`${testIDPrefix}-url-${event.id}`}
+          style={styles.eventSummaryLine}
+          onPress={() => Linking.openURL(normalizeUrl(event.url!))}
+        >
+          <Icon name="link" size={12} color="#2f6fed" />
+          <Text style={[styles.eventSummaryText, styles.eventSummaryLink]} numberOfLines={1} ellipsizeMode="tail">
+            {event.url}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+    </>
+  );
 
   const isFilterActive = selectedCalendarIds !== null;
   const handleResetFilter = useCallback(() => {
@@ -969,6 +1011,7 @@ export default function CalendarScreen() {
                               {event.title}
                             </Text>
                           </View>
+                          {renderEventSummaryLines(event, "calendar-list-event")}
                           {tags.length > 0 ? (
                             <EventTagBadges tags={tags} fallbackColor={calendarColorById[event.calendarId]} />
                           ) : null}
@@ -1108,32 +1151,37 @@ export default function CalendarScreen() {
                       router.push(`/event/${item.id}`);
                     }}
                   >
-                    <View style={[styles.categoryDot, { backgroundColor: resolveEventColor(item, calendarColorById) }]} />
-                    {personalCalendarIds.has(item.calendarId) ? (
-                      <Icon testID={`calendar-event-personal-${item.id}`} name="lock" size={12} color="#666" />
-                    ) : null}
-                    <Text style={styles.eventTime}>
-                      {item.isAllDay ? "終日" : `${formatTime(item.startAt)}〜${formatTime(item.endAt)}`}
-                    </Text>
-                    <Text style={styles.eventTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    {item.photoCount > 0 || item.commentCount > 0 ? (
-                      <View testID={`calendar-event-counts-${item.id}`} style={styles.eventCountsRow}>
-                        {item.photoCount > 0 ? (
-                          <View style={styles.eventCountBadge}>
-                            <Icon name="photo" size={11} color="#999" />
-                            <Text style={styles.eventCountText}>{item.photoCount}</Text>
-                          </View>
+                    <View style={styles.eventRowContent}>
+                      <View style={styles.eventRowMain}>
+                        <View style={[styles.categoryDot, { backgroundColor: resolveEventColor(item, calendarColorById) }]} />
+                        {personalCalendarIds.has(item.calendarId) ? (
+                          <Icon testID={`calendar-event-personal-${item.id}`} name="lock" size={12} color="#666" />
                         ) : null}
-                        {item.commentCount > 0 ? (
-                          <View style={styles.eventCountBadge}>
-                            <Icon name="comment" size={11} color="#999" />
-                            <Text style={styles.eventCountText}>{item.commentCount}</Text>
+                        <Text style={styles.eventTime}>
+                          {item.isAllDay ? "終日" : `${formatTime(item.startAt)}〜${formatTime(item.endAt)}`}
+                        </Text>
+                        <Text style={styles.eventTitle} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        {item.photoCount > 0 || item.commentCount > 0 ? (
+                          <View testID={`calendar-event-counts-${item.id}`} style={styles.eventCountsRow}>
+                            {item.photoCount > 0 ? (
+                              <View style={styles.eventCountBadge}>
+                                <Icon name="photo" size={11} color="#999" />
+                                <Text style={styles.eventCountText}>{item.photoCount}</Text>
+                              </View>
+                            ) : null}
+                            {item.commentCount > 0 ? (
+                              <View style={styles.eventCountBadge}>
+                                <Icon name="comment" size={11} color="#999" />
+                                <Text style={styles.eventCountText}>{item.commentCount}</Text>
+                              </View>
+                            ) : null}
                           </View>
                         ) : null}
                       </View>
-                    ) : null}
+                      {renderEventSummaryLines(item, "calendar-event")}
+                    </View>
                   </TouchableOpacity>
                 )}
               />
@@ -1526,6 +1574,19 @@ const styles = StyleSheet.create({
   eventCountText: {
     fontSize: 11,
     color: "#999",
+  },
+  eventSummaryLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  eventSummaryText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#888",
+  },
+  eventSummaryLink: {
+    color: "#2f6fed",
   },
   fab: {
     position: "absolute",
