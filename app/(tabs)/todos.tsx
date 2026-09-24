@@ -682,14 +682,16 @@ export default function TodosScreen() {
           style={styles.summaryCard}
           onPress={handleScrollToIncomplete}
         >
-          <Text style={styles.summaryText}>未完了 {incompleteTodoCount}件</Text>
+          <Text style={styles.summaryLabel}>未完了</Text>
+          <Text style={styles.summaryCount}>{incompleteTodoCount}件</Text>
         </TouchableOpacity>
         <TouchableOpacity
           testID="todos-summary-urgent"
           style={[styles.summaryCard, styles.summaryCardUrgent]}
           onPress={handleScrollToDueSoon}
         >
-          <Text style={styles.summaryTextUrgent}>期限が近い {dueSoonGroupCount}件</Text>
+          <Text style={styles.summaryLabelUrgent}>期限が近い</Text>
+          <Text style={styles.summaryCountUrgent}>{dueSoonGroupCount}件</Text>
         </TouchableOpacity>
         <TouchableOpacity
           testID="todos-summary-overdue"
@@ -698,7 +700,8 @@ export default function TodosScreen() {
             if (overdueGroups.length > 0) setIsOverdueExpanded((prev) => !prev);
           }}
         >
-          <Text style={styles.summaryTextOverdue}>期限超過 {overdueGroups.length}件</Text>
+          <Text style={styles.summaryLabelOverdue}>期限超過</Text>
+          <Text style={styles.summaryCountOverdue}>{overdueGroups.length}件</Text>
           {overdueGroups.length > 0 ? (
             <Text testID="todos-summary-overdue-hint" style={styles.summaryHint}>
               {isOverdueExpanded ? "タップで隠す" : "タップで展開"}
@@ -1003,20 +1006,37 @@ const styles = StyleSheet.create({
   summaryCardOverdue: {
     backgroundColor: "#fcebeb",
   },
-  summaryText: {
+  // 見出し(「未完了」等)と件数を改行で分け、件数を大きく太くしてメリハリを
+  // つける(2026-09、以前は1行の文字列で件数が埋もれて見づらかった)。
+  summaryLabel: {
     color: "#444",
-    fontWeight: "700",
-    fontSize: 15,
+    fontWeight: "600",
+    fontSize: 12,
   },
-  summaryTextUrgent: {
+  summaryCount: {
+    color: "#444",
+    fontWeight: "800",
+    fontSize: 20,
+  },
+  summaryLabelUrgent: {
     color: "#633806",
-    fontWeight: "700",
-    fontSize: 15,
+    fontWeight: "600",
+    fontSize: 12,
   },
-  summaryTextOverdue: {
+  summaryCountUrgent: {
+    color: "#633806",
+    fontWeight: "800",
+    fontSize: 20,
+  },
+  summaryLabelOverdue: {
     color: "#791f1f",
-    fontWeight: "700",
-    fontSize: 15,
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  summaryCountOverdue: {
+    color: "#791f1f",
+    fontWeight: "800",
+    fontSize: 20,
   },
   summaryHint: {
     color: "#791f1f",

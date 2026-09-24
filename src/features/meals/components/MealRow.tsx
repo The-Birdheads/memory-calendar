@@ -4,13 +4,22 @@ import { RatingStars } from "./RatingStars";
 import type { MealRecord, MealSlot } from "../types";
 import { CalendarLabel } from "../../calendars/components/CalendarLabel";
 import type { Calendar } from "../../calendars/types";
-import { Icon } from "../../../shared/components/Icon";
+import { Icon, type IconName } from "../../../shared/components/Icon";
 
 export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
   breakfast: "朝食",
   lunch: "昼食",
   dinner: "夕食",
   snack: "間食",
+};
+
+// 見た目だけでどの食事かひと目でわかるように、時間帯を表すアイコンを添える
+// (朝食=日の出、昼食=太陽、夕食=三日月、間食=クッキー)。
+const MEAL_SLOT_ICONS: Record<MealSlot, IconName> = {
+  breakfast: "meal-breakfast",
+  lunch: "meal-lunch",
+  dinner: "meal-dinner",
+  snack: "meal-snack",
 };
 
 export interface MealRowProps {
@@ -42,6 +51,7 @@ export function MealRow({ record, onPress, dateLabel, calendar, creatorLabel }: 
   return (
     <TouchableOpacity testID={`meal-item-${record.id}`} style={styles.mealRow} onPress={onPress}>
       <View style={styles.mealRowSlotChip}>
+        <Icon testID={`meal-item-slot-icon-${record.id}`} name={MEAL_SLOT_ICONS[record.slot]} size={12} color="#666" />
         <Text style={styles.mealRowSlotText}>{MEAL_SLOT_LABELS[record.slot]}</Text>
       </View>
       <View style={styles.mealRowInfo}>
@@ -82,6 +92,9 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
   },
   mealRowSlotChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     backgroundColor: "#f2f3f5",
     borderRadius: 6,
     paddingHorizontal: 8,

@@ -30,6 +30,10 @@ const ICONS = {
   edit: require("../../../assets/icons/edit.png"),
   comment: require("../../../assets/icons/comment.png"),
   tag: require("../../../assets/icons/tag.png"),
+  "meal-breakfast": require("../../../assets/icons/meal-breakfast.png"),
+  "meal-lunch": require("../../../assets/icons/meal-lunch.png"),
+  "meal-dinner": require("../../../assets/icons/meal-dinner.png"),
+  "meal-snack": require("../../../assets/icons/meal-snack.png"),
 } as const;
 
 export type IconName = keyof typeof ICONS;

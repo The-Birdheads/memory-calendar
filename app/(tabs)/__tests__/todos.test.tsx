@@ -484,13 +484,16 @@ describe("TodosScreen", () => {
     mockCommonHooks(TODOS_URGENCY);
     jest.setSystemTime(new Date("2026-09-05T00:00:00.000Z"));
 
-    const { getByText } = await render(<TodosScreen />);
+    const { getByTestId } = await render(<TodosScreen />);
 
-    expect(getByText("未完了 4件")).toBeTruthy();
+    expect(within(getByTestId("todos-summary-incomplete")).getByText("未完了")).toBeTruthy();
+    expect(within(getByTestId("todos-summary-incomplete")).getByText("4件")).toBeTruthy();
     // "期限が近い" now covers only today (event-t) + tomorrow (event-tm) = 2;
     // the overdue one (event-o) gets its own count, and the far-future one doesn't count at all.
-    expect(getByText("期限が近い 2件")).toBeTruthy();
-    expect(getByText("期限超過 1件")).toBeTruthy();
+    expect(within(getByTestId("todos-summary-urgent")).getByText("期限が近い")).toBeTruthy();
+    expect(within(getByTestId("todos-summary-urgent")).getByText("2件")).toBeTruthy();
+    expect(within(getByTestId("todos-summary-overdue")).getByText("期限超過")).toBeTruthy();
+    expect(within(getByTestId("todos-summary-overdue")).getByText("1件")).toBeTruthy();
   });
 
   it("shows a 'タップで展開' hint on the overdue panel and reveals the overdue events (with their badge) when tapped", async () => {
@@ -505,7 +508,7 @@ describe("TodosScreen", () => {
     await fireEvent.press(getByTestId("todos-summary-overdue"));
 
     expect(getByTestId("todo-section-container-event-o")).toBeTruthy();
-    expect(getByText("期限超過")).toBeTruthy();
+    expect(within(getByTestId("todo-section-container-event-o")).getByText("期限超過")).toBeTruthy();
     expect(getByText("タップで隠す")).toBeTruthy();
   });
 
@@ -891,9 +894,9 @@ describe("TodosScreen", () => {
     // event-2 (夏祭り, 2026-08-01) is past, and its only todo isn't done yet.
     jest.setSystemTime(new Date("2026-08-15T00:00:00.000Z"));
 
-    const { getByTestId, getByText, queryByTestId } = await render(<TodosScreen />);
+    const { getByTestId, queryByTestId } = await render(<TodosScreen />);
 
-    expect(getByText("期限超過 1件")).toBeTruthy();
+    expect(within(getByTestId("todos-summary-overdue")).getByText("1件")).toBeTruthy();
     // Nothing is fully-completed-and-past here, so the past toggle has nothing to show.
     expect(queryByTestId("todos-past-toggle")).toBeNull();
 
