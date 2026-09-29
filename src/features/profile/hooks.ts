@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import { deleteOwnAccount, getMyProfile, updateDisplayName, updateWeekStartsOn } from "./service";
 import type { Profile, ProfileError } from "./types";
@@ -32,6 +33,15 @@ export function useMyProfile(userId: string): UseMyProfileResult {
   useEffect(() => {
     refetch();
   }, [refetch]);
+
+  // 個人設定(週の開始曜日・ユーザー名)は別画面/別のuseMyProfileインスタンス
+  // から更新されることがあるため、同一プロフィール行の変更をリアルタイムで
+  // 拾ってその場で反映する(2026-09、週開始曜日の切り替えがカレンダー画面に
+  // 即時反映されなかったのを修正)。
+  useEffect(() => {
+    if (!userId) return;
+    return subscribeToTableChanges(getSupabaseClient(), `my-profile-${userId}`, "profiles", refetch, `id=eq.${userId}`);
+  }, [userId, refetch]);
 
   return { profile, isLoading, error, refetch };
 }

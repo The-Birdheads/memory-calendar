@@ -41,6 +41,35 @@ describe("useMyProfile", () => {
     expect(result.current.profile).toBeNull();
     expect(result.current.error).toEqual({ type: "NotFound" });
   });
+
+  it("refetches when this user's own profile row changes elsewhere (regression: switching 週の開始曜日 in settings didn't update the calendar screen's own useMyProfile instance)", async () => {
+    const channel = { on: jest.fn(), subscribe: jest.fn(), unsubscribe: jest.fn() };
+    channel.on.mockReturnValue(channel);
+    channel.subscribe.mockReturnValue(channel);
+    const client = { channel: jest.fn(() => channel) };
+    (getSupabaseClient as jest.Mock).mockReturnValue(client);
+    (getMyProfile as jest.Mock).mockResolvedValue({
+      ok: true,
+      value: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
+    });
+
+    await renderHook(() => useMyProfile("user-1"));
+
+    await waitFor(() => expect(client.channel).toHaveBeenCalledWith(expect.stringMatching(/^my-profile-user-1-/)));
+    expect(channel.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "profiles", filter: "id=eq.user-1" },
+      expect.any(Function)
+    );
+
+    const onChange = channel.on.mock.calls[0][2];
+    (getMyProfile as jest.Mock).mockClear();
+    await act(async () => {
+      await onChange();
+    });
+
+    expect(getMyProfile).toHaveBeenCalledWith(client, "user-1");
+  });
 });
 
 describe("useUpdateDisplayName", () => {

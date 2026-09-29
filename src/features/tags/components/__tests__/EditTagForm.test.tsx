@@ -283,6 +283,40 @@ describe("EditTagForm", () => {
     });
   });
 
+  it("shows both the 大分類 and 中分類 ancestors as a breadcrumb for a 小分類 tag (not just the immediate 中分類 parent)", async () => {
+    const midOfTag2 = {
+      ...MAJOR_TAG,
+      id: "tag-5",
+      level: "mid" as const,
+      parentId: "tag-2",
+      name: "国内旅行",
+      color: "#00ff00",
+    };
+    const { getByTestId, queryByTestId } = await render(
+      <EditTagForm
+        tag={MAJOR_TAG}
+        allTags={[MAJOR_TAG, OTHER_MAJOR_TAG, midOfTag2]}
+        calendars={CALENDARS}
+        onSave={jest.fn()}
+      />
+    );
+
+    await fireEvent.press(getByTestId("edit-tag-level-minor"));
+    // before a 大分類 is picked, no ancestor badge yet - just the "未選択" placeholder
+    expect(getByTestId("edit-tag-parent-tag-unselected")).toBeTruthy();
+    expect(queryByTestId("edit-tag-major-ancestor-badge")).toBeNull();
+
+    await fireEvent.press(getByTestId("edit-tag-grandparent-tag-2"));
+    // 大分類 picked but no 中分類 yet: shows just the 大分類 badge as the (only) parent badge
+    expect(within(getByTestId("edit-tag-parent-tag-badge")).getByText("外出")).toBeTruthy();
+    expect(queryByTestId("edit-tag-major-ancestor-badge")).toBeNull();
+
+    await fireEvent.press(getByTestId("edit-tag-parent-tag-5"));
+    // both picked: 大分類 badge first, then 中分類 badge
+    expect(within(getByTestId("edit-tag-major-ancestor-badge")).getByText("外出")).toBeTruthy();
+    expect(within(getByTestId("edit-tag-parent-tag-badge")).getByText("国内旅行")).toBeTruthy();
+  });
+
   it("resets the chosen 大分類/中分類 when switching away from and back to 小分類", async () => {
     const midOfTag1 = { ...MAJOR_TAG, id: "tag-4", level: "mid" as const, parentId: "tag-1", name: "誕生日" };
     const { getByTestId, queryByTestId } = await render(

@@ -76,6 +76,11 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
       )
     : [];
   const parentTag = parentId ? allTags.find((candidate) => candidate.id === parentId) : undefined;
+  // 小分類は「大分類 › 中分類」の2段で親タグを表示する(中分類だけだと
+  // どの大分類に属すか一目で分からないため)。中分類は元々親=大分類なので1段のまま。
+  const grandparentTag =
+    level === "minor" && grandparentId ? allTags.find((candidate) => candidate.id === grandparentId) : undefined;
+  const parentBreadcrumb = [grandparentTag, parentTag].filter((candidate): candidate is Tag => !!candidate);
   // 親(中分類なら大分類、小分類なら中分類)の色を自動で薄めた色にする。親の
   // 色が未設定の場合は薄める元の色が無いため、そのまま未設定を引き継ぐ
   // (`??`だと親のcolorが明示的にnullの時もmajorColorへフォールバックして
@@ -189,31 +194,42 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
         <TextInput testID="edit-tag-name-input" style={styles.input} value={name} onChangeText={setName} />
       )}
 
-      {level === "major" ? (
-        <ColorSwatchPicker
-          testIDPrefix="edit-tag-color"
-          selected={majorColor}
-          onSelect={handleSelectMajorColor}
-          usageByColor={usageByColor}
-          allowUnset
-        />
-      ) : (
-        <View style={styles.parentTagRow}>
-          <Text style={styles.parentTagLabel}>親タグ</Text>
-          {parentTag ? (
-            <View
-              testID="edit-tag-parent-tag-badge"
-              style={[styles.parentTagBadge, { backgroundColor: parentTag.color ?? "#999999" }]}
-            >
-              <Text style={styles.parentTagBadgeText}>{parentTag.name}</Text>
-            </View>
-          ) : (
-            <Text testID="edit-tag-parent-tag-unselected" style={styles.parentTagUnselected}>
-              未選択
-            </Text>
-          )}
-        </View>
-      )}
+      <View style={styles.colorSection}>
+        {level === "major" ? (
+          <ColorSwatchPicker
+            testIDPrefix="edit-tag-color"
+            selected={majorColor}
+            onSelect={handleSelectMajorColor}
+            usageByColor={usageByColor}
+            allowUnset
+          />
+        ) : (
+          <View style={styles.parentTagRow}>
+            <Text style={styles.parentTagLabel}>親タグ</Text>
+            {parentBreadcrumb.length === 0 ? (
+              <Text testID="edit-tag-parent-tag-unselected" style={styles.parentTagUnselected}>
+                未選択
+              </Text>
+            ) : (
+              parentBreadcrumb.map((ancestor, index) => (
+                <View key={ancestor.id} style={styles.parentTagBreadcrumbItem}>
+                  {index > 0 ? <Text style={styles.parentTagChevron}>›</Text> : null}
+                  <View
+                    testID={
+                      index === parentBreadcrumb.length - 1
+                        ? "edit-tag-parent-tag-badge"
+                        : "edit-tag-major-ancestor-badge"
+                    }
+                    style={[styles.parentTagBadge, { backgroundColor: ancestor.color ?? "#999999" }]}
+                  >
+                    <Text style={styles.parentTagBadgeText}>{ancestor.name}</Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+      </View>
 
       <View style={styles.levelRow}>
         {LEVELS.map((l) => {
@@ -299,6 +315,11 @@ const styles = StyleSheet.create({
   container: {
     gap: 8,
   },
+  // タグ名の行のすぐ下に色選択/親タグが来ると距離が近すぎて見づらいため、
+  // 追加で余白を空ける(2026-09)。
+  colorSection: {
+    marginTop: 12,
+  },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
@@ -330,11 +351,21 @@ const styles = StyleSheet.create({
   parentTagRow: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
     gap: 8,
   },
   parentTagLabel: {
     color: "#666",
     fontSize: 12,
+  },
+  parentTagBreadcrumbItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  parentTagChevron: {
+    color: "#999",
+    fontSize: 14,
   },
   parentTagBadge: {
     borderRadius: 10,
