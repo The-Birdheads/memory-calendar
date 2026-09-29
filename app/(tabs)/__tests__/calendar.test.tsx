@@ -4,6 +4,7 @@ import { Linking } from "react-native";
 
 import CalendarScreen from "../calendar";
 import { useAuthSession } from "../../../src/features/auth/hooks";
+import { useMyProfile } from "../../../src/features/profile/hooks";
 import {
   useCalendarMembers,
   useCreateCalendar,
@@ -59,6 +60,10 @@ jest.mock("expo-router", () => {
 
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
+}));
+
+jest.mock("../../../src/features/profile/hooks", () => ({
+  useMyProfile: jest.fn(),
 }));
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
@@ -150,6 +155,12 @@ const OTHER_DAY_EVENT = {
 
 function mockCommonHooks() {
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } } });
+  (useMyProfile as jest.Mock).mockReturnValue({
+    profile: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
+    isLoading: false,
+    error: null,
+    refetch: jest.fn(),
+  });
   (useMyCalendars as jest.Mock).mockReturnValue({
     calendars: CALENDARS,
     isLoading: false,
@@ -2470,6 +2481,41 @@ describe("CalendarScreen", () => {
       await fireEvent.press(getByTestId("calendar-filter"));
 
       expect(queryByTestId("calendar-color-legend")).toBeNull();
+    });
+  });
+
+  describe("週の開始曜日(個人設定)", () => {
+    it("shows the weekday header starting on Sunday by default", async () => {
+      mockCommonHooks();
+
+      const { getByTestId } = await render(<CalendarScreen />);
+
+      const labels = within(getByTestId("calendar-weekday-row"))
+        .getAllByText(/^[日月火水木金土]$/)
+        .map((node) => node.props.children);
+      expect(labels).toEqual(["日", "月", "火", "水", "木", "金", "土"]);
+    });
+
+    it("starts the weekday header (and the grid) on Monday when the profile is set to weekStartsOn: 1", async () => {
+      mockCommonHooks();
+      (useMyProfile as jest.Mock).mockReturnValue({
+        profile: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 },
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+
+      const labels = within(getByTestId("calendar-weekday-row"))
+        .getAllByText(/^[日月火水木金土]$/)
+        .map((node) => node.props.children);
+      expect(labels).toEqual(["月", "火", "水", "木", "金", "土", "日"]);
+
+      // "Now" is fixed at 2026-08-18 (see beforeEach) - August 2026 starts on
+      // a Saturday, so a Monday-start grid's first row should begin on
+      // Monday 2026-07-27 instead of the Sunday-start default's 2026-07-26.
+      expect(getByTestId("calendar-grid-cell-2026-07-27")).toBeTruthy();
     });
   });
 });

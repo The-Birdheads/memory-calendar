@@ -45,4 +45,26 @@ describe("buildMonthGrid", () => {
     expect(currentMonthCells).toHaveLength(31);
     expect(weeks.length).toBe(6);
   });
+
+  it("starts each week on Monday when weekStartsOn is 1", () => {
+    // 2026-09-01 is a Tuesday, so a Monday-start grid should begin on Monday 2026-08-31.
+    const weeks = buildMonthGrid(new Date("2026-09-15T00:00:00.000Z"), 1);
+    const cells = weeks.flat();
+
+    expect(cells[0].dateKey).toBe("2026-08-31");
+    weeks.forEach((week) => {
+      expect(week).toHaveLength(7);
+    });
+    const currentMonthCells = cells.filter((cell) => cell.isCurrentMonth);
+    expect(currentMonthCells).toHaveLength(30);
+    expect(currentMonthCells[0].dateKey).toBe("2026-09-01");
+    expect(currentMonthCells[currentMonthCells.length - 1].dateKey).toBe("2026-09-30");
+  });
+
+  it("still starts on Sunday for a month whose 1st already falls on Monday, when weekStartsOn is 1 (regression: 0-day offset)", () => {
+    // 2026-06-01 is a Monday.
+    const weeks = buildMonthGrid(new Date("2026-06-15T00:00:00.000Z"), 1);
+
+    expect(weeks[0][0].dateKey).toBe("2026-06-01");
+  });
 });

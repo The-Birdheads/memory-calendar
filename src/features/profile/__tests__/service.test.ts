@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { deleteOwnAccount, getMyProfile, getProfileErrorMessageJa, updateDisplayName } from "../service";
+import { deleteOwnAccount, getMyProfile, getProfileErrorMessageJa, updateDisplayName, updateWeekStartsOn } from "../service";
 
 describe("getMyProfile", () => {
   it("returns the caller's profile", async () => {
     const eq = jest.fn().mockReturnThis();
     const single = jest.fn().mockResolvedValue({
-      data: { id: "user-1", display_name: "たろう", avatar_url: null },
+      data: { id: "user-1", display_name: "たろう", avatar_url: null, week_starts_on: 0 },
       error: null,
     });
     const client = {
@@ -17,7 +17,7 @@ describe("getMyProfile", () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { id: "user-1", displayName: "たろう", avatarUrl: null },
+      value: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
     });
     expect(client.from).toHaveBeenCalledWith("profiles");
     expect(eq).toHaveBeenCalledWith("id", "user-1");
@@ -44,7 +44,7 @@ describe("updateDisplayName", () => {
     const eq = jest.fn().mockReturnThis();
     const select = jest.fn().mockReturnThis();
     const single = jest.fn().mockResolvedValue({
-      data: { id: "user-1", display_name: "新しい名前", avatar_url: null },
+      data: { id: "user-1", display_name: "新しい名前", avatar_url: null, week_starts_on: 0 },
       error: null,
     });
     const client = {
@@ -55,7 +55,7 @@ describe("updateDisplayName", () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { id: "user-1", displayName: "新しい名前", avatarUrl: null },
+      value: { id: "user-1", displayName: "新しい名前", avatarUrl: null, weekStartsOn: 0 },
     });
     expect(update).toHaveBeenCalledWith({ display_name: "新しい名前" });
     expect(eq).toHaveBeenCalledWith("id", "user-1");
@@ -100,6 +100,45 @@ describe("updateDisplayName", () => {
     } as unknown as SupabaseClient;
 
     const result = await updateDisplayName(client, "user-1", "たろう");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("updateWeekStartsOn", () => {
+  it("updates and returns the caller's profile with the new week-start day", async () => {
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({
+      data: { id: "user-1", display_name: "たろう", avatar_url: null, week_starts_on: 1 },
+      error: null,
+    });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await updateWeekStartsOn(client, "user-1", 1);
+
+    expect(result).toEqual({
+      ok: true,
+      value: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 },
+    });
+    expect(update).toHaveBeenCalledWith({ week_starts_on: 1 });
+    expect(eq).toHaveBeenCalledWith("id", "user-1");
+  });
+
+  it("maps a permission error to Forbidden", async () => {
+    const client = {
+      from: jest.fn().mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: null, error: { code: "42501" } }),
+      }),
+    } as unknown as SupabaseClient;
+
+    const result = await updateWeekStartsOn(client, "user-1", 1);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

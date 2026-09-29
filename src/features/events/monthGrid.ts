@@ -8,7 +8,10 @@ function toDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function buildMonthGrid(date: Date): MonthGridCell[][] {
+/** 0 = 日曜始まり, 1 = 月曜始まり(個人設定で選べる、デフォルトは日曜始まり)。 */
+export type WeekStartsOn = 0 | 1;
+
+export function buildMonthGrid(date: Date, weekStartsOn: WeekStartsOn = 0): MonthGridCell[][] {
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth();
 
@@ -16,7 +19,7 @@ export function buildMonthGrid(date: Date): MonthGridCell[][] {
   const lastOfMonth = new Date(Date.UTC(year, month + 1, 0));
 
   const gridStart = new Date(firstOfMonth);
-  gridStart.setUTCDate(gridStart.getUTCDate() - gridStart.getUTCDay());
+  gridStart.setUTCDate(gridStart.getUTCDate() - ((gridStart.getUTCDay() - weekStartsOn + 7) % 7));
 
   const totalDaysBeforeRoundUp = Math.round(
     (lastOfMonth.getTime() - gridStart.getTime()) / (24 * 60 * 60 * 1000) + 1

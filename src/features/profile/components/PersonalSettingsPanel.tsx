@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { router } from "expo-router";
 
 import { useAuthActions } from "../../auth/hooks";
 import { DeleteAccountConfirmModal } from "./DeleteAccountConfirmModal";
-import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../hooks";
+import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../hooks";
 import { getProfileErrorMessageJa } from "../service";
 
 export interface PersonalSettingsPanelProps {
@@ -12,8 +12,9 @@ export interface PersonalSettingsPanelProps {
 }
 
 export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
-  const { profile, isLoading } = useMyProfile(userId);
+  const { profile, isLoading, refetch: refetchProfile } = useMyProfile(userId);
   const { updateDisplayName, error: updateError } = useUpdateDisplayName();
+  const { updateWeekStartsOn, error: weekStartsOnError } = useUpdateWeekStartsOn();
   const { signOut, isSubmitting: isSigningOut } = useAuthActions();
   const { deleteAccount, isSubmitting: isDeletingAccount, error: deleteError } = useDeleteAccount();
   const [nameDraft, setNameDraft] = useState("");
@@ -35,6 +36,14 @@ export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
     const updated = await updateDisplayName(userId, nameDraft);
     if (updated) {
       setIsSaved(true);
+    }
+  };
+
+  const handleSelectWeekStartsOn = async (weekStartsOn: 0 | 1) => {
+    if (weekStartsOn === profile?.weekStartsOn) return;
+    const updated = await updateWeekStartsOn(userId, weekStartsOn);
+    if (updated) {
+      refetchProfile();
     }
   };
 
@@ -61,27 +70,54 @@ export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
     <>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.sectionLabel}>ユーザー名</Text>
-        <TextInput
-          testID="personal-settings-name-input"
-          style={styles.input}
-          value={nameDraft}
-          onChangeText={handleChangeName}
-          editable={!isLoading}
-        />
+        <View style={styles.nameRow}>
+          <TextInput
+            testID="personal-settings-name-input"
+            style={[styles.input, styles.nameInput]}
+            value={nameDraft}
+            onChangeText={handleChangeName}
+            editable={!isLoading}
+          />
+          <TouchableOpacity
+            testID="personal-settings-save"
+            style={styles.saveButton}
+            onPress={handleSave}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.saveButtonText}>✓</Text>
+          </TouchableOpacity>
+        </View>
         {updateError ? <Text style={styles.errorText}>{getProfileErrorMessageJa(updateError)}</Text> : null}
         {isSaved ? (
           <Text testID="personal-settings-saved" style={styles.savedText}>
             保存しました
           </Text>
         ) : null}
-        <TouchableOpacity
-          testID="personal-settings-save"
-          style={styles.saveButton}
-          onPress={handleSave}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={styles.saveButtonText}>✓</Text>
-        </TouchableOpacity>
+
+        <Text style={[styles.sectionLabel, styles.weekStartsOnLabel]}>週の開始曜日</Text>
+        <View style={styles.weekStartsOnRow}>
+          <TouchableOpacity
+            testID="personal-settings-week-starts-on-sunday"
+            style={[styles.weekStartsOnChip, (profile?.weekStartsOn ?? 0) === 0 && styles.weekStartsOnChipActive]}
+            onPress={() => handleSelectWeekStartsOn(0)}
+          >
+            <Text
+              style={(profile?.weekStartsOn ?? 0) === 0 ? styles.weekStartsOnTextActive : styles.weekStartsOnText}
+            >
+              日曜始まり
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID="personal-settings-week-starts-on-monday"
+            style={[styles.weekStartsOnChip, profile?.weekStartsOn === 1 && styles.weekStartsOnChipActive]}
+            onPress={() => handleSelectWeekStartsOn(1)}
+          >
+            <Text style={profile?.weekStartsOn === 1 ? styles.weekStartsOnTextActive : styles.weekStartsOnText}>
+              月曜始まり
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {weekStartsOnError ? <Text style={styles.errorText}>{getProfileErrorMessageJa(weekStartsOnError)}</Text> : null}
 
         <TouchableOpacity
           testID="personal-settings-logout"
@@ -120,12 +156,20 @@ const styles = StyleSheet.create({
     color: "#666",
     fontSize: 12,
   },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  nameInput: {
+    flex: 1,
   },
   errorText: {
     color: "#d32f2f",
@@ -134,7 +178,6 @@ const styles = StyleSheet.create({
     color: "#2f6fed",
   },
   saveButton: {
-    alignSelf: "flex-start",
     backgroundColor: "#2f6fed",
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -142,6 +185,36 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: "#fff",
+    fontWeight: "700",
+  },
+  weekStartsOnLabel: {
+    marginTop: 16,
+  },
+  weekStartsOnRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  weekStartsOnChip: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  weekStartsOnChipActive: {
+    borderWidth: 2,
+    borderColor: "#2f6fed",
+    backgroundColor: "#e8f0fe",
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  weekStartsOnText: {
+    fontSize: 15,
+    color: "#444",
+  },
+  weekStartsOnTextActive: {
+    fontSize: 15,
+    color: "#0c447c",
     fontWeight: "700",
   },
   logoutButton: {

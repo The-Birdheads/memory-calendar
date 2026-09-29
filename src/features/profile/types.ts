@@ -2,6 +2,8 @@ export interface Profile {
   id: string;
   displayName: string | null;
   avatarUrl: string | null;
+  /** 個人設定のカレンダー週開始曜日。0 = 日曜始まり, 1 = 月曜始まり。 */
+  weekStartsOn: 0 | 1;
 }
 
 export type ProfileError =

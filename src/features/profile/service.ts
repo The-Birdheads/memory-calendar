@@ -7,6 +7,7 @@ interface ProfileRow {
   id: string;
   display_name: string | null;
   avatar_url: string | null;
+  week_starts_on: number;
 }
 
 function mapProfileRow(row: ProfileRow): Profile {
@@ -14,6 +15,7 @@ function mapProfileRow(row: ProfileRow): Profile {
     id: row.id,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,
+    weekStartsOn: row.week_starts_on === 1 ? 1 : 0,
   };
 }
 
@@ -47,6 +49,25 @@ export async function updateDisplayName(
   const { data, error } = await client
     .from("profiles")
     .update({ display_name: trimmed })
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    return err(mapProfileError(error as PostgrestError));
+  }
+
+  return ok(mapProfileRow(data as ProfileRow));
+}
+
+export async function updateWeekStartsOn(
+  client: SupabaseClient,
+  userId: string,
+  weekStartsOn: 0 | 1
+): Promise<Result<Profile, ProfileError>> {
+  const { data, error } = await client
+    .from("profiles")
+    .update({ week_starts_on: weekStartsOn })
     .eq("id", userId)
     .select()
     .single();

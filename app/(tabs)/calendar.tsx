@@ -15,6 +15,7 @@ import { Tabs, router, useFocusEffect, useLocalSearchParams } from "expo-router"
 
 import { useAuthSession } from "../../src/features/auth/hooks";
 import { useMyCalendars } from "../../src/features/calendars/hooks";
+import { useMyProfile } from "../../src/features/profile/hooks";
 import { CalendarSwitchChip } from "../../src/features/calendars/components/CalendarSwitchChip";
 import { EventCreateModal } from "../../src/features/events/components/EventCreateModal";
 import { computeDateKeyRange } from "../../src/features/events/dateRange";
@@ -23,7 +24,7 @@ import { expandEventDateKeys } from "../../src/features/events/eventDateKeys";
 import { formatDayHeaderLabel } from "../../src/features/events/formatDayHeaderLabel";
 import { useEventsInRangeForCalendars } from "../../src/features/events/hooks";
 import { isJapaneseHoliday } from "../../src/features/events/japaneseHolidays";
-import { buildMonthGrid, type MonthGridCell } from "../../src/features/events/monthGrid";
+import { buildMonthGrid, type MonthGridCell, type WeekStartsOn } from "../../src/features/events/monthGrid";
 import { buildMonthEventGroups } from "../../src/features/events/monthEventList";
 import { buildMultiDayBanners, excludeBannerEvents, fillBannerGaps } from "../../src/features/events/multiDayBanners";
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
@@ -48,7 +49,16 @@ import { hexToRgba } from "../../src/shared/utils/color";
 import { formatTime, jstNow } from "../../src/shared/utils/formatDateTime";
 import { normalizeUrl } from "../../src/shared/utils/url";
 
-const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+// index = 実際の曜日番号(0=日曜〜6=土曜、Date#getUTCDayと同じ基準)。週の開始
+// 曜日設定に合わせてヘッダーの並び順を回転させても、土日の色分けなどは
+// 引き続き実際の曜日番号で判定できるようにlabelとdayOfWeekを組で持つ。
+const WEEKDAY_LABELS_BY_DAY = ["日", "月", "火", "水", "木", "金", "土"];
+
+function getWeekdayHeaderCells(weekStartsOn: WeekStartsOn): { label: string; dayOfWeek: number }[] {
+  return WEEKDAY_LABELS_BY_DAY.map((label, dayOfWeek) => ({ label, dayOfWeek })).map(
+    (_, index, all) => all[(index + weekStartsOn) % 7]
+  );
+}
 
 const MAX_DOTS_PER_CELL = 3;
 
@@ -135,6 +145,9 @@ export default function CalendarScreen() {
 
   const { session } = useAuthSession();
   const { calendars, refetch: refetchCalendars } = useMyCalendars();
+  // 個人設定の「週の開始曜日」(未設定/未ログイン中は日曜始まりのデフォルトに揃える)。
+  const { profile } = useMyProfile(session?.user.id ?? "");
+  const weekStartsOn: WeekStartsOn = profile?.weekStartsOn ?? 0;
   // null means "no explicit selection yet" - defaults to ALL calendars, so
   // every calendar is selected when the app first opens. Tapping a chip
   // always toggles that one calendar's own membership in the set (see
@@ -211,20 +224,20 @@ export default function CalendarScreen() {
     setSelectedDateKey(toDateKey(focusedDate.toISOString()));
   }, [focusedDate]);
 
-  const monthGrid = useMemo(() => buildMonthGrid(focusedDate), [focusedDate]);
+  const monthGrid = useMemo(() => buildMonthGrid(focusedDate, weekStartsOn), [focusedDate, weekStartsOn]);
   // スワイプ中に隣の月の構造をその場で見せるための前月/翌月グリッド
   // (予定データは持たず、日付の並びだけ - 実データはスワイプが完了して
   // フォーカス月が実際に切り替わってから読み込まれる)。
   const prevMonthGrid = useMemo(() => {
     const date = new Date(focusedDate);
     date.setUTCMonth(date.getUTCMonth() - 1);
-    return buildMonthGrid(date);
-  }, [focusedDate]);
+    return buildMonthGrid(date, weekStartsOn);
+  }, [focusedDate, weekStartsOn]);
   const nextMonthGrid = useMemo(() => {
     const date = new Date(focusedDate);
     date.setUTCMonth(date.getUTCMonth() + 1);
-    return buildMonthGrid(date);
-  }, [focusedDate]);
+    return buildMonthGrid(date, weekStartsOn);
+  }, [focusedDate, weekStartsOn]);
   const range = useMemo(() => rangeForGrid(monthGrid), [monthGrid]);
   // 前月・翌月の予定もバックグラウンドで先読みしておくと、実際にスワイプ/
   // 矢印でそちらへ移動した瞬間には既にキャッシュ済みになっていて、毎回
@@ -934,14 +947,14 @@ export default function CalendarScreen() {
           testID="calendar-grid-container"
           {...monthSwipeResponder.panHandlers}
         >
-          <View style={styles.weekdayRow}>
-            {WEEKDAY_LABELS.map((label, index) => (
+          <View testID="calendar-weekday-row" style={styles.weekdayRow}>
+            {getWeekdayHeaderCells(weekStartsOn).map(({ label, dayOfWeek }) => (
               <Text
-                key={label}
+                key={dayOfWeek}
                 style={[
                   styles.weekdayLabel,
-                  index === 6 && styles.weekdaySaturday,
-                  index === 0 && styles.weekdaySunday,
+                  dayOfWeek === 6 && styles.weekdaySaturday,
+                  dayOfWeek === 0 && styles.weekdaySunday,
                 ]}
               >
                 {label}

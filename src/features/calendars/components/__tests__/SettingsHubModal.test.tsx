@@ -14,7 +14,7 @@ import {
 } from "../../hooks";
 import { useCreateTag, useDeleteTag, useTagTree, useUpdateTag } from "../../../tags/hooks";
 import { useAuthActions } from "../../../auth/hooks";
-import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../../../profile/hooks";
+import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../../../profile/hooks";
 import type { TagTreeNode } from "../../../tags/types";
 
 jest.mock("../../hooks", () => ({
@@ -42,6 +42,7 @@ jest.mock("../../../auth/hooks", () => ({
 jest.mock("../../../profile/hooks", () => ({
   useMyProfile: jest.fn(),
   useUpdateDisplayName: jest.fn(),
+  useUpdateWeekStartsOn: jest.fn(),
   useDeleteAccount: jest.fn(),
 }));
 
@@ -137,12 +138,17 @@ function mockHooks(
   });
   (useAuthActions as jest.Mock).mockReturnValue({ signOut: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useMyProfile as jest.Mock).mockReturnValue({
-    profile: { id: "user-1", displayName: "たろう", avatarUrl: null },
+    profile: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
     isLoading: false,
     error: null,
     refetch: jest.fn(),
   });
   (useUpdateDisplayName as jest.Mock).mockReturnValue({ updateDisplayName: jest.fn(), isSubmitting: false, error: null });
+  (useUpdateWeekStartsOn as jest.Mock).mockReturnValue({
+    updateWeekStartsOn: jest.fn(),
+    isSubmitting: false,
+    error: null,
+  });
   (useDeleteAccount as jest.Mock).mockReturnValue({
     deleteAccount: jest.fn().mockResolvedValue(true),
     isSubmitting: false,

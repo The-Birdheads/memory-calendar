@@ -3,7 +3,7 @@ import { router } from "expo-router";
 
 import { PersonalSettingsPanel } from "../PersonalSettingsPanel";
 import { useAuthActions } from "../../../auth/hooks";
-import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../../hooks";
+import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../../hooks";
 
 jest.mock("expo-router", () => ({
   router: { replace: jest.fn(), push: jest.fn() },
@@ -16,27 +16,43 @@ jest.mock("../../../auth/hooks", () => ({
 jest.mock("../../hooks", () => ({
   useMyProfile: jest.fn(),
   useUpdateDisplayName: jest.fn(),
+  useUpdateWeekStartsOn: jest.fn(),
   useDeleteAccount: jest.fn(),
 }));
 
 function mockHooks(overrides: {
   displayName?: string | null;
+  weekStartsOn?: 0 | 1;
+  refetchProfile?: jest.Mock;
   updateDisplayName?: jest.Mock;
   updateError?: unknown;
+  updateWeekStartsOn?: jest.Mock;
+  weekStartsOnError?: unknown;
   signOut?: jest.Mock;
   deleteAccount?: jest.Mock;
   deleteError?: unknown;
 } = {}) {
   (useMyProfile as jest.Mock).mockReturnValue({
-    profile: { id: "user-1", displayName: overrides.displayName ?? "たろう", avatarUrl: null },
+    profile: {
+      id: "user-1",
+      displayName: overrides.displayName ?? "たろう",
+      avatarUrl: null,
+      weekStartsOn: overrides.weekStartsOn ?? 0,
+    },
     isLoading: false,
     error: null,
-    refetch: jest.fn(),
+    refetch: overrides.refetchProfile ?? jest.fn(),
   });
   (useUpdateDisplayName as jest.Mock).mockReturnValue({
     updateDisplayName: overrides.updateDisplayName ?? jest.fn().mockResolvedValue({ id: "user-1", displayName: "新しい名前", avatarUrl: null }),
     isSubmitting: false,
     error: overrides.updateError ?? null,
+  });
+  (useUpdateWeekStartsOn as jest.Mock).mockReturnValue({
+    updateWeekStartsOn:
+      overrides.updateWeekStartsOn ?? jest.fn().mockResolvedValue({ id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 }),
+    isSubmitting: false,
+    error: overrides.weekStartsOnError ?? null,
   });
   (useAuthActions as jest.Mock).mockReturnValue({
     signOut: overrides.signOut ?? jest.fn().mockResolvedValue(true),
@@ -100,6 +116,55 @@ describe("PersonalSettingsPanel", () => {
     await fireEvent.press(getByTestId("personal-settings-save"));
 
     await waitFor(() => expect(getByText("ユーザー名を入力してください")).toBeTruthy());
+  });
+
+  it("shows both week-start options", async () => {
+    mockHooks({ weekStartsOn: 0 });
+
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    expect(getByTestId("personal-settings-week-starts-on-sunday")).toBeTruthy();
+    expect(getByTestId("personal-settings-week-starts-on-monday")).toBeTruthy();
+  });
+
+  it("switches to 月曜始まり when tapped, and refetches the profile", async () => {
+    const updateWeekStartsOnMock = jest
+      .fn()
+      .mockResolvedValue({ id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 });
+    const refetchProfileMock = jest.fn();
+    mockHooks({ weekStartsOn: 0, updateWeekStartsOn: updateWeekStartsOnMock, refetchProfile: refetchProfileMock });
+
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-week-starts-on-monday"));
+
+    await waitFor(() => expect(updateWeekStartsOnMock).toHaveBeenCalledWith("user-1", 1));
+    await waitFor(() => expect(refetchProfileMock).toHaveBeenCalled());
+  });
+
+  it("does not call updateWeekStartsOn again when the already-selected option is tapped", async () => {
+    const updateWeekStartsOnMock = jest.fn();
+    mockHooks({ weekStartsOn: 0, updateWeekStartsOn: updateWeekStartsOnMock });
+
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-week-starts-on-sunday"));
+
+    expect(updateWeekStartsOnMock).not.toHaveBeenCalled();
+  });
+
+  it("shows an error message when saving the week-start day fails", async () => {
+    mockHooks({
+      weekStartsOn: 0,
+      updateWeekStartsOn: jest.fn().mockResolvedValue(null),
+      weekStartsOnError: { type: "Forbidden" },
+    });
+
+    const { getByTestId, getByText } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-week-starts-on-monday"));
+
+    await waitFor(() => expect(getByText("この操作を行う権限がありません")).toBeTruthy());
   });
 
   it("signs out and navigates to the login screen", async () => {

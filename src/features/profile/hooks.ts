@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
-import { deleteOwnAccount, getMyProfile, updateDisplayName } from "./service";
+import { deleteOwnAccount, getMyProfile, updateDisplayName, updateWeekStartsOn } from "./service";
 import type { Profile, ProfileError } from "./types";
 
 export interface UseMyProfileResult {
@@ -59,6 +59,31 @@ export function useUpdateDisplayName(): UseUpdateDisplayNameResult {
   }, []);
 
   return { updateDisplayName: runUpdateDisplayName, isSubmitting, error };
+}
+
+export interface UseUpdateWeekStartsOnResult {
+  updateWeekStartsOn: (userId: string, weekStartsOn: 0 | 1) => Promise<Profile | null>;
+  isSubmitting: boolean;
+  error: ProfileError | null;
+}
+
+export function useUpdateWeekStartsOn(): UseUpdateWeekStartsOnResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<ProfileError | null>(null);
+
+  const runUpdateWeekStartsOn = useCallback(async (userId: string, weekStartsOn: 0 | 1) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await updateWeekStartsOn(getSupabaseClient(), userId, weekStartsOn);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return null;
+    }
+    return result.value;
+  }, []);
+
+  return { updateWeekStartsOn: runUpdateWeekStartsOn, isSubmitting, error };
 }
 
 export interface UseDeleteAccountResult {
