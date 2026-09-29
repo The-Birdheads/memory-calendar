@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { router } from "expo-router";
 
+import { Icon } from "../../../shared/components/Icon";
 import { useAuthActions } from "../../auth/hooks";
 import { DeleteAccountConfirmModal } from "./DeleteAccountConfirmModal";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../hooks";
@@ -17,25 +18,23 @@ export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
   const { updateWeekStartsOn, error: weekStartsOnError } = useUpdateWeekStartsOn();
   const { signOut, isSubmitting: isSigningOut } = useAuthActions();
   const { deleteAccount, isSubmitting: isDeletingAccount, error: deleteError } = useDeleteAccount();
+  const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
-  const [isSaved, setIsSaved] = useState(false);
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
 
-  useEffect(() => {
-    if (profile) {
-      setNameDraft(profile.displayName ?? "");
-    }
-  }, [profile]);
-
-  const handleChangeName = (text: string) => {
-    setNameDraft(text);
-    setIsSaved(false);
+  const handleStartEditName = () => {
+    setNameDraft(profile?.displayName ?? "");
+    setIsEditingName(true);
   };
 
-  const handleSave = async () => {
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+  };
+
+  const handleConfirmEditName = async () => {
     const updated = await updateDisplayName(userId, nameDraft);
     if (updated) {
-      setIsSaved(true);
+      setIsEditingName(false);
     }
   };
 
@@ -70,29 +69,46 @@ export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
     <>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.sectionLabel}>ユーザー名</Text>
-        <View style={styles.nameRow}>
-          <TextInput
-            testID="personal-settings-name-input"
-            style={[styles.input, styles.nameInput]}
-            value={nameDraft}
-            onChangeText={handleChangeName}
-            editable={!isLoading}
-          />
-          <TouchableOpacity
-            testID="personal-settings-save"
-            style={styles.saveButton}
-            onPress={handleSave}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.saveButtonText}>✓</Text>
-          </TouchableOpacity>
-        </View>
+        {isEditingName ? (
+          <View style={styles.nameRow}>
+            <TextInput
+              testID="personal-settings-name-input"
+              style={[styles.input, styles.nameInput]}
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              autoFocus
+            />
+            <TouchableOpacity
+              testID="personal-settings-name-confirm"
+              onPress={handleConfirmEditName}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.confirmCheck}>✓</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="personal-settings-name-cancel"
+              onPress={handleCancelEditName}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.cancelText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.nameRow}>
+            <Text testID="personal-settings-name-display" style={styles.nameDisplay}>
+              {profile?.displayName ?? ""}
+            </Text>
+            <TouchableOpacity
+              testID="personal-settings-name-edit"
+              onPress={handleStartEditName}
+              disabled={isLoading}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Icon name="edit" size={16} color="#2f6fed" />
+            </TouchableOpacity>
+          </View>
+        )}
         {updateError ? <Text style={styles.errorText}>{getProfileErrorMessageJa(updateError)}</Text> : null}
-        {isSaved ? (
-          <Text testID="personal-settings-saved" style={styles.savedText}>
-            保存しました
-          </Text>
-        ) : null}
 
         <Text style={[styles.sectionLabel, styles.weekStartsOnLabel]}>週の開始曜日</Text>
         <View style={styles.weekStartsOnRow}>
@@ -171,21 +187,21 @@ const styles = StyleSheet.create({
   nameInput: {
     flex: 1,
   },
-  errorText: {
-    color: "#d32f2f",
+  nameDisplay: {
+    flex: 1,
+    fontSize: 15,
   },
-  savedText: {
+  confirmCheck: {
+    fontSize: 18,
+    fontWeight: "700",
     color: "#2f6fed",
   },
-  saveButton: {
-    backgroundColor: "#2f6fed",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+  cancelText: {
+    fontSize: 16,
+    color: "#666",
   },
-  saveButtonText: {
-    color: "#fff",
-    fontWeight: "700",
+  errorText: {
+    color: "#d32f2f",
   },
   weekStartsOnLabel: {
     marginTop: 16,

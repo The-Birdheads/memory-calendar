@@ -71,24 +71,29 @@ describe("PersonalSettingsPanel", () => {
     jest.clearAllMocks();
   });
 
-  it("pre-fills the name field with the caller's current display name", async () => {
+  it("shows the display name as plain text with an edit (pencil) icon, not an input, by default", async () => {
     mockHooks({ displayName: "たろう" });
 
-    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+    const { getByTestId, queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    expect(getByTestId("personal-settings-name-display").props.children).toBe("たろう");
+    expect(getByTestId("personal-settings-name-edit")).toBeTruthy();
+    expect(queryByTestId("personal-settings-name-input")).toBeNull();
+  });
+
+  it("reveals a text input (pre-filled) with confirm/cancel buttons when the edit icon is pressed", async () => {
+    mockHooks({ displayName: "たろう" });
+
+    const { getByTestId, queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+    await fireEvent.press(getByTestId("personal-settings-name-edit"));
 
     expect(getByTestId("personal-settings-name-input").props.value).toBe("たろう");
+    expect(getByTestId("personal-settings-name-confirm")).toBeTruthy();
+    expect(getByTestId("personal-settings-name-cancel")).toBeTruthy();
+    expect(queryByTestId("personal-settings-name-display")).toBeNull();
   });
 
-  it("uses a ✓ icon instead of the 保存 text label for the save button", async () => {
-    mockHooks({ displayName: "たろう" });
-
-    const { queryByText, getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
-
-    expect(queryByText("保存")).toBeNull();
-    expect(getByTestId("personal-settings-save")).toBeTruthy();
-  });
-
-  it("saves the edited display name", async () => {
+  it("saves the edited display name and returns to plain-text display on confirm", async () => {
     const updateDisplayNameMock = jest.fn().mockResolvedValue({
       id: "user-1",
       displayName: "新しい名前",
@@ -96,26 +101,42 @@ describe("PersonalSettingsPanel", () => {
     });
     mockHooks({ updateDisplayName: updateDisplayNameMock });
 
-    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
-
+    const { getByTestId, queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+    await fireEvent.press(getByTestId("personal-settings-name-edit"));
     await fireEvent.changeText(getByTestId("personal-settings-name-input"), "新しい名前");
-    await fireEvent.press(getByTestId("personal-settings-save"));
+    await fireEvent.press(getByTestId("personal-settings-name-confirm"));
 
     await waitFor(() => expect(updateDisplayNameMock).toHaveBeenCalledWith("user-1", "新しい名前"));
-    expect(getByTestId("personal-settings-saved")).toBeTruthy();
+    expect(queryByTestId("personal-settings-name-input")).toBeNull();
+    expect(getByTestId("personal-settings-name-edit")).toBeTruthy();
   });
 
-  it("shows an error message when saving fails", async () => {
+  it("reverts to the original name and closes the input without saving when cancel is pressed", async () => {
+    const updateDisplayNameMock = jest.fn();
+    mockHooks({ displayName: "たろう", updateDisplayName: updateDisplayNameMock });
+
+    const { getByTestId, queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+    await fireEvent.press(getByTestId("personal-settings-name-edit"));
+    await fireEvent.changeText(getByTestId("personal-settings-name-input"), "書きかけの名前");
+    await fireEvent.press(getByTestId("personal-settings-name-cancel"));
+
+    expect(updateDisplayNameMock).not.toHaveBeenCalled();
+    expect(queryByTestId("personal-settings-name-input")).toBeNull();
+    expect(getByTestId("personal-settings-name-display").props.children).toBe("たろう");
+  });
+
+  it("stays in edit mode and shows an error message when saving fails", async () => {
     mockHooks({
       updateDisplayName: jest.fn().mockResolvedValue(null),
       updateError: { type: "ValidationError", field: "displayName" },
     });
 
     const { getByTestId, getByText } = await render(<PersonalSettingsPanel userId="user-1" />);
-
-    await fireEvent.press(getByTestId("personal-settings-save"));
+    await fireEvent.press(getByTestId("personal-settings-name-edit"));
+    await fireEvent.press(getByTestId("personal-settings-name-confirm"));
 
     await waitFor(() => expect(getByText("ユーザー名を入力してください")).toBeTruthy());
+    expect(getByTestId("personal-settings-name-input")).toBeTruthy();
   });
 
   it("shows both week-start options", async () => {

@@ -27,11 +27,6 @@ export interface CreateCalendarInput {
   color?: string;
 }
 
-export interface UpdateCalendarInput {
-  name?: string;
-  color?: string;
-}
-
 export interface CalendarInvite {
   id: string;
   calendarId: string;

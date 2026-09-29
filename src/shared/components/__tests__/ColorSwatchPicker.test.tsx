@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render, within } from "@testing-library/react-native";
 
 import { ColorSwatchPicker } from "../ColorSwatchPicker";
 import { COLOR_PALETTE } from "../../constants/colorPalette";
@@ -86,14 +86,29 @@ describe("ColorSwatchPicker", () => {
     expect(onSelect).toHaveBeenCalledWith(null);
   });
 
-  it("marks the '未設定' swatch as selected when selected is null", async () => {
+  it("shows a check mark inside the '未設定' swatch when selected is null", async () => {
     const { getByTestId } = await render(
       <ColorSwatchPicker testIDPrefix="color" selected={null} onSelect={jest.fn()} usageByColor={NO_USAGE} allowUnset />
     );
 
-    const flattenStyle = (style: unknown) =>
-      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
-    expect(flattenStyle(getByTestId("color-unset").props.style).borderColor).toBe("#333");
+    expect(within(getByTestId("color-unset")).getByText("✓")).toBeTruthy();
+  });
+
+  it("shows a plain dash in the '未設定' swatch when some other color is selected", async () => {
+    const { getByTestId } = await render(
+      <ColorSwatchPicker testIDPrefix="color" selected="#2f6fed" onSelect={jest.fn()} usageByColor={NO_USAGE} allowUnset />
+    );
+
+    expect(within(getByTestId("color-unset")).getByText("-")).toBeTruthy();
+  });
+
+  it("shows a check mark inside the selected color swatch, and none on the others", async () => {
+    const { getByTestId, queryByTestId } = await render(
+      <ColorSwatchPicker testIDPrefix="color" selected="#e53935" onSelect={jest.fn()} usageByColor={NO_USAGE} />
+    );
+
+    expect(getByTestId("color-red-check")).toBeTruthy();
+    expect(queryByTestId("color-blue-check")).toBeNull();
   });
 
   it("shows the usage message once the used color becomes the selected one", async () => {

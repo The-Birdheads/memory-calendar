@@ -128,6 +128,7 @@ export function TagFormScreen({ tagId, onChange, onSaved }: TagFormScreenProps) 
             calendars={calendars}
             onSave={handleSave}
             isSubmitting={isSavingTag}
+            isEditing={tagId !== null}
           />
           {tagId && selectedTag ? (
             <TouchableOpacity testID="tag-management-delete-button" onPress={() => setDeleteTargetId(selectedTag.id)}>

@@ -9,10 +9,11 @@ import {
   useJoinByInvite,
   useLeaveOrDeleteCalendar,
   useMyCalendars,
-  useUpdateCalendar,
   useUpdateCalendarColor,
+  useUpdateCalendarName,
 } from "../../hooks";
 import { useCreateTag, useDeleteTag, useTagTree, useUpdateTag } from "../../../tags/hooks";
+import { TAG_COLORS } from "../../../tags/components/EditTagForm";
 import { useAuthActions } from "../../../auth/hooks";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../../../profile/hooks";
 import type { TagTreeNode } from "../../../tags/types";
@@ -24,8 +25,8 @@ jest.mock("../../hooks", () => ({
   useJoinByInvite: jest.fn(),
   useLeaveOrDeleteCalendar: jest.fn(),
   useMyCalendars: jest.fn(),
-  useUpdateCalendar: jest.fn(),
   useUpdateCalendarColor: jest.fn(),
+  useUpdateCalendarName: jest.fn(),
 }));
 
 jest.mock("../../../tags/hooks", () => ({
@@ -104,7 +105,11 @@ function mockHooks(
     isSubmitting: false,
     error: null,
   });
-  (useUpdateCalendar as jest.Mock).mockReturnValue({ updateCalendar: jest.fn(), isSubmitting: false, error: null });
+  (useUpdateCalendarName as jest.Mock).mockReturnValue({
+    updateCalendarName: jest.fn(),
+    isSubmitting: false,
+    error: null,
+  });
   (useUpdateCalendarColor as jest.Mock).mockReturnValue({
     updateCalendarColor: jest.fn(),
     isSubmitting: false,
@@ -186,7 +191,7 @@ describe("SettingsHubModal", () => {
 
       await fireEvent.press(getByTestId("settings-hub-open-personal"));
 
-      expect(getByTestId("personal-settings-name-input").props.value).toBe("たろう");
+      expect(getByTestId("personal-settings-name-display").props.children).toBe("たろう");
     });
 
     it("opens calendar settings and shows the calendar list", async () => {
@@ -250,12 +255,12 @@ describe("SettingsHubModal", () => {
 
       await fireEvent.press(getByTestId("settings-hub-open-calendar"));
       await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
-      expect(getByTestId("calendar-settings-name-input")).toBeTruthy();
+      expect(getByTestId("calendar-settings-name-display")).toBeTruthy();
       // Exactly one back control, never two stacked "back" links.
       expect(getByTestId("settings-hub-back")).toBeTruthy();
 
       await fireEvent.press(getByTestId("settings-hub-back"));
-      expect(queryByTestId("calendar-settings-name-input")).toBeNull();
+      expect(queryByTestId("calendar-settings-name-display")).toBeNull();
       expect(getByTestId("calendar-settings-calendar-cal-1")).toBeTruthy();
 
       await fireEvent.press(getByTestId("settings-hub-back"));
@@ -338,7 +343,22 @@ describe("SettingsHubModal", () => {
       expect(queryByTestId("calendar-settings-invite-button")).toBeNull();
     });
 
-    it("opens a calendar's edit view, pre-filled with its name", async () => {
+    it("opens a calendar's edit view, showing its name as plain text with an edit icon", async () => {
+      mockHooks();
+
+      const { getByTestId, queryByTestId } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} initialSection="calendar" />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+
+      expect(getByTestId("calendar-settings-name-display").props.children).toBe("我が家");
+      expect(getByTestId("calendar-settings-name-edit")).toBeTruthy();
+      expect(queryByTestId("calendar-settings-name-input")).toBeNull();
+      expect(useCalendarMembers).toHaveBeenLastCalledWith("cal-1");
+    });
+
+    it("reveals a text input with confirm/cancel buttons when the name's edit icon is pressed", async () => {
       mockHooks();
 
       const { getByTestId } = await render(
@@ -346,16 +366,70 @@ describe("SettingsHubModal", () => {
       );
 
       await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+      await fireEvent.press(getByTestId("calendar-settings-name-edit"));
 
       expect(getByTestId("calendar-settings-name-input").props.value).toBe("我が家");
-      expect(useCalendarMembers).toHaveBeenLastCalledWith("cal-1");
+      expect(getByTestId("calendar-settings-name-confirm")).toBeTruthy();
+      expect(getByTestId("calendar-settings-name-cancel")).toBeTruthy();
     });
 
-    it("saves the renamed calendar and notifies the caller to refetch", async () => {
+    it("saves the renamed calendar and notifies the caller to refetch, on confirm", async () => {
       mockHooks();
-      const updateCalendarMock = jest.fn().mockResolvedValue(true);
-      (useUpdateCalendar as jest.Mock).mockReturnValue({
-        updateCalendar: updateCalendarMock,
+      const updateCalendarNameMock = jest.fn().mockResolvedValue(true);
+      (useUpdateCalendarName as jest.Mock).mockReturnValue({
+        updateCalendarName: updateCalendarNameMock,
+        isSubmitting: false,
+        error: null,
+      });
+      const onChange = jest.fn();
+
+      const { getByTestId, queryByTestId } = await render(
+        <SettingsHubModal
+          calendars={CALENDARS}
+          currentUserId="user-1"
+          onClose={jest.fn()}
+          onChange={onChange}
+          initialSection="calendar"
+        />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+      await fireEvent.press(getByTestId("calendar-settings-name-edit"));
+      await fireEvent.changeText(getByTestId("calendar-settings-name-input"), "改名後の我が家");
+      await fireEvent.press(getByTestId("calendar-settings-name-confirm"));
+
+      await waitFor(() => expect(updateCalendarNameMock).toHaveBeenCalledWith("cal-1", "改名後の我が家"));
+      await waitFor(() => expect(onChange).toHaveBeenCalled());
+      expect(queryByTestId("calendar-settings-name-input")).toBeNull();
+    });
+
+    it("reverts to the original name without saving when the name edit is cancelled", async () => {
+      mockHooks();
+      const updateCalendarNameMock = jest.fn();
+      (useUpdateCalendarName as jest.Mock).mockReturnValue({
+        updateCalendarName: updateCalendarNameMock,
+        isSubmitting: false,
+        error: null,
+      });
+
+      const { getByTestId } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} initialSection="calendar" />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+      await fireEvent.press(getByTestId("calendar-settings-name-edit"));
+      await fireEvent.changeText(getByTestId("calendar-settings-name-input"), "書きかけの名前");
+      await fireEvent.press(getByTestId("calendar-settings-name-cancel"));
+
+      expect(updateCalendarNameMock).not.toHaveBeenCalled();
+      expect(getByTestId("calendar-settings-name-display").props.children).toBe("我が家");
+    });
+
+    it("saves the color immediately when a swatch is tapped, without a separate confirm step", async () => {
+      mockHooks();
+      const updateCalendarColorMock = jest.fn().mockResolvedValue(true);
+      (useUpdateCalendarColor as jest.Mock).mockReturnValue({
+        updateCalendarColor: updateCalendarColorMock,
         isSubmitting: false,
         error: null,
       });
@@ -372,71 +446,39 @@ describe("SettingsHubModal", () => {
       );
 
       await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
-      await fireEvent.changeText(getByTestId("calendar-settings-name-input"), "改名後の我が家");
-      await fireEvent.press(getByTestId("calendar-settings-save-button"));
+      await fireEvent.press(getByTestId("calendar-settings-color-green"));
 
-      await waitFor(() =>
-        expect(updateCalendarMock).toHaveBeenCalledWith("cal-1", { name: "改名後の我が家", color: "#2f6fed" }),
-      );
+      await waitFor(() => expect(updateCalendarColorMock).toHaveBeenCalledWith("cal-1", "#22c32a"));
       await waitFor(() => expect(onChange).toHaveBeenCalled());
+      expect(getByTestId("calendar-settings-color-green-check")).toBeTruthy();
     });
 
-    it("uses a ✓ icon instead of the 保存 text label for the calendar-edit save button", async () => {
-      mockHooks();
-
-      const { queryByText, getByTestId } = await render(
-        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} initialSection="calendar" />,
-      );
-
-      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
-
-      expect(queryByText("保存")).toBeNull();
-      expect(getByTestId("calendar-settings-save-button")).toBeTruthy();
-    });
-
-    it("changes the calendar's color and saves it together with the name", async () => {
-      mockHooks();
-      const updateCalendarMock = jest.fn().mockResolvedValue(true);
-      (useUpdateCalendar as jest.Mock).mockReturnValue({
-        updateCalendar: updateCalendarMock,
+    it("lets a non-owner member rename the calendar too, via the member-level name update (regression: name/color used to be owner-only)", async () => {
+      mockHooks({ members: MEMBERS_CAL_1 });
+      const updateCalendarNameMock = jest.fn().mockResolvedValue(true);
+      (useUpdateCalendarName as jest.Mock).mockReturnValue({
+        updateCalendarName: updateCalendarNameMock,
         isSubmitting: false,
         error: null,
       });
-
-      const { getByTestId } = await render(
-        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} initialSection="calendar" />,
-      );
-
-      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
-      await fireEvent.press(getByTestId("calendar-settings-color-green"));
-      await fireEvent.press(getByTestId("calendar-settings-save-button"));
-
-      await waitFor(() =>
-        expect(updateCalendarMock).toHaveBeenCalledWith("cal-1", { name: "我が家", color: "#22c32a" }),
-      );
-    });
-
-    it("disables the calendar name field for a non-owner member (regression: color used to be owner-only too)", async () => {
-      mockHooks({ members: MEMBERS_CAL_1 });
 
       const { getByTestId } = await render(
         <SettingsHubModal calendars={CALENDARS} currentUserId="user-2" onClose={jest.fn()} initialSection="calendar" />,
       );
 
       await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+      expect(getByTestId("calendar-settings-name-edit")).toBeTruthy();
 
-      expect(getByTestId("calendar-settings-name-input").props.editable).toBe(false);
+      await fireEvent.press(getByTestId("calendar-settings-name-edit"));
+      await fireEvent.changeText(getByTestId("calendar-settings-name-input"), "改名後の我が家");
+      await fireEvent.press(getByTestId("calendar-settings-name-confirm"));
+
+      await waitFor(() => expect(updateCalendarNameMock).toHaveBeenCalledWith("cal-1", "改名後の我が家"));
     });
 
-    it("lets a non-owner member change and save just the color, via the member-level color update", async () => {
+    it("lets a non-owner member change the color, via the member-level color update, immediately on tap", async () => {
       mockHooks({ members: MEMBERS_CAL_1 });
-      const updateCalendarMock = jest.fn().mockResolvedValue(true);
       const updateCalendarColorMock = jest.fn().mockResolvedValue(true);
-      (useUpdateCalendar as jest.Mock).mockReturnValue({
-        updateCalendar: updateCalendarMock,
-        isSubmitting: false,
-        error: null,
-      });
       (useUpdateCalendarColor as jest.Mock).mockReturnValue({
         updateCalendarColor: updateCalendarColorMock,
         isSubmitting: false,
@@ -456,10 +498,8 @@ describe("SettingsHubModal", () => {
 
       await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
       await fireEvent.press(getByTestId("calendar-settings-color-green"));
-      await fireEvent.press(getByTestId("calendar-settings-save-button"));
 
       await waitFor(() => expect(updateCalendarColorMock).toHaveBeenCalledWith("cal-1", "#22c32a"));
-      expect(updateCalendarMock).not.toHaveBeenCalled();
       await waitFor(() => expect(onChange).toHaveBeenCalled());
     });
 
@@ -622,7 +662,7 @@ describe("SettingsHubModal", () => {
       await waitFor(() => expect(onChange).toHaveBeenCalled());
       await waitFor(() => expect(getByTestId("calendar-settings-created")).toBeTruthy());
       expect(getByText("「新しいカレンダー」を作成しました")).toBeTruthy();
-      expect(queryByTestId("calendar-settings-save-button")).toBeNull();
+      expect(queryByTestId("calendar-settings-name-display")).toBeNull();
     });
 
     it("opens the invite screen directly from the 「作成しました」step, and going back lands on the edit view", async () => {
@@ -660,7 +700,7 @@ describe("SettingsHubModal", () => {
       await fireEvent.press(getByTestId("settings-hub-back"));
 
       expect(queryByTestId("invite-flow-generate")).toBeNull();
-      expect(getByTestId("calendar-settings-save-button")).toBeTruthy();
+      expect(getByTestId("calendar-settings-name-display")).toBeTruthy();
     });
 
     it("goes straight to the edit view when 'あとで招待する' is pressed from the 「作成しました」step", async () => {
@@ -695,7 +735,7 @@ describe("SettingsHubModal", () => {
       await fireEvent.press(getByTestId("calendar-settings-created-later"));
 
       expect(queryByTestId("calendar-settings-created")).toBeNull();
-      expect(getByTestId("calendar-settings-save-button")).toBeTruthy();
+      expect(getByTestId("calendar-settings-name-display")).toBeTruthy();
     });
 
     it("opens straight into the create form when initialCalendarMode is 'create' (skipping the list screen)", async () => {
@@ -970,7 +1010,27 @@ describe("SettingsHubModal", () => {
       expect(getByTestId("tag-management-tag-tag-1")).toBeTruthy();
     });
 
-    it("edits an existing tag, pre-filled, and saves the update", async () => {
+    it("edits an existing tag's name (pencil → input → confirm) and saves the update", async () => {
+      const { refetchTags } = mockHooks();
+      const updateTagMock = jest.fn().mockResolvedValue(true);
+      (useUpdateTag as jest.Mock).mockReturnValue({ updateTag: updateTagMock, isSubmitting: false, error: null });
+
+      const { getByTestId, queryByTestId } = await openTagList();
+
+      await fireEvent.press(getByTestId("tag-management-tag-tag-1"));
+      expect(getByTestId("edit-tag-name-display").props.children).toBe("行事");
+      expect(queryByTestId("edit-tag-save-button")).toBeNull();
+      expect(getByTestId("tag-management-delete-button")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("edit-tag-name-edit"));
+      await fireEvent.changeText(getByTestId("edit-tag-name-input"), "行楽");
+      await fireEvent.press(getByTestId("edit-tag-name-confirm"));
+
+      await waitFor(() => expect(updateTagMock).toHaveBeenCalledWith("tag-1", { name: "行楽" }));
+      await waitFor(() => expect(refetchTags).toHaveBeenCalled());
+    });
+
+    it("saves an existing tag's color immediately when a swatch is tapped, with no separate confirm step", async () => {
       const { refetchTags } = mockHooks();
       const updateTagMock = jest.fn().mockResolvedValue(true);
       (useUpdateTag as jest.Mock).mockReturnValue({ updateTag: updateTagMock, isSubmitting: false, error: null });
@@ -978,14 +1038,10 @@ describe("SettingsHubModal", () => {
       const { getByTestId } = await openTagList();
 
       await fireEvent.press(getByTestId("tag-management-tag-tag-1"));
-      expect(getByTestId("edit-tag-name-input").props.value).toBe("行事");
-      expect(getByTestId("tag-management-delete-button")).toBeTruthy();
-
-      await fireEvent.changeText(getByTestId("edit-tag-name-input"), "行楽");
-      await fireEvent.press(getByTestId("edit-tag-save-button"));
+      await fireEvent.press(getByTestId("edit-tag-color-green"));
 
       await waitFor(() =>
-        expect(updateTagMock).toHaveBeenCalledWith("tag-1", { name: "行楽", color: "#ff0000", level: "major", parentId: null }),
+        expect(updateTagMock).toHaveBeenCalledWith("tag-1", { color: TAG_COLORS.find((c) => c.name === "green")!.hex }),
       );
       await waitFor(() => expect(refetchTags).toHaveBeenCalled());
     });

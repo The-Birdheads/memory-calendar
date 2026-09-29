@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { ColorSwatchPicker } from "../../../shared/components/ColorSwatchPicker";
+import { Icon } from "../../../shared/components/Icon";
 import { COLOR_PALETTE } from "../../../shared/constants/colorPalette";
 import { lightenHexColor } from "../../../shared/utils/color";
 import { findColorUsage, type ColorUsageEntry } from "../../../shared/utils/colorUsage";
@@ -15,8 +16,15 @@ export interface EditTagFormProps {
   calendars: Calendar[];
   onSave: (input: UpdateTagInput) => void;
   /** 保存処理が実行中かどうか。連打で同じタグが複数作られるのを防ぐため、
-   * 実行中は保存ボタンを無効化する。 */
+   * 実行中は保存ボタンを無効化する(新規作成時のみ - 編集時は下記の通り)。 */
   isSubmitting?: boolean;
+  /**
+   * 既存タグの編集かどうか(false=新規作成)。編集時は名前を鉛筆アイコンでの
+   * インライン編集にし、分類・親タグ・色は選択した瞬間にそれぞれ保存する
+   * (決定用の✓ボタンは表示しない)。新規作成時はタグ自体がまだ存在しない
+   * ため、従来通り全項目を入力してから1回の「作成」で保存する。
+   */
+  isEditing?: boolean;
 }
 
 export const TAG_COLORS = COLOR_PALETTE;
@@ -34,8 +42,10 @@ function eligibleParentsFor(level: TagLevel, allTags: Tag[], excludeId: string):
   return allTags.filter((candidate) => candidate.level === parentLevel && candidate.id !== excludeId);
 }
 
-export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: EditTagFormProps) {
+export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isEditing }: EditTagFormProps) {
   const [name, setName] = useState(tag.name);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(tag.name);
   const [level, setLevel] = useState<TagLevel>(tag.level);
   const [parentId, setParentId] = useState<string | null>(tag.parentId);
   const [majorColor, setMajorColor] = useState<string | null>(tag.level === "major" ? tag.color : TAG_COLORS[0].hex);
@@ -85,11 +95,48 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: E
     setLevel(nextLevel);
     setParentId(null);
     setGrandparentId(null);
+    // 大分類への変更は親タグ不要でその場で状態が確定するので即保存する。
+    // 中分類/小分類への変更は親タグを選ぶまで未確定のまま(下のparent選択で保存)。
+    if (isEditing && nextLevel === "major") {
+      onSave({ level: "major", parentId: null, color: majorColor });
+    }
   };
 
   const handleSelectGrandparent = (nextGrandparentId: string) => {
     setGrandparentId(nextGrandparentId);
     setParentId(null);
+  };
+
+  const handleSelectParent = (newParentId: string) => {
+    setParentId(newParentId);
+    if (isEditing) {
+      const newParentTag = allTags.find((candidate) => candidate.id === newParentId);
+      const newColor =
+        newParentTag && newParentTag.color !== null ? lightenHexColor(newParentTag.color, AUTO_SHADE_AMOUNT) : null;
+      onSave({ level, parentId: newParentId, color: newColor });
+    }
+  };
+
+  const handleSelectMajorColor = (hex: string | null) => {
+    setMajorColor(hex);
+    if (isEditing) {
+      onSave({ color: hex });
+    }
+  };
+
+  const handleStartEditName = () => {
+    setNameDraft(name);
+    setIsEditingName(true);
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+  };
+
+  const handleConfirmEditName = () => {
+    setName(nameDraft);
+    setIsEditingName(false);
+    onSave({ name: nameDraft });
   };
 
   const handleSave = () => {
@@ -99,13 +146,54 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: E
 
   return (
     <View style={styles.container}>
-      <TextInput testID="edit-tag-name-input" style={styles.input} value={name} onChangeText={setName} />
+      {isEditing ? (
+        isEditingName ? (
+          <View style={styles.nameRow}>
+            <TextInput
+              testID="edit-tag-name-input"
+              style={[styles.input, styles.nameInput]}
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              autoFocus
+            />
+            <TouchableOpacity
+              testID="edit-tag-name-confirm"
+              onPress={handleConfirmEditName}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.confirmCheck}>✓</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="edit-tag-name-cancel"
+              onPress={handleCancelEditName}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.cancelText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.nameRow}>
+            <Text testID="edit-tag-name-display" style={styles.nameDisplay}>
+              {name}
+            </Text>
+            <TouchableOpacity
+              testID="edit-tag-name-edit"
+              onPress={handleStartEditName}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Icon name="edit" size={16} color="#2f6fed" />
+            </TouchableOpacity>
+          </View>
+        )
+      ) : (
+        <TextInput testID="edit-tag-name-input" style={styles.input} value={name} onChangeText={setName} />
+      )}
 
       {level === "major" ? (
         <ColorSwatchPicker
           testIDPrefix="edit-tag-color"
           selected={majorColor}
-          onSelect={setMajorColor}
+          onSelect={handleSelectMajorColor}
           usageByColor={usageByColor}
           allowUnset
         />
@@ -167,7 +255,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: E
                 <TouchableOpacity
                   key={mid.id}
                   testID={`edit-tag-parent-${mid.id}`}
-                  onPress={() => setParentId(mid.id)}
+                  onPress={() => handleSelectParent(mid.id)}
                   style={[styles.parentButton, mid.id === parentId && styles.parentButtonActive]}
                 >
                   <Text>{mid.name}</Text>
@@ -182,7 +270,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: E
             <TouchableOpacity
               key={candidate.id}
               testID={`edit-tag-parent-${candidate.id}`}
-              onPress={() => setParentId(candidate.id)}
+              onPress={() => handleSelectParent(candidate.id)}
               style={[styles.parentButton, candidate.id === parentId && styles.parentButtonActive]}
             >
               <Text>{candidate.name}</Text>
@@ -191,15 +279,17 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting }: E
         </View>
       ) : null}
 
-      <TouchableOpacity
-        testID="edit-tag-save-button"
-        style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
-        disabled={isSubmitting}
-        onPress={handleSave}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Text style={styles.saveButtonText}>✓</Text>
-      </TouchableOpacity>
+      {isEditing ? null : (
+        <TouchableOpacity
+          testID="edit-tag-save-button"
+          style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
+          disabled={isSubmitting}
+          onPress={handleSave}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={styles.saveButtonText}>✓</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -214,6 +304,27 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  nameInput: {
+    flex: 1,
+  },
+  nameDisplay: {
+    flex: 1,
+    fontSize: 15,
+  },
+  confirmCheck: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2f6fed",
+  },
+  cancelText: {
+    fontSize: 16,
+    color: "#666",
   },
   colorSwatch: {
     width: 28,

@@ -11,7 +11,7 @@ import {
   listMembersForCalendars,
   listMyCalendars,
   removeMember,
-  updateCalendar,
+  updateCalendarName,
 } from "../service";
 import {
   useCalendarMembers,
@@ -23,7 +23,7 @@ import {
   useMyCalendars,
   usePersonalCalendar,
   useRemoveMember,
-  useUpdateCalendar,
+  useUpdateCalendarName,
 } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
@@ -36,7 +36,7 @@ jest.mock("../service", () => ({
   listMembersForCalendars: jest.fn(),
   removeMember: jest.fn(),
   createCalendar: jest.fn(),
-  updateCalendar: jest.fn(),
+  updateCalendarName: jest.fn(),
   createInvite: jest.fn(),
   joinByInvite: jest.fn(),
   getPersonalCalendar: jest.fn(),
@@ -80,36 +80,36 @@ describe("useCreateCalendar", () => {
   });
 });
 
-describe("useUpdateCalendar", () => {
+describe("useUpdateCalendarName", () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
   it("returns true and clears the error when the update succeeds", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (updateCalendar as jest.Mock).mockResolvedValue({ ok: true, value: { id: "cal-1" } });
+    (updateCalendarName as jest.Mock).mockResolvedValue({ ok: true, value: { id: "cal-1" } });
 
-    const { result } = await renderHook(() => useUpdateCalendar());
+    const { result } = await renderHook(() => useUpdateCalendarName());
 
     let success = false;
     await act(async () => {
-      success = await result.current.updateCalendar("cal-1", { name: "改名後" });
+      success = await result.current.updateCalendarName("cal-1", "改名後");
     });
 
     expect(success).toBe(true);
     expect(result.current.error).toBeNull();
-    expect(updateCalendar).toHaveBeenCalledWith({}, "cal-1", { name: "改名後" });
+    expect(updateCalendarName).toHaveBeenCalledWith({}, "cal-1", "改名後");
   });
 
   it("returns false and sets the error when the update fails", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (updateCalendar as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+    (updateCalendarName as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
 
-    const { result } = await renderHook(() => useUpdateCalendar());
+    const { result } = await renderHook(() => useUpdateCalendarName());
 
     let success = true;
     await act(async () => {
-      success = await result.current.updateCalendar("cal-1", { name: "改名後" });
+      success = await result.current.updateCalendarName("cal-1", "改名後");
     });
 
     expect(success).toBe(false);

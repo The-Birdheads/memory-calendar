@@ -8,7 +8,6 @@ import type {
   CalendarMember,
   CalendarMembership,
   CreateCalendarInput,
-  UpdateCalendarInput,
 } from "./types";
 
 interface CalendarRow {
@@ -117,25 +116,22 @@ export async function getPersonalCalendar(
   return ok(mapCalendarRow(data as CalendarRow));
 }
 
-export async function updateCalendar(
+/** 名前・色はどちらもメンバーなら誰でも変えられる(種別=kindはUIから変更
+ * できないため、それ以外の直接UPDATEは使わずSECURITY DEFINER RPC経由で
+ * 更新する)。 */
+export async function updateCalendarName(
   client: SupabaseClient,
   calendarId: string,
-  input: UpdateCalendarInput
+  name: string
 ): Promise<Result<Calendar, CalendarError>> {
-  if (input.name !== undefined && !input.name.trim()) {
+  if (!name.trim()) {
     return err({ type: "ValidationError", field: "name" });
   }
 
-  const payload: Record<string, unknown> = {};
-  if (input.name !== undefined) payload.name = input.name;
-  if (input.color !== undefined) payload.color = input.color;
-
-  const { data, error } = await client
-    .from("calendars")
-    .update(payload)
-    .eq("id", calendarId)
-    .select()
-    .single();
+  const { data, error } = await client.rpc("update_calendar_name", {
+    p_calendar_id: calendarId,
+    p_name: name,
+  });
 
   if (error || !data) {
     return err(mapCalendarError(error as PostgrestError));
@@ -144,9 +140,6 @@ export async function updateCalendar(
   return ok(mapCalendarRow(data as CalendarRow));
 }
 
-/** カレンダー名・種別の変更は引き続きオーナーのみ(calendars_update_owner
- * ポリシー)だが、色はメンバーなら誰でも変えられるようにするため、
- * update_calendar_colorのSECURITY DEFINER RPC経由で更新する。 */
 export async function updateCalendarColor(
   client: SupabaseClient,
   calendarId: string,

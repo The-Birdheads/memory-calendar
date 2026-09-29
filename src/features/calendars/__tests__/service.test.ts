@@ -11,8 +11,8 @@ import {
   listMembersForCalendars,
   listMyCalendars,
   removeMember,
-  updateCalendar,
   updateCalendarColor,
+  updateCalendarName,
 } from "../service";
 
 function createMockClient(fromOverrides: Record<string, jest.Mock> = {}): SupabaseClient {
@@ -524,8 +524,8 @@ describe("removeMember", () => {
   });
 });
 
-describe("updateCalendar", () => {
-  it("updates the calendar name and returns it on success", async () => {
+describe("updateCalendarName", () => {
+  it("calls the update_calendar_name RPC and returns the updated calendar on success", async () => {
     const row = {
       id: "cal-1",
       name: "改名後",
@@ -534,15 +534,10 @@ describe("updateCalendar", () => {
       created_by: "user-1",
       created_at: "2026-08-17T00:00:00.000Z",
     };
-    const update = jest.fn().mockReturnThis();
-    const eq = jest.fn().mockReturnThis();
-    const select = jest.fn().mockReturnThis();
-    const single = jest.fn().mockResolvedValue({ data: row, error: null });
-    const client = {
-      from: jest.fn().mockReturnValue({ update, eq, select, single }),
-    } as unknown as SupabaseClient;
+    const rpc = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = { rpc } as unknown as SupabaseClient;
 
-    const result = await updateCalendar(client, "cal-1", { name: "改名後" });
+    const result = await updateCalendarName(client, "cal-1", "改名後");
 
     expect(result).toEqual({
       ok: true,
@@ -555,56 +550,27 @@ describe("updateCalendar", () => {
         createdAt: "2026-08-17T00:00:00.000Z",
       },
     });
-    expect(client.from).toHaveBeenCalledWith("calendars");
-    expect(update).toHaveBeenCalledWith({ name: "改名後" });
-    expect(eq).toHaveBeenCalledWith("id", "cal-1");
-  });
-
-  it("updates the calendar's color and returns it on success", async () => {
-    const row = {
-      id: "cal-1",
-      name: "我が家",
-      kind: "group",
-      color: "#43a047",
-      created_by: "user-1",
-      created_at: "2026-08-17T00:00:00.000Z",
-    };
-    const update = jest.fn().mockReturnThis();
-    const eq = jest.fn().mockReturnThis();
-    const select = jest.fn().mockReturnThis();
-    const single = jest.fn().mockResolvedValue({ data: row, error: null });
-    const client = {
-      from: jest.fn().mockReturnValue({ update, eq, select, single }),
-    } as unknown as SupabaseClient;
-
-    const result = await updateCalendar(client, "cal-1", { color: "#43a047" });
-
-    expect(result.ok && result.value.color).toBe("#43a047");
-    expect(update).toHaveBeenCalledWith({ color: "#43a047" });
+    expect(rpc).toHaveBeenCalledWith("update_calendar_name", { p_calendar_id: "cal-1", p_name: "改名後" });
   });
 
   it("returns a ValidationError without calling Supabase when the new name is empty", async () => {
-    const client = { from: jest.fn() } as unknown as SupabaseClient;
+    const rpc = jest.fn();
+    const client = { rpc } as unknown as SupabaseClient;
 
-    const result = await updateCalendar(client, "cal-1", { name: "   " });
+    const result = await updateCalendarName(client, "cal-1", "   ");
 
     expect(result).toEqual({ ok: false, error: { type: "ValidationError", field: "name" } });
-    expect(client.from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("maps a permission error to Forbidden when the caller is not the owner", async () => {
-    const update = jest.fn().mockReturnThis();
-    const eq = jest.fn().mockReturnThis();
-    const select = jest.fn().mockReturnThis();
-    const single = jest.fn().mockResolvedValue({
+  it("maps a permission error to Forbidden when the caller isn't a member (regression: non-owner members must still succeed)", async () => {
+    const rpc = jest.fn().mockResolvedValue({
       data: null,
       error: { message: "permission denied", code: "42501" },
     });
-    const client = {
-      from: jest.fn().mockReturnValue({ update, eq, select, single }),
-    } as unknown as SupabaseClient;
+    const client = { rpc } as unknown as SupabaseClient;
 
-    const result = await updateCalendar(client, "cal-1", { name: "改名後" });
+    const result = await updateCalendarName(client, "cal-1", "改名後");
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

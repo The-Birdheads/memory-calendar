@@ -296,4 +296,140 @@ describe("EditTagForm", () => {
 
     expect(queryByTestId("edit-tag-parent-tag-4")).toBeNull();
   });
+
+  describe("isEditing (既存タグの編集: 名前は鉛筆アイコン、分類・親タグ・色は選択即保存)", () => {
+    it("shows the name as plain text with an edit (pencil) icon instead of an input, and no save button at all", async () => {
+      const { getByTestId, queryByTestId } = await render(
+        <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS} onSave={jest.fn()} isEditing />
+      );
+
+      expect(getByTestId("edit-tag-name-display").props.children).toBe("行事");
+      expect(getByTestId("edit-tag-name-edit")).toBeTruthy();
+      expect(queryByTestId("edit-tag-name-input")).toBeNull();
+      expect(queryByTestId("edit-tag-save-button")).toBeNull();
+    });
+
+    it("reveals a text input with confirm/cancel when the name's edit icon is pressed, and saves just the name on confirm", async () => {
+      const onSave = jest.fn();
+      const { getByTestId, queryByTestId } = await render(
+        <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS} onSave={onSave} isEditing />
+      );
+
+      await fireEvent.press(getByTestId("edit-tag-name-edit"));
+      expect(getByTestId("edit-tag-name-input").props.value).toBe("行事");
+
+      await fireEvent.changeText(getByTestId("edit-tag-name-input"), "行楽");
+      await fireEvent.press(getByTestId("edit-tag-name-confirm"));
+
+      expect(onSave).toHaveBeenCalledWith({ name: "行楽" });
+      expect(queryByTestId("edit-tag-name-input")).toBeNull();
+      expect(getByTestId("edit-tag-name-display").props.children).toBe("行楽");
+    });
+
+    it("reverts to the original name without saving when the name edit is cancelled", async () => {
+      const onSave = jest.fn();
+      const { getByTestId } = await render(
+        <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS} onSave={onSave} isEditing />
+      );
+
+      await fireEvent.press(getByTestId("edit-tag-name-edit"));
+      await fireEvent.changeText(getByTestId("edit-tag-name-input"), "書きかけ");
+      await fireEvent.press(getByTestId("edit-tag-name-cancel"));
+
+      expect(onSave).not.toHaveBeenCalled();
+      expect(getByTestId("edit-tag-name-display").props.children).toBe("行事");
+    });
+
+    it("saves a major tag's color immediately when a swatch is tapped, with a check mark inside it and no separate confirm step", async () => {
+      const onSave = jest.fn();
+      const { getByTestId } = await render(
+        <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS} onSave={onSave} isEditing />
+      );
+
+      await fireEvent.press(getByTestId("edit-tag-color-green"));
+
+      expect(onSave).toHaveBeenCalledWith({ color: TAG_COLORS.find((c) => c.name === "green")!.hex });
+      expect(getByTestId("edit-tag-color-green-check")).toBeTruthy();
+    });
+
+    it("saves 色未設定 immediately when picked for a major tag being edited", async () => {
+      const onSave = jest.fn();
+      const { getByTestId } = await render(
+        <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS} onSave={onSave} isEditing />
+      );
+
+      await fireEvent.press(getByTestId("edit-tag-color-unset"));
+
+      expect(onSave).toHaveBeenCalledWith({ color: null });
+    });
+
+    it("saves immediately when switching level to 大分類 (parentless, so the new state is already valid)", async () => {
+      const midTag = { ...MAJOR_TAG, id: "tag-3", level: "mid" as const, parentId: "tag-1" };
+      const onSave = jest.fn();
+      const { getByTestId } = await render(
+        <EditTagForm tag={midTag} allTags={[MAJOR_TAG, midTag]} calendars={CALENDARS} onSave={onSave} isEditing />
+      );
+
+      await fireEvent.press(getByTestId("edit-tag-level-major"));
+
+      expect(onSave).toHaveBeenCalledWith({ level: "major", parentId: null, color: TAG_COLORS[0].hex });
+    });
+
+    it("does not save when switching level to 中分類 (no parent chosen yet), but does save once a parent is picked", async () => {
+      const onSave = jest.fn();
+      const { getByTestId } = await render(
+        <EditTagForm
+          tag={MAJOR_TAG}
+          allTags={[MAJOR_TAG, OTHER_MAJOR_TAG]}
+          calendars={CALENDARS}
+          onSave={onSave}
+          isEditing
+        />
+      );
+
+      await fireEvent.press(getByTestId("edit-tag-level-mid"));
+      expect(onSave).not.toHaveBeenCalled();
+
+      await fireEvent.press(getByTestId("edit-tag-parent-tag-2"));
+
+      expect(onSave).toHaveBeenCalledWith({
+        level: "mid",
+        parentId: "tag-2",
+        color: lightenHexColor("#00ff00", 0.35),
+      });
+    });
+
+    it("saves immediately once a 小分類's grandparent+parent are both picked, not on the grandparent step alone", async () => {
+      const midOfTag2 = {
+        ...MAJOR_TAG,
+        id: "tag-5",
+        level: "mid" as const,
+        parentId: "tag-2",
+        name: "国内旅行",
+        color: "#00ff00",
+      };
+      const onSave = jest.fn();
+      const { getByTestId } = await render(
+        <EditTagForm
+          tag={MAJOR_TAG}
+          allTags={[MAJOR_TAG, OTHER_MAJOR_TAG, midOfTag2]}
+          calendars={CALENDARS}
+          onSave={onSave}
+          isEditing
+        />
+      );
+
+      await fireEvent.press(getByTestId("edit-tag-level-minor"));
+      await fireEvent.press(getByTestId("edit-tag-grandparent-tag-2"));
+      expect(onSave).not.toHaveBeenCalled();
+
+      await fireEvent.press(getByTestId("edit-tag-parent-tag-5"));
+
+      expect(onSave).toHaveBeenCalledWith({
+        level: "minor",
+        parentId: "tag-5",
+        color: lightenHexColor("#00ff00", 0.35),
+      });
+    });
+  });
 });

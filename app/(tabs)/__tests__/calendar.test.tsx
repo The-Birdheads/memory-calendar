@@ -13,8 +13,8 @@ import {
   useLeaveOrDeleteCalendar,
   useMyCalendars,
   useRemoveMember,
-  useUpdateCalendar,
   useUpdateCalendarColor,
+  useUpdateCalendarName,
 } from "../../../src/features/calendars/hooks";
 import { computeDateKeyRange } from "../../../src/features/events/dateRange";
 import {
@@ -72,8 +72,8 @@ jest.mock("../../../src/features/calendars/hooks", () => ({
   useRemoveMember: jest.fn(),
   useLeaveOrDeleteCalendar: jest.fn(),
   useCreateCalendar: jest.fn(),
-  useUpdateCalendar: jest.fn(),
   useUpdateCalendarColor: jest.fn(),
+  useUpdateCalendarName: jest.fn(),
   useCreateInvite: jest.fn(),
   useJoinByInvite: jest.fn(),
 }));
@@ -212,8 +212,8 @@ function mockCommonHooks() {
     isSubmitting: false,
     error: null,
   });
-  (useUpdateCalendar as jest.Mock).mockReturnValue({
-    updateCalendar: jest.fn().mockResolvedValue(true),
+  (useUpdateCalendarName as jest.Mock).mockReturnValue({
+    updateCalendarName: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });

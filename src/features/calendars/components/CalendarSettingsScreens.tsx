@@ -12,8 +12,8 @@ import {
   useCreateCalendar,
   useJoinByInvite,
   useLeaveOrDeleteCalendar,
-  useUpdateCalendar,
   useUpdateCalendarColor,
+  useUpdateCalendarName,
 } from "../hooks";
 import { getCalendarErrorMessageJa } from "../service";
 import type { Calendar } from "../types";
@@ -233,12 +233,15 @@ export function CalendarEditScreen({
   onLeftOrDeleted,
 }: CalendarEditScreenProps) {
   const selectedCalendar = calendars.find((calendar) => calendar.id === calendarId) ?? null;
-  const isOwner = !!selectedCalendar && selectedCalendar.createdBy === currentUserId;
+  const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(selectedCalendar?.name ?? "");
+  // 決定操作を別途要求せず選択即保存にするため、タップした色をその場で
+  // 反映するローカルの表示用状態(サーバーの応答を待たずにチェックマークが
+  // 動く)。実際の保存はhandleSelectColor内で即座に行う。
   const [colorDraft, setColorDraft] = useState(selectedCalendar?.color ?? COLOR_PALETTE[0].hex);
   const [isLeaveConfirmVisible, setIsLeaveConfirmVisible] = useState(false);
 
-  const { updateCalendar, error: updateError } = useUpdateCalendar();
+  const { updateCalendarName, error: updateError } = useUpdateCalendarName();
   const { updateCalendarColor, error: updateColorError } = useUpdateCalendarColor();
   const { members } = useCalendarMembers(calendarId);
   const { leaveOrDeleteCalendar, isSubmitting: isLeavingOrDeleting, error: leaveError } = useLeaveOrDeleteCalendar();
@@ -249,13 +252,30 @@ export function CalendarEditScreen({
     [calendars, allTags, calendarId]
   );
 
-  // 名前・種別の変更はオーナー限定(calendars_update_owner)だが、色はメンバー
-  // なら誰でも変えられるようにしたいので、オーナーでない場合は色だけを
-  // update_calendar_color RPC(メンバー権限)経由で保存する。
-  const handleSave = async () => {
-    const success = isOwner
-      ? await updateCalendar(calendarId, { name: nameDraft, color: colorDraft })
-      : await updateCalendarColor(calendarId, colorDraft);
+  const handleStartEditName = () => {
+    setNameDraft(selectedCalendar?.name ?? "");
+    setIsEditingName(true);
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+  };
+
+  // 名前・色はどちらもメンバーなら誰でも変えられるようにしたいので、常に
+  // メンバー権限のSECURITY DEFINER RPC経由で保存する。
+  const handleConfirmEditName = async () => {
+    const success = await updateCalendarName(calendarId, nameDraft);
+    if (success) {
+      setIsEditingName(false);
+      onChange?.();
+    }
+  };
+
+  // 色はオーナーでなくてもメンバーなら誰でも変えられるようにしたいので、
+  // 常にupdate_calendar_color RPC(メンバー権限チェック)経由で保存する。
+  const handleSelectColor = async (hex: string) => {
+    setColorDraft(hex);
+    const success = await updateCalendarColor(calendarId, hex);
     if (success) onChange?.();
   };
 
@@ -282,37 +302,57 @@ export function CalendarEditScreen({
             </View>
           ) : null}
 
-          <Text style={styles.sectionLabel}>
-            カレンダー名{isOwner ? "" : "(変更はオーナーのみ)"}
-          </Text>
-          <TextInput
-            testID="calendar-settings-name-input"
-            style={[styles.input, !isOwner && styles.inputDisabled]}
-            value={nameDraft}
-            onChangeText={setNameDraft}
-            editable={isOwner}
-          />
+          <Text style={styles.sectionLabel}>カレンダー名</Text>
+          {isEditingName ? (
+            <View style={styles.nameRow}>
+              <TextInput
+                testID="calendar-settings-name-input"
+                style={[styles.input, styles.nameInput]}
+                value={nameDraft}
+                onChangeText={setNameDraft}
+                autoFocus
+              />
+              <TouchableOpacity
+                testID="calendar-settings-name-confirm"
+                onPress={handleConfirmEditName}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.confirmCheck}>✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="calendar-settings-name-cancel"
+                onPress={handleCancelEditName}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.cancelText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.nameRow}>
+              <Text testID="calendar-settings-name-display" style={styles.nameDisplay}>
+                {selectedCalendar?.name ?? ""}
+              </Text>
+              <TouchableOpacity
+                testID="calendar-settings-name-edit"
+                onPress={handleStartEditName}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon name="edit" size={16} color="#2f6fed" />
+              </TouchableOpacity>
+            </View>
+          )}
+          {updateError ? <Text style={styles.errorText}>{getCalendarErrorMessageJa(updateError)}</Text> : null}
 
           <Text style={styles.sectionLabel}>色（タグのない予定はこの色で表示されます）</Text>
           <ColorSwatchPicker
             testIDPrefix="calendar-settings-color"
             selected={colorDraft}
-            onSelect={(hex) => hex !== null && setColorDraft(hex)}
+            onSelect={(hex) => hex !== null && handleSelectColor(hex)}
             usageByColor={usageByColor}
           />
-
-          {updateError ? <Text style={styles.errorText}>{getCalendarErrorMessageJa(updateError)}</Text> : null}
           {updateColorError ? (
             <Text style={styles.errorText}>{getCalendarErrorMessageJa(updateColorError)}</Text>
           ) : null}
-          <TouchableOpacity
-            testID="calendar-settings-save-button"
-            style={styles.saveButton}
-            onPress={handleSave}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.saveButtonText}>✓</Text>
-          </TouchableOpacity>
 
           <Text style={styles.sectionLabel}>所属するユーザー</Text>
           {members.map((member) => (
@@ -467,9 +507,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  inputDisabled: {
-    backgroundColor: "#f2f3f5",
-    color: "#999",
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  nameInput: {
+    flex: 1,
+  },
+  nameDisplay: {
+    flex: 1,
+    fontSize: 15,
+  },
+  confirmCheck: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2f6fed",
+  },
+  cancelText: {
+    fontSize: 16,
+    color: "#666",
   },
   errorText: {
     color: "#d32f2f",

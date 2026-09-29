@@ -22,6 +22,9 @@ export interface ColorSwatchPickerProps {
  * 「この色は共有カレンダー「〇〇」で使用中です」のような説明文を出す
  * (2026-09追加)。選択自体をブロックはしない - あくまで参考情報で、
  * 気づいた上でも同じ色を選び直せる。
+ * 選択状態は丸の外側の縁取りではなく、丸の中央のチェックマークで示す
+ * (2026-09、決定操作を別途要求せずタップ即選択にする変更に合わせて、
+ * 「選ばれている」ことがその場で分かるようにした)。
  */
 export function ColorSwatchPicker({ testIDPrefix, selected, onSelect, usageByColor, allowUnset }: ColorSwatchPickerProps) {
   const selectedUsage = selected !== null ? usageByColor[selected] : undefined;
@@ -33,10 +36,10 @@ export function ColorSwatchPicker({ testIDPrefix, selected, onSelect, usageByCol
         {allowUnset ? (
           <TouchableOpacity
             testID={`${testIDPrefix}-unset`}
-            style={[styles.swatch, styles.unsetSwatch, selected === null && styles.swatchSelected]}
+            style={[styles.swatch, styles.unsetSwatch]}
             onPress={() => onSelect(null)}
           >
-            <Text style={styles.unsetSwatchText}>-</Text>
+            <Text style={styles.unsetSwatchText}>{selected === null ? "✓" : "-"}</Text>
           </TouchableOpacity>
         ) : null}
         {COLOR_PALETTE.map((color) => {
@@ -46,13 +49,14 @@ export function ColorSwatchPicker({ testIDPrefix, selected, onSelect, usageByCol
             <TouchableOpacity
               key={color.name}
               testID={`${testIDPrefix}-${color.name}`}
-              style={[
-                styles.swatch,
-                { backgroundColor: color.hex },
-                selected === color.hex && styles.swatchSelected,
-              ]}
+              style={[styles.swatch, { backgroundColor: color.hex }]}
               onPress={() => onSelect(color.hex)}
             >
+              {selected === color.hex ? (
+                <Text testID={`${testIDPrefix}-${color.name}-check`} style={styles.check}>
+                  ✓
+                </Text>
+              ) : null}
               {isUsed ? <View testID={`${testIDPrefix}-${color.name}-used-mark`} style={styles.usedMark} /> : null}
             </TouchableOpacity>
           );
@@ -80,19 +84,19 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  swatchSelected: {
-    borderColor: "#333",
-  },
-  unsetSwatch: {
-    backgroundColor: "#eee",
     alignItems: "center",
     justifyContent: "center",
   },
+  check: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  unsetSwatch: {
+    backgroundColor: "#eee",
+  },
   unsetSwatchText: {
-    color: "#999",
+    color: "#666",
     fontSize: 16,
     fontWeight: "700",
   },

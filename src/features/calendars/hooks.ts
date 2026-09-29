@@ -12,17 +12,10 @@ import {
   listMembersForCalendars,
   listMyCalendars,
   removeMember,
-  updateCalendar,
   updateCalendarColor,
+  updateCalendarName,
 } from "./service";
-import type {
-  Calendar,
-  CalendarError,
-  CalendarInvite,
-  CalendarMember,
-  CreateCalendarInput,
-  UpdateCalendarInput,
-} from "./types";
+import type { Calendar, CalendarError, CalendarInvite, CalendarMember, CreateCalendarInput } from "./types";
 
 export interface UseCreateCalendarResult {
   createCalendar: (input: CreateCalendarInput) => Promise<Calendar | null>;
@@ -49,20 +42,21 @@ export function useCreateCalendar(): UseCreateCalendarResult {
   return { createCalendar: runCreateCalendar, isSubmitting, error };
 }
 
-export interface UseUpdateCalendarResult {
-  updateCalendar: (calendarId: string, input: UpdateCalendarInput) => Promise<boolean>;
+export interface UseUpdateCalendarNameResult {
+  updateCalendarName: (calendarId: string, name: string) => Promise<boolean>;
   isSubmitting: boolean;
   error: CalendarError | null;
 }
 
-export function useUpdateCalendar(): UseUpdateCalendarResult {
+/** 名前はメンバーなら誰でも変更できる(種別=kindはUIから変更できない)。 */
+export function useUpdateCalendarName(): UseUpdateCalendarNameResult {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<CalendarError | null>(null);
 
-  const runUpdateCalendar = useCallback(async (calendarId: string, input: UpdateCalendarInput) => {
+  const runUpdateCalendarName = useCallback(async (calendarId: string, name: string) => {
     setIsSubmitting(true);
     setError(null);
-    const result = await updateCalendar(getSupabaseClient(), calendarId, input);
+    const result = await updateCalendarName(getSupabaseClient(), calendarId, name);
     setIsSubmitting(false);
     if (!result.ok) {
       setError(result.error);
@@ -71,7 +65,7 @@ export function useUpdateCalendar(): UseUpdateCalendarResult {
     return true;
   }, []);
 
-  return { updateCalendar: runUpdateCalendar, isSubmitting, error };
+  return { updateCalendarName: runUpdateCalendarName, isSubmitting, error };
 }
 
 export interface UseUpdateCalendarColorResult {
@@ -80,7 +74,7 @@ export interface UseUpdateCalendarColorResult {
   error: CalendarError | null;
 }
 
-/** 色はメンバーなら誰でも変更できる(名前・種別はオーナー限定のuseUpdateCalendarのまま)。 */
+/** 色はメンバーなら誰でも変更できる。 */
 export function useUpdateCalendarColor(): UseUpdateCalendarColorResult {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<CalendarError | null>(null);
