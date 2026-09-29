@@ -123,6 +123,12 @@ export function TagFormScreen({ tagId, onChange, onSaved }: TagFormScreenProps) 
       <ScrollView keyboardShouldPersistTaps="handled">
         <View style={styles.formSection}>
           <EditTagForm
+            // タグ一覧の読み込みが完了する前はselectedTagがまだ見つからず
+            // blankTag()のname=""でマウントされてしまう(EditTagForm内部の
+            // useState(tag.name)等はマウント時の値のまま更新されない)ため、
+            // 読み込み中は"pending"、実データが届いたらtag.idをkeyにして
+            // 切り替わった瞬間に再マウントさせ、内部stateを作り直させる。
+            key={selectedTag ? selectedTag.id : "pending"}
             tag={selectedTag ?? blankTag()}
             allTags={allTags}
             calendars={calendars}

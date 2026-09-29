@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render, within } from "@testing-library/react-native";
 
 import { EditTagForm, TAG_COLORS } from "../EditTagForm";
 import { lightenHexColor } from "../../../../shared/utils/color";
@@ -118,7 +118,7 @@ describe("EditTagForm", () => {
     expect(queryByTestId("edit-tag-color-blue-used-mark")).toBeNull();
   });
 
-  it("auto-derives a lighter shade of the parent's color for a mid tag instead of showing swatches", async () => {
+  it("shows the parent tag (not color swatches) for a mid tag, auto-deriving a lighter shade of its color on save", async () => {
     const onSave = jest.fn();
     const { getByTestId, queryByTestId } = await render(
       <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, OTHER_MAJOR_TAG]} calendars={CALENDARS}
@@ -128,9 +128,12 @@ describe("EditTagForm", () => {
     await fireEvent.press(getByTestId("edit-tag-level-mid"));
 
     expect(queryByTestId("edit-tag-color-blue")).toBeNull();
-    expect(getByTestId("edit-tag-color-preview")).toBeTruthy();
+    expect(getByTestId("edit-tag-parent-tag-unselected")).toBeTruthy();
 
     await fireEvent.press(getByTestId("edit-tag-parent-tag-2"));
+
+    expect(within(getByTestId("edit-tag-parent-tag-badge")).getByText("外出")).toBeTruthy();
+
     await fireEvent.press(getByTestId("edit-tag-save-button"));
 
     expect(onSave).toHaveBeenCalledWith({
@@ -162,7 +165,7 @@ describe("EditTagForm", () => {
   it("also leaves a mid tag's color unset (rather than crashing) when its major parent's color is unset", async () => {
     const unsetMajorTag = { ...OTHER_MAJOR_TAG, color: null };
     const onSave = jest.fn();
-    const { getByTestId, getByText } = await render(
+    const { getByTestId } = await render(
       <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG, unsetMajorTag]} calendars={CALENDARS}
         onSave={onSave} />
     );
@@ -170,7 +173,7 @@ describe("EditTagForm", () => {
     await fireEvent.press(getByTestId("edit-tag-level-mid"));
     await fireEvent.press(getByTestId(`edit-tag-parent-${unsetMajorTag.id}`));
 
-    expect(getByText(/この色も未設定になります/)).toBeTruthy();
+    expect(within(getByTestId("edit-tag-parent-tag-badge")).getByText(unsetMajorTag.name)).toBeTruthy();
 
     await fireEvent.press(getByTestId("edit-tag-save-button"));
 

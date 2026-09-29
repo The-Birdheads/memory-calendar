@@ -198,19 +198,20 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
           allowUnset
         />
       ) : (
-        <View style={styles.autoColorRow}>
-          <View
-            testID="edit-tag-color-preview"
-            style={[
-              styles.colorSwatch,
-              computedColor !== null ? { backgroundColor: computedColor } : styles.colorSwatchUnset,
-            ]}
-          />
-          <Text style={styles.autoColorLabel}>
-            {computedColor !== null
-              ? "親タグの色から自動設定されます"
-              : "親タグが未設定のため、この色も未設定になります(表示時はカレンダーの色が使われます)"}
-          </Text>
+        <View style={styles.parentTagRow}>
+          <Text style={styles.parentTagLabel}>親タグ</Text>
+          {parentTag ? (
+            <View
+              testID="edit-tag-parent-tag-badge"
+              style={[styles.parentTagBadge, { backgroundColor: parentTag.color ?? "#999999" }]}
+            >
+              <Text style={styles.parentTagBadgeText}>{parentTag.name}</Text>
+            </View>
+          ) : (
+            <Text testID="edit-tag-parent-tag-unselected" style={styles.parentTagUnselected}>
+              未選択
+            </Text>
+          )}
         </View>
       )}
 
@@ -326,23 +327,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
   },
-  colorSwatch: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  colorSwatchUnset: {
-    backgroundColor: "#eee",
-  },
-  autoColorRow: {
+  parentTagRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  autoColorLabel: {
+  parentTagLabel: {
     color: "#666",
+    fontSize: 12,
+  },
+  parentTagBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  parentTagBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+  },
+  parentTagUnselected: {
+    color: "#999",
     fontSize: 12,
   },
   levelRow: {
