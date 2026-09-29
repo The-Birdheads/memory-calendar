@@ -144,6 +144,26 @@ export async function updateCalendar(
   return ok(mapCalendarRow(data as CalendarRow));
 }
 
+/** カレンダー名・種別の変更は引き続きオーナーのみ(calendars_update_owner
+ * ポリシー)だが、色はメンバーなら誰でも変えられるようにするため、
+ * update_calendar_colorのSECURITY DEFINER RPC経由で更新する。 */
+export async function updateCalendarColor(
+  client: SupabaseClient,
+  calendarId: string,
+  color: string
+): Promise<Result<Calendar, CalendarError>> {
+  const { data, error } = await client.rpc("update_calendar_color", {
+    p_calendar_id: calendarId,
+    p_color: color,
+  });
+
+  if (error || !data) {
+    return err(mapCalendarError(error as PostgrestError));
+  }
+
+  return ok(mapCalendarRow(data as CalendarRow));
+}
+
 export async function createInvite(
   client: SupabaseClient,
   calendarId: string

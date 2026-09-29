@@ -12,6 +12,7 @@ import {
   listMyCalendars,
   removeMember,
   updateCalendar,
+  updateCalendarColor,
 } from "../service";
 
 function createMockClient(fromOverrides: Record<string, jest.Mock> = {}): SupabaseClient {
@@ -604,6 +605,48 @@ describe("updateCalendar", () => {
     } as unknown as SupabaseClient;
 
     const result = await updateCalendar(client, "cal-1", { name: "改名後" });
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("updateCalendarColor", () => {
+  it("calls the update_calendar_color RPC and returns the updated calendar on success", async () => {
+    const row = {
+      id: "cal-1",
+      name: "我が家",
+      kind: "group",
+      color: "#43a047",
+      created_by: "user-1",
+      created_at: "2026-08-17T00:00:00.000Z",
+    };
+    const rpc = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    const result = await updateCalendarColor(client, "cal-1", "#43a047");
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: "cal-1",
+        name: "我が家",
+        kind: "group",
+        color: "#43a047",
+        createdBy: "user-1",
+        createdAt: "2026-08-17T00:00:00.000Z",
+      },
+    });
+    expect(rpc).toHaveBeenCalledWith("update_calendar_color", { p_calendar_id: "cal-1", p_color: "#43a047" });
+  });
+
+  it("maps a permission error to Forbidden when the caller isn't a member (regression: non-owner members must still succeed)", async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: "permission denied", code: "42501" },
+    });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    const result = await updateCalendarColor(client, "cal-1", "#43a047");
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

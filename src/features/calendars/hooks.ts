@@ -13,6 +13,7 @@ import {
   listMyCalendars,
   removeMember,
   updateCalendar,
+  updateCalendarColor,
 } from "./service";
 import type {
   Calendar,
@@ -71,6 +72,32 @@ export function useUpdateCalendar(): UseUpdateCalendarResult {
   }, []);
 
   return { updateCalendar: runUpdateCalendar, isSubmitting, error };
+}
+
+export interface UseUpdateCalendarColorResult {
+  updateCalendarColor: (calendarId: string, color: string) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: CalendarError | null;
+}
+
+/** 色はメンバーなら誰でも変更できる(名前・種別はオーナー限定のuseUpdateCalendarのまま)。 */
+export function useUpdateCalendarColor(): UseUpdateCalendarColorResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<CalendarError | null>(null);
+
+  const runUpdateCalendarColor = useCallback(async (calendarId: string, color: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await updateCalendarColor(getSupabaseClient(), calendarId, color);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { updateCalendarColor: runUpdateCalendarColor, isSubmitting, error };
 }
 
 export interface UseCreateInviteResult {

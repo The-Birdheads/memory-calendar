@@ -275,6 +275,7 @@ function MealFormModalContent({
                   testID="meal-form-date-picker"
                   value={mealDate}
                   mode="date"
+                  display={Platform.OS === "ios" ? "inline" : "default"}
                   onChange={(_event, selected) => {
                     if (selected) setMealDate(selected);
                   }}

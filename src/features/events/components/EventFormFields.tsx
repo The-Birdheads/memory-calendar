@@ -90,6 +90,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
               testID={activePicker === "start" ? `${testIDPrefix}-start-picker` : `${testIDPrefix}-end-picker`}
               value={activePicker === "start" ? value.start : value.end}
               mode={value.isAllDay ? "date" : "datetime"}
+              display={Platform.OS === "ios" ? "inline" : "default"}
               onChange={(_event: unknown, selected?: Date) => {
                 if (selected) {
                   onChange(activePicker === "start" ? { start: selected } : { end: selected });

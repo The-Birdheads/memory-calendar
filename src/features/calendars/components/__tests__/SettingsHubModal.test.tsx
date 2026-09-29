@@ -10,6 +10,7 @@ import {
   useLeaveOrDeleteCalendar,
   useMyCalendars,
   useUpdateCalendar,
+  useUpdateCalendarColor,
 } from "../../hooks";
 import { useCreateTag, useDeleteTag, useTagTree, useUpdateTag } from "../../../tags/hooks";
 import { useAuthActions } from "../../../auth/hooks";
@@ -24,6 +25,7 @@ jest.mock("../../hooks", () => ({
   useLeaveOrDeleteCalendar: jest.fn(),
   useMyCalendars: jest.fn(),
   useUpdateCalendar: jest.fn(),
+  useUpdateCalendarColor: jest.fn(),
 }));
 
 jest.mock("../../../tags/hooks", () => ({
@@ -102,6 +104,11 @@ function mockHooks(
     error: null,
   });
   (useUpdateCalendar as jest.Mock).mockReturnValue({ updateCalendar: jest.fn(), isSubmitting: false, error: null });
+  (useUpdateCalendarColor as jest.Mock).mockReturnValue({
+    updateCalendarColor: jest.fn(),
+    isSubmitting: false,
+    error: null,
+  });
   (useLeaveOrDeleteCalendar as jest.Mock).mockReturnValue({
     leaveOrDeleteCalendar: jest.fn(),
     isSubmitting: false,
@@ -399,8 +406,55 @@ describe("SettingsHubModal", () => {
       await fireEvent.press(getByTestId("calendar-settings-save-button"));
 
       await waitFor(() =>
-        expect(updateCalendarMock).toHaveBeenCalledWith("cal-1", { name: "我が家", color: "#43a047" }),
+        expect(updateCalendarMock).toHaveBeenCalledWith("cal-1", { name: "我が家", color: "#22c32a" }),
       );
+    });
+
+    it("disables the calendar name field for a non-owner member (regression: color used to be owner-only too)", async () => {
+      mockHooks({ members: MEMBERS_CAL_1 });
+
+      const { getByTestId } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-2" onClose={jest.fn()} initialSection="calendar" />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+
+      expect(getByTestId("calendar-settings-name-input").props.editable).toBe(false);
+    });
+
+    it("lets a non-owner member change and save just the color, via the member-level color update", async () => {
+      mockHooks({ members: MEMBERS_CAL_1 });
+      const updateCalendarMock = jest.fn().mockResolvedValue(true);
+      const updateCalendarColorMock = jest.fn().mockResolvedValue(true);
+      (useUpdateCalendar as jest.Mock).mockReturnValue({
+        updateCalendar: updateCalendarMock,
+        isSubmitting: false,
+        error: null,
+      });
+      (useUpdateCalendarColor as jest.Mock).mockReturnValue({
+        updateCalendarColor: updateCalendarColorMock,
+        isSubmitting: false,
+        error: null,
+      });
+      const onChange = jest.fn();
+
+      const { getByTestId } = await render(
+        <SettingsHubModal
+          calendars={CALENDARS}
+          currentUserId="user-2"
+          onClose={jest.fn()}
+          onChange={onChange}
+          initialSection="calendar"
+        />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+      await fireEvent.press(getByTestId("calendar-settings-color-green"));
+      await fireEvent.press(getByTestId("calendar-settings-save-button"));
+
+      await waitFor(() => expect(updateCalendarColorMock).toHaveBeenCalledWith("cal-1", "#22c32a"));
+      expect(updateCalendarMock).not.toHaveBeenCalled();
+      await waitFor(() => expect(onChange).toHaveBeenCalled());
     });
 
     it("marks a color already used by another calendar/tag, and explains who's using it once picked", async () => {

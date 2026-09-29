@@ -13,6 +13,7 @@ import {
   useJoinByInvite,
   useLeaveOrDeleteCalendar,
   useUpdateCalendar,
+  useUpdateCalendarColor,
 } from "../hooks";
 import { getCalendarErrorMessageJa } from "../service";
 import type { Calendar } from "../types";
@@ -232,11 +233,13 @@ export function CalendarEditScreen({
   onLeftOrDeleted,
 }: CalendarEditScreenProps) {
   const selectedCalendar = calendars.find((calendar) => calendar.id === calendarId) ?? null;
+  const isOwner = !!selectedCalendar && selectedCalendar.createdBy === currentUserId;
   const [nameDraft, setNameDraft] = useState(selectedCalendar?.name ?? "");
   const [colorDraft, setColorDraft] = useState(selectedCalendar?.color ?? COLOR_PALETTE[0].hex);
   const [isLeaveConfirmVisible, setIsLeaveConfirmVisible] = useState(false);
 
   const { updateCalendar, error: updateError } = useUpdateCalendar();
+  const { updateCalendarColor, error: updateColorError } = useUpdateCalendarColor();
   const { members } = useCalendarMembers(calendarId);
   const { leaveOrDeleteCalendar, isSubmitting: isLeavingOrDeleting, error: leaveError } = useLeaveOrDeleteCalendar();
   const { tagTree } = useTagTree();
@@ -246,8 +249,13 @@ export function CalendarEditScreen({
     [calendars, allTags, calendarId]
   );
 
+  // 名前・種別の変更はオーナー限定(calendars_update_owner)だが、色はメンバー
+  // なら誰でも変えられるようにしたいので、オーナーでない場合は色だけを
+  // update_calendar_color RPC(メンバー権限)経由で保存する。
   const handleSave = async () => {
-    const success = await updateCalendar(calendarId, { name: nameDraft, color: colorDraft });
+    const success = isOwner
+      ? await updateCalendar(calendarId, { name: nameDraft, color: colorDraft })
+      : await updateCalendarColor(calendarId, colorDraft);
     if (success) onChange?.();
   };
 
@@ -274,12 +282,15 @@ export function CalendarEditScreen({
             </View>
           ) : null}
 
-          <Text style={styles.sectionLabel}>カレンダー名</Text>
+          <Text style={styles.sectionLabel}>
+            カレンダー名{isOwner ? "" : "(変更はオーナーのみ)"}
+          </Text>
           <TextInput
             testID="calendar-settings-name-input"
-            style={styles.input}
+            style={[styles.input, !isOwner && styles.inputDisabled]}
             value={nameDraft}
             onChangeText={setNameDraft}
+            editable={isOwner}
           />
 
           <Text style={styles.sectionLabel}>色（タグのない予定はこの色で表示されます）</Text>
@@ -291,6 +302,9 @@ export function CalendarEditScreen({
           />
 
           {updateError ? <Text style={styles.errorText}>{getCalendarErrorMessageJa(updateError)}</Text> : null}
+          {updateColorError ? (
+            <Text style={styles.errorText}>{getCalendarErrorMessageJa(updateColorError)}</Text>
+          ) : null}
           <TouchableOpacity
             testID="calendar-settings-save-button"
             style={styles.saveButton}
@@ -452,6 +466,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  inputDisabled: {
+    backgroundColor: "#f2f3f5",
+    color: "#999",
   },
   errorText: {
     color: "#d32f2f",
