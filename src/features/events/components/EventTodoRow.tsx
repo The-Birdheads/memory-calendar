@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Modal, PanResponder, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Icon } from "../../../shared/components/Icon";
 import { TodoReminderPicker } from "../../todos/components/TodoReminderPicker";
 import type { Todo } from "../../todos/types";
+
+type PanHandlers = ReturnType<typeof PanResponder.create>["panHandlers"];
 
 export interface EventTodoRowProps {
   todo: Todo;
@@ -15,6 +17,11 @@ export interface EventTodoRowProps {
   onDelete: (todoId: string) => void;
   onSetReminder: (todoId: string, reminderAt: string | null) => void;
   onEditTitle: (todoId: string, title: string) => void;
+  /** 並べ替えモード中は、チェックボックスの代わりにドラッグハンドルを出し、
+   * 編集/リマインド/削除は隠してドラッグだけに専念できるようにする。 */
+  isReordering?: boolean;
+  isDragging?: boolean;
+  dragHandlePanHandlers?: PanHandlers;
 }
 
 /**
@@ -32,6 +39,9 @@ export function EventTodoRow({
   onDelete,
   onSetReminder,
   onEditTitle,
+  isReordering,
+  isDragging,
+  dragHandlePanHandlers,
 }: EventTodoRowProps) {
   const [isReminderModalVisible, setIsReminderModalVisible] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -53,6 +63,22 @@ export function EventTodoRow({
   const handleCancelEditTitle = () => {
     setIsEditingTitle(false);
   };
+
+  if (isReordering) {
+    return (
+      <View
+        style={[styles.row, styles.reorderRow, isDragging && styles.reorderRowDragging]}
+        testID={`event-todo-${todo.id}`}
+      >
+        <View testID={`event-todo-drag-handle-${todo.id}`} {...dragHandlePanHandlers}>
+          <Icon name="drag-handle" size={16} color="#999" />
+        </View>
+        <Text style={[styles.title, todo.isDone && styles.doneText]} numberOfLines={1}>
+          {todo.title}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.row} testID={`event-todo-${todo.id}`}>
@@ -158,6 +184,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     paddingVertical: 8,
+  },
+  reorderRow: {
+    backgroundColor: "#fff",
+  },
+  reorderRowDragging: {
+    backgroundColor: "#f2f3f5",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   title: {
     flex: 1,

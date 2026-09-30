@@ -3,8 +3,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Linking } from "react-native";
 
 import CalendarScreen from "../calendar";
-import { useAuthSession } from "../../../src/features/auth/hooks";
-import { useMyProfile } from "../../../src/features/profile/hooks";
+import { useAuthActions, useAuthSession } from "../../../src/features/auth/hooks";
+import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../../../src/features/profile/hooks";
 import {
   useCalendarMembers,
   useCreateCalendar,
@@ -60,10 +60,14 @@ jest.mock("expo-router", () => {
 
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
+  useAuthActions: jest.fn(),
 }));
 
 jest.mock("../../../src/features/profile/hooks", () => ({
   useMyProfile: jest.fn(),
+  useUpdateDisplayName: jest.fn(),
+  useUpdateWeekStartsOn: jest.fn(),
+  useDeleteAccount: jest.fn(),
 }));
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
@@ -155,12 +159,16 @@ const OTHER_DAY_EVENT = {
 
 function mockCommonHooks() {
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } } });
+  (useAuthActions as jest.Mock).mockReturnValue({ signOut: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useMyProfile as jest.Mock).mockReturnValue({
     profile: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
     isLoading: false,
     error: null,
     refetch: jest.fn(),
   });
+  (useUpdateDisplayName as jest.Mock).mockReturnValue({ updateDisplayName: jest.fn(), isSubmitting: false, error: null });
+  (useUpdateWeekStartsOn as jest.Mock).mockReturnValue({ updateWeekStartsOn: jest.fn(), isSubmitting: false, error: null });
+  (useDeleteAccount as jest.Mock).mockReturnValue({ deleteAccount: jest.fn(), isSubmitting: false, error: null });
   (useMyCalendars as jest.Mock).mockReturnValue({
     calendars: CALENDARS,
     isLoading: false,
@@ -1493,6 +1501,31 @@ describe("CalendarScreen", () => {
       })
     );
     await waitFor(() => expect(refetchTagTree).toHaveBeenCalled());
+  });
+
+  it("refetches its own profile (so the weekday header/grid pick up the change) when 週の開始曜日 is switched from the settings modal (regression: switching it in settings didn't update the calendar screen until it was remounted)", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+    const refetchProfile = jest.fn();
+    (useMyProfile as jest.Mock).mockReturnValue({
+      profile: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
+      isLoading: false,
+      error: null,
+      refetch: refetchProfile,
+    });
+    (useUpdateWeekStartsOn as jest.Mock).mockReturnValue({
+      updateWeekStartsOn: jest.fn().mockResolvedValue({ id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 }),
+      isSubmitting: false,
+      error: null,
+    });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-settings-button"));
+    await fireEvent.press(getByTestId("settings-hub-open-personal"));
+    await fireEvent.press(getByTestId("personal-settings-week-starts-on-monday"));
+
+    await waitFor(() => expect(refetchProfile).toHaveBeenCalled());
   });
 
   it("attaches the selected calendar tags to a newly created event", async () => {

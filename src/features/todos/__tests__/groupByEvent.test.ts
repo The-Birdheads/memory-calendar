@@ -13,6 +13,7 @@ function makeTodo(overrides: Partial<TodoWithEventTitle>): TodoWithEventTitle {
     createdBy: "user-1",
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
+    sortOrder: 1,
     eventTitle: "event",
     eventStartAt: "2026-08-01T00:00:00.000Z",
     eventEndAt: "2026-08-01T00:00:00.000Z",

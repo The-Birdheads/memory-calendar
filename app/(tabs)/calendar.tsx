@@ -146,7 +146,7 @@ export default function CalendarScreen() {
   const { session } = useAuthSession();
   const { calendars, refetch: refetchCalendars } = useMyCalendars();
   // 個人設定の「週の開始曜日」(未設定/未ログイン中は日曜始まりのデフォルトに揃える)。
-  const { profile } = useMyProfile(session?.user.id ?? "");
+  const { profile, refetch: refetchProfile } = useMyProfile(session?.user.id ?? "");
   const weekStartsOn: WeekStartsOn = profile?.weekStartsOn ?? 0;
   // null means "no explicit selection yet" - defaults to ALL calendars, so
   // every calendar is selected when the app first opens. Tapping a chip
@@ -932,6 +932,7 @@ export default function CalendarScreen() {
           onChange={() => {
             refetchCalendars();
             refetchTagTree();
+            refetchProfile();
           }}
           initialSection={settingsModalRequest.initialSection}
           initialCalendarMode={settingsModalRequest.initialCalendarMode}

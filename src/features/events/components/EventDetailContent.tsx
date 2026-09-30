@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -50,12 +51,26 @@ import { PersonalOnlyBadge } from "../../../shared/components/PersonalOnlyBadge"
 import { TagPickerRow } from "../../tags/components/TagPickerRow";
 import { useAttachTagsToEvent, useDetachTagFromEvent, useEventTags, useTagTree } from "../../tags/hooks";
 import { flattenTagTree, getDescendantIds, sortTagsHierarchically } from "../../tags/tagTree";
-import { useCreateTodo, useDeleteTodo, useToggleDone, useTodosByEvent, useUpdateTodo } from "../../todos/hooks";
+import {
+  useCreateTodo,
+  useDeleteTodo,
+  useReorderTodo,
+  useToggleDone,
+  useTodosByEvent,
+  useUpdateTodo,
+} from "../../todos/hooks";
+import { sequentialSortOrders } from "../../todos/reorder";
 import type { Todo } from "../../todos/types";
+import { useDragReorder } from "../../todos/useDragReorder";
 import { EventTodoRow } from "./EventTodoRow";
 import { Icon } from "../../../shared/components/Icon";
 import { formatDateTimeRange, toJstDateKey } from "../../../shared/utils/formatDateTime";
 import { normalizeUrl } from "../../../shared/utils/url";
+
+// EventTodoRowの並べ替えモード時の行の高さ(概算) - ドラッグ中に指がどの行の
+// 位置まで来たかをこの値で割って判定するための目安値(可変長タイトルの
+// 実測はせず、単純さを優先する)。
+const TODO_ROW_HEIGHT = 40;
 
 export interface EventDetailContentProps {
   eventId: string;
@@ -130,7 +145,32 @@ export function EventDetailContent({
   const { toggleDone } = useToggleDone();
   const { deleteTodo } = useDeleteTodo();
   const { updateTodo } = useUpdateTodo();
+  const { reorderTodo } = useReorderTodo();
   const [newTodoTitle, setNewTodoTitle] = useState("");
+  // 並べ替えモード中は、確定(✓)を押すまでtodos自体には触れず、ドラッグ中の
+  // 並びだけをこのフックのローカル状態(todoDrag.order)で持つ。
+  const [isReorderingTodos, setIsReorderingTodos] = useState(false);
+  const todoDrag = useDragReorder(todos.map((todo) => todo.id), TODO_ROW_HEIGHT);
+
+  const handleStartReorderTodos = () => {
+    todoDrag.reset(todos.map((todo) => todo.id));
+    setIsReorderingTodos(true);
+  };
+
+  const handleCancelReorderTodos = () => {
+    setIsReorderingTodos(false);
+  };
+
+  const handleConfirmReorderTodos = async () => {
+    const originalOrder = todos.map((todo) => todo.id);
+    if (JSON.stringify(todoDrag.order) !== JSON.stringify(originalOrder)) {
+      for (const { id, sortOrder } of sequentialSortOrders(todoDrag.order)) {
+        await reorderTodo(id, sortOrder);
+      }
+      await refetchTodos();
+    }
+    setIsReorderingTodos(false);
+  };
 
   const { members } = useCalendarMembers(calendarId);
   const { reminders, refetch: refetchReminders } = useEventReminders(eventId);
@@ -505,39 +545,100 @@ export function EventDetailContent({
     </View>
   );
 
+  const todosById = new Map(todos.map((todo) => [todo.id, todo]));
+
   const todoSection = (
     <View style={styles.sectionInFrame}>
-      <Text style={styles.sectionTitle}>ToDo</Text>
-      {todos.map((todo) => (
-        <EventTodoRow
-          key={todo.id}
-          todo={todo}
-          isAllDay={event.isAllDay}
-          eventStartAt={event.startAt}
-          onToggle={handleToggleTodo}
-          onDelete={handleDeleteTodo}
-          onSetReminder={handleSetTodoReminder}
-          onEditTitle={handleEditTodoTitle}
-        />
-      ))}
-      <View style={styles.todoAddRow}>
-        <TextInput
-          testID="event-todo-input"
-          style={styles.input}
-          placeholder="ToDoを追加"
-          value={newTodoTitle}
-          onChangeText={setNewTodoTitle}
-        />
-        <TouchableOpacity
-          testID="event-todo-add"
-          style={[styles.iconButton, isAddingTodo && styles.iconButtonDisabled]}
-          disabled={isAddingTodo}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          onPress={handleAddTodo}
-        >
-          <Icon name="plus" size={16} color="#2f6fed" />
-        </TouchableOpacity>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>ToDo</Text>
+        {todos.length > 1 ? (
+          isReorderingTodos ? (
+            <View style={styles.tagEditActions}>
+              <TouchableOpacity
+                testID="event-todo-reorder-confirm"
+                onPress={handleConfirmReorderTodos}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.tagConfirmCheck}>✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="event-todo-reorder-cancel"
+                onPress={handleCancelReorderTodos}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.cancelText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              testID="event-todo-reorder-start"
+              onPress={handleStartReorderTodos}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Icon name="reorder" size={16} color="#666" />
+            </TouchableOpacity>
+          )
+        ) : null}
       </View>
+
+      {isReorderingTodos
+        ? todoDrag.order.map((todoId) => {
+            const todo = todosById.get(todoId);
+            if (!todo) return null;
+            const isDragging = todoDrag.draggingId === todoId;
+            return (
+              <Animated.View
+                key={todoId}
+                style={isDragging ? { transform: [{ translateY: todoDrag.dragY }], zIndex: 1 } : undefined}
+              >
+                <EventTodoRow
+                  todo={todo}
+                  isAllDay={event.isAllDay}
+                  eventStartAt={event.startAt}
+                  onToggle={handleToggleTodo}
+                  onDelete={handleDeleteTodo}
+                  onSetReminder={handleSetTodoReminder}
+                  onEditTitle={handleEditTodoTitle}
+                  isReordering
+                  isDragging={isDragging}
+                  dragHandlePanHandlers={todoDrag.panHandlersFor(todoId)}
+                />
+              </Animated.View>
+            );
+          })
+        : todos.map((todo) => (
+            <EventTodoRow
+              key={todo.id}
+              todo={todo}
+              isAllDay={event.isAllDay}
+              eventStartAt={event.startAt}
+              onToggle={handleToggleTodo}
+              onDelete={handleDeleteTodo}
+              onSetReminder={handleSetTodoReminder}
+              onEditTitle={handleEditTodoTitle}
+            />
+          ))}
+
+      {isReorderingTodos ? null : (
+        <View style={styles.todoAddRow}>
+          <TextInput
+            testID="event-todo-input"
+            style={styles.input}
+            placeholder="ToDoを追加"
+            value={newTodoTitle}
+            onChangeText={setNewTodoTitle}
+          />
+          <TouchableOpacity
+            testID="event-todo-add"
+            style={[styles.iconButton, isAddingTodo && styles.iconButtonDisabled]}
+            disabled={isAddingTodo}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            onPress={handleAddTodo}
+          >
+            <Icon name="plus" size={16} color="#2f6fed" />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 

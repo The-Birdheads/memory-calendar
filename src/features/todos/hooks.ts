@@ -10,6 +10,7 @@ import {
   listTodosByEvent,
   reattachTodoToExistingEvent,
   reattachTodoToNewPersonalEvent,
+  reorderTodo,
   toggleDone,
   updateTodo,
 } from "./service";
@@ -252,6 +253,31 @@ export function useUpdateTodo(): UseUpdateTodoResult {
   }, []);
 
   return { updateTodo: runUpdateTodo, isSubmitting, error };
+}
+
+export interface UseReorderTodoResult {
+  reorderTodo: (todoId: string, sortOrder: number) => Promise<boolean>;
+  isSubmitting: boolean;
+  error: TodoError | null;
+}
+
+export function useReorderTodo(): UseReorderTodoResult {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<TodoError | null>(null);
+
+  const runReorderTodo = useCallback(async (todoId: string, sortOrder: number) => {
+    setIsSubmitting(true);
+    setError(null);
+    const result = await reorderTodo(getSupabaseClient(), todoId, sortOrder);
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }, []);
+
+  return { reorderTodo: runReorderTodo, isSubmitting, error };
 }
 
 export interface UseDeleteTodoResult {

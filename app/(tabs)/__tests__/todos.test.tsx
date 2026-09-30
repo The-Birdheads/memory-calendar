@@ -9,6 +9,7 @@ import {
   useOrphanedTodos,
   useReattachTodoToExistingEvent,
   useReattachTodoToNewPersonalEvent,
+  useReorderTodo,
   useToggleDone,
   useTodosByCalendars,
   useUpdateTodo,
@@ -65,6 +66,7 @@ jest.mock("../../../src/features/todos/hooks", () => ({
   useToggleDone: jest.fn(),
   useDeleteTodo: jest.fn(),
   useUpdateTodo: jest.fn(),
+  useReorderTodo: jest.fn(),
 }));
 
 // EventDetailContent has its own large, independently-tested suite - mocking
@@ -129,6 +131,35 @@ const TODOS_TWO_EVENTS = [
     eventTitle: "夏祭り",
     eventStartAt: "2026-08-01T10:00:00.000Z",
     eventEndAt: "2026-08-01T20:00:00.000Z",
+    eventIsAllDay: false,
+  },
+];
+
+const TODOS_TWO_INCOMPLETE = [
+  {
+    id: "todo-1",
+    eventId: "event-1",
+    eventCalendarId: "cal-1",
+    title: "楽譜購入",
+    isDone: false,
+    completedAt: null,
+    reminderAt: null,
+    eventTitle: "発表会",
+    eventStartAt: "2026-09-10T10:00:00.000Z",
+    eventEndAt: "2026-09-10T12:00:00.000Z",
+    eventIsAllDay: false,
+  },
+  {
+    id: "todo-2",
+    eventId: "event-1",
+    eventCalendarId: "cal-1",
+    title: "練習",
+    isDone: false,
+    completedAt: null,
+    reminderAt: null,
+    eventTitle: "発表会",
+    eventStartAt: "2026-09-10T10:00:00.000Z",
+    eventEndAt: "2026-09-10T12:00:00.000Z",
     eventIsAllDay: false,
   },
 ];
@@ -252,6 +283,7 @@ function mockCommonHooks(todos: typeof TODOS, refetch = jest.fn()) {
   (useToggleDone as jest.Mock).mockReturnValue({ toggleDone: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useDeleteTodo as jest.Mock).mockReturnValue({ deleteTodo: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useUpdateTodo as jest.Mock).mockReturnValue({ updateTodo: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
+  (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
 }
 
 function flattenStyle(style: unknown): Record<string, unknown> {
@@ -676,6 +708,70 @@ describe("TodosScreen", () => {
     const { getByText } = await render(<TodosScreen />);
 
     expect(getByText("2026/09/10〜2026/09/12")).toBeTruthy();
+  });
+
+  describe("ToDoの並べ替え", () => {
+    it("does not show the reorder toggle when a section has 0 or 1 incomplete todo", async () => {
+      mockCommonHooks(TODOS);
+
+      const { queryByTestId } = await render(<TodosScreen />);
+
+      expect(queryByTestId("todo-section-reorder-start-event-1")).toBeNull();
+    });
+
+    it("shows the reorder toggle once a section has 2 or more incomplete todos", async () => {
+      mockCommonHooks(TODOS_TWO_INCOMPLETE);
+
+      const { getByTestId } = await render(<TodosScreen />);
+
+      expect(getByTestId("todo-section-reorder-start-event-1")).toBeTruthy();
+    });
+
+    it("entering reorder mode shows a drag handle per row (not a checkbox)", async () => {
+      mockCommonHooks(TODOS_TWO_INCOMPLETE);
+
+      const { getByTestId, queryByTestId } = await render(<TodosScreen />);
+      await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+
+      expect(getByTestId("todo-drag-handle-todo-1")).toBeTruthy();
+      expect(getByTestId("todo-drag-handle-todo-2")).toBeTruthy();
+      expect(queryByTestId("todo-checkbox-todo-1")).toBeNull();
+      expect(getByTestId("todo-section-reorder-confirm-event-1")).toBeTruthy();
+      expect(getByTestId("todo-section-reorder-cancel-event-1")).toBeTruthy();
+    });
+
+    it("cancelling reorder mode discards without calling reorderTodo, and restores the checkboxes", async () => {
+      const reorderTodoMock = jest.fn();
+      mockCommonHooks(TODOS_TWO_INCOMPLETE);
+      (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+      const { getByTestId, queryByTestId } = await render(<TodosScreen />);
+      await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+      await fireEvent.press(getByTestId("todo-section-reorder-cancel-event-1"));
+
+      expect(reorderTodoMock).not.toHaveBeenCalled();
+      expect(getByTestId("todo-checkbox-todo-1")).toBeTruthy();
+      expect(queryByTestId("todo-drag-handle-todo-1")).toBeNull();
+    });
+
+    it("confirming without dragging anything does not call reorderTodo (nothing actually changed)", async () => {
+      const reorderTodoMock = jest.fn();
+      const refetch = jest.fn();
+      mockCommonHooks(TODOS_TWO_INCOMPLETE, refetch);
+      (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+      const { getByTestId, queryByTestId } = await render(<TodosScreen />);
+      // handleResetFilter refetches once on mount (useFocusEffect) - only the
+      // calls made *after* pressing confirm matter for this assertion.
+      const callsBeforeConfirm = refetch.mock.calls.length;
+      await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+      await fireEvent.press(getByTestId("todo-section-reorder-confirm-event-1"));
+
+      expect(reorderTodoMock).not.toHaveBeenCalled();
+      expect(refetch.mock.calls.length).toBe(callsBeforeConfirm);
+      expect(getByTestId("todo-checkbox-todo-1")).toBeTruthy();
+      expect(queryByTestId("todo-drag-handle-todo-1")).toBeNull();
+    });
   });
 
   it("toggles done state and refetches so the list updates immediately", async () => {

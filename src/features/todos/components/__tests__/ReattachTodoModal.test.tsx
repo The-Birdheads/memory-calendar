@@ -24,6 +24,7 @@ const TODO: Todo = {
   createdBy: "user-1",
   createdAt: "2026-08-18T00:00:00.000Z",
   updatedAt: "2026-08-18T00:00:00.000Z",
+  sortOrder: 1,
 };
 
 const CALENDARS = [

@@ -8,6 +8,9 @@ export interface Todo {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** 表示順(同じeventIdの中で昇順)。ドラッグ&ドロップで並べ替えた時、前後の
+   * 値の中間値を入れるだけで済むよう実数にしている。 */
+  sortOrder: number;
 }
 
 /**

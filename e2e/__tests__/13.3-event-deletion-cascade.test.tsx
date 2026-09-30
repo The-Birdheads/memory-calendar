@@ -24,7 +24,7 @@ import {
   useEventTags,
   useTagTree,
 } from "../../src/features/tags/hooks";
-import { useCreateTodo, useDeleteTodo, useToggleDone, useTodosByEvent, useUpdateTodo } from "../../src/features/todos/hooks";
+import { useCreateTodo, useDeleteTodo, useReorderTodo, useToggleDone, useTodosByEvent, useUpdateTodo } from "../../src/features/todos/hooks";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
 jest.mock("expo-router", () => ({
@@ -79,6 +79,7 @@ jest.mock("../../src/features/todos/hooks", () => ({
   useToggleDone: jest.fn(),
   useDeleteTodo: jest.fn(),
   useUpdateTodo: jest.fn(),
+  useReorderTodo: jest.fn(),
 }));
 
 // events/hooks (useEvent, useDeleteEvent) are intentionally left un-mocked so the
@@ -133,6 +134,7 @@ describe("13.3 予定削除フローの検証", () => {
     (useToggleDone as jest.Mock).mockReturnValue({ toggleDone: jest.fn(), isSubmitting: false, error: null });
     (useDeleteTodo as jest.Mock).mockReturnValue({ deleteTodo: jest.fn(), isSubmitting: false, error: null });
     (useUpdateTodo as jest.Mock).mockReturnValue({ updateTodo: jest.fn(), isSubmitting: false, error: null });
+    (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: jest.fn(), isSubmitting: false, error: null });
   }
 
   it("shows the memory-data warning in the confirm modal, then cascades the delete on confirm", async () => {

@@ -9,6 +9,7 @@ import {
   listTodosByEvent,
   reattachTodoToExistingEvent,
   reattachTodoToNewPersonalEvent,
+  reorderTodo,
   toggleDone,
   updateTodo,
 } from "../service";
@@ -18,6 +19,7 @@ import {
   useOrphanedTodos,
   useReattachTodoToExistingEvent,
   useReattachTodoToNewPersonalEvent,
+  useReorderTodo,
   useToggleDone,
   useTodosByCalendars,
   useTodosByEvent,
@@ -35,6 +37,7 @@ jest.mock("../service", () => ({
   listTodosByEvent: jest.fn(),
   reattachTodoToExistingEvent: jest.fn(),
   reattachTodoToNewPersonalEvent: jest.fn(),
+  reorderTodo: jest.fn(),
   toggleDone: jest.fn(),
   updateTodo: jest.fn(),
   deleteTodo: jest.fn(),
@@ -382,6 +385,43 @@ describe("useUpdateTodo", () => {
 
     expect(success).toBe(false);
     expect(result.current.error).toEqual({ type: "ValidationError", field: "title" });
+  });
+});
+
+describe("useReorderTodo", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns true and clears the error when it succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (reorderTodo as jest.Mock).mockResolvedValue({ ok: true, value: { id: "todo-1" } });
+
+    const { result } = await renderHook(() => useReorderTodo());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.reorderTodo("todo-1", 1.5);
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(reorderTodo).toHaveBeenCalledWith({}, "todo-1", 1.5);
+  });
+
+  it("returns false and sets the error when it fails", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (reorderTodo as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+
+    const { result } = await renderHook(() => useReorderTodo());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.reorderTodo("todo-1", 1.5);
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Forbidden" });
   });
 });
 

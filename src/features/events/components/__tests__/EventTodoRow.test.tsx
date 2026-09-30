@@ -13,6 +13,7 @@ const BASE_TODO: Todo = {
   createdBy: "user-1",
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-01T00:00:00.000Z",
+  sortOrder: 1,
 };
 
 function flattenStyle(style: unknown): Record<string, unknown> {

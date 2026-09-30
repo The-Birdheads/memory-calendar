@@ -20,6 +20,7 @@ interface TodoRow {
   created_by: string;
   created_at: string;
   updated_at: string;
+  sort_order: number;
 }
 
 interface TodoRowWithEvent extends TodoRow {
@@ -38,6 +39,7 @@ function mapTodoRow(row: TodoRow): Todo {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    sortOrder: row.sort_order,
   };
 }
 
@@ -93,7 +95,8 @@ export async function listTodosByCalendars(
   const { data, error } = await client
     .from("todos")
     .select("*, events!inner(calendar_id, title, start_at, end_at, is_all_day)")
-    .in("events.calendar_id", calendarIds);
+    .in("events.calendar_id", calendarIds)
+    .order("sort_order", { ascending: true });
 
   if (error || !data) {
     return err(mapTodoError(error as PostgrestError));
@@ -148,6 +151,27 @@ export async function updateTodo(
   return ok(mapTodoRow(data as TodoRow));
 }
 
+/** ドラッグ&ドロップで並べ替えた後、動かした1件のsort_orderだけを新しい
+ * 位置の前後の中間値に更新する(他の行のsort_orderは変えずに済む)。 */
+export async function reorderTodo(
+  client: SupabaseClient,
+  todoId: string,
+  sortOrder: number
+): Promise<Result<Todo, TodoError>> {
+  const { data, error } = await client
+    .from("todos")
+    .update({ sort_order: sortOrder })
+    .eq("id", todoId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    return err(mapTodoError(error as PostgrestError));
+  }
+
+  return ok(mapTodoRow(data as TodoRow));
+}
+
 export async function deleteTodo(
   client: SupabaseClient,
   todoId: string
@@ -162,7 +186,11 @@ export async function deleteTodo(
 }
 
 export async function listOrphanedTodos(client: SupabaseClient): Promise<Result<Todo[], TodoError>> {
-  const { data, error } = await client.from("todos").select().is("event_id", null);
+  const { data, error } = await client
+    .from("todos")
+    .select()
+    .is("event_id", null)
+    .order("sort_order", { ascending: true });
 
   if (error || !data) {
     return err(mapTodoError(error as PostgrestError));
@@ -214,7 +242,11 @@ export async function listTodosByEvent(
   client: SupabaseClient,
   eventId: string
 ): Promise<Result<Todo[], TodoError>> {
-  const { data, error } = await client.from("todos").select().eq("event_id", eventId);
+  const { data, error } = await client
+    .from("todos")
+    .select()
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: true });
 
   if (error || !data) {
     return err(mapTodoError(error as PostgrestError));

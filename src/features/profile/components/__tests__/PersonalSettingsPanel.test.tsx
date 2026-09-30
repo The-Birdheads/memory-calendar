@@ -100,8 +100,9 @@ describe("PersonalSettingsPanel", () => {
       avatarUrl: null,
     });
     mockHooks({ updateDisplayName: updateDisplayNameMock });
+    const onChange = jest.fn();
 
-    const { getByTestId, queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+    const { getByTestId, queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" onChange={onChange} />);
     await fireEvent.press(getByTestId("personal-settings-name-edit"));
     await fireEvent.changeText(getByTestId("personal-settings-name-input"), "新しい名前");
     await fireEvent.press(getByTestId("personal-settings-name-confirm"));
@@ -109,6 +110,7 @@ describe("PersonalSettingsPanel", () => {
     await waitFor(() => expect(updateDisplayNameMock).toHaveBeenCalledWith("user-1", "新しい名前"));
     expect(queryByTestId("personal-settings-name-input")).toBeNull();
     expect(getByTestId("personal-settings-name-edit")).toBeTruthy();
+    expect(onChange).toHaveBeenCalled();
   });
 
   it("reverts to the original name and closes the input without saving when cancel is pressed", async () => {
@@ -148,19 +150,21 @@ describe("PersonalSettingsPanel", () => {
     expect(getByTestId("personal-settings-week-starts-on-monday")).toBeTruthy();
   });
 
-  it("switches to 月曜始まり when tapped, and refetches the profile", async () => {
+  it("switches to 月曜始まり when tapped, refetches the profile, and notifies the caller via onChange (regression: other screens' own useMyProfile instances - e.g. the calendar screen's - didn't pick up the change until closing and reopening)", async () => {
     const updateWeekStartsOnMock = jest
       .fn()
       .mockResolvedValue({ id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 });
     const refetchProfileMock = jest.fn();
+    const onChange = jest.fn();
     mockHooks({ weekStartsOn: 0, updateWeekStartsOn: updateWeekStartsOnMock, refetchProfile: refetchProfileMock });
 
-    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" onChange={onChange} />);
 
     await fireEvent.press(getByTestId("personal-settings-week-starts-on-monday"));
 
     await waitFor(() => expect(updateWeekStartsOnMock).toHaveBeenCalledWith("user-1", 1));
     await waitFor(() => expect(refetchProfileMock).toHaveBeenCalled());
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
   });
 
   it("does not call updateWeekStartsOn again when the already-selected option is tapped", async () => {

@@ -10,9 +10,12 @@ import { getProfileErrorMessageJa } from "../service";
 
 export interface PersonalSettingsPanelProps {
   userId: string;
+  /** 表示名/週の開始曜日を保存した後に呼ばれる - 他画面(カレンダー画面の
+   * useMyProfileなど)が持つ別インスタンスの状態を確実に最新化するため。 */
+  onChange?: () => void;
 }
 
-export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
+export function PersonalSettingsPanel({ userId, onChange }: PersonalSettingsPanelProps) {
   const { profile, isLoading, refetch: refetchProfile } = useMyProfile(userId);
   const { updateDisplayName, error: updateError } = useUpdateDisplayName();
   const { updateWeekStartsOn, error: weekStartsOnError } = useUpdateWeekStartsOn();
@@ -35,6 +38,7 @@ export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
     const updated = await updateDisplayName(userId, nameDraft);
     if (updated) {
       setIsEditingName(false);
+      onChange?.();
     }
   };
 
@@ -43,6 +47,7 @@ export function PersonalSettingsPanel({ userId }: PersonalSettingsPanelProps) {
     const updated = await updateWeekStartsOn(userId, weekStartsOn);
     if (updated) {
       refetchProfile();
+      onChange?.();
     }
   };
 

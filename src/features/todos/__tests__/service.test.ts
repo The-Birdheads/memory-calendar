@@ -8,6 +8,7 @@ import {
   listTodosByEvent,
   reattachTodoToExistingEvent,
   reattachTodoToNewPersonalEvent,
+  reorderTodo,
   toggleDone,
   updateTodo,
 } from "../service";
@@ -113,7 +114,7 @@ describe("createTodo", () => {
 });
 
 describe("listTodosByCalendars", () => {
-  it("returns the todos for events belonging to any of the given calendars", async () => {
+  it("returns the todos for events belonging to any of the given calendars, ordered by sort_order", async () => {
     const rows = [
       {
         id: "todo-1",
@@ -124,6 +125,7 @@ describe("listTodosByCalendars", () => {
         created_by: "user-1",
         created_at: "2026-08-18T00:00:00.000Z",
         updated_at: "2026-08-18T00:00:00.000Z",
+        sort_order: 1,
         events: {
           calendar_id: "cal-1",
           title: "誕生日会",
@@ -141,6 +143,7 @@ describe("listTodosByCalendars", () => {
         created_by: "user-1",
         created_at: "2026-08-17T00:00:00.000Z",
         updated_at: "2026-08-17T00:00:00.000Z",
+        sort_order: 1,
         events: {
           calendar_id: "cal-2",
           title: "夏祭り",
@@ -151,9 +154,10 @@ describe("listTodosByCalendars", () => {
       },
     ];
     const select = jest.fn().mockReturnThis();
-    const inFilter = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const inFilter = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
     const client = {
-      from: jest.fn().mockReturnValue({ select, in: inFilter }),
+      from: jest.fn().mockReturnValue({ select, in: inFilter, order }),
     } as unknown as SupabaseClient;
 
     const result = await listTodosByCalendars(client, ["cal-1", "cal-2"]);
@@ -171,6 +175,7 @@ describe("listTodosByCalendars", () => {
           createdBy: "user-1",
           createdAt: "2026-08-18T00:00:00.000Z",
           updatedAt: "2026-08-18T00:00:00.000Z",
+          sortOrder: 1,
           eventTitle: "誕生日会",
           eventStartAt: "2026-08-20T10:00:00.000Z",
           eventEndAt: "2026-08-20T12:00:00.000Z",
@@ -186,6 +191,7 @@ describe("listTodosByCalendars", () => {
           createdBy: "user-1",
           createdAt: "2026-08-17T00:00:00.000Z",
           updatedAt: "2026-08-17T00:00:00.000Z",
+          sortOrder: 1,
           eventTitle: "夏祭り",
           eventStartAt: "2026-07-15T09:00:00.000Z",
           eventEndAt: "2026-07-16T09:00:00.000Z",
@@ -196,6 +202,7 @@ describe("listTodosByCalendars", () => {
     expect(client.from).toHaveBeenCalledWith("todos");
     expect(select).toHaveBeenCalledWith("*, events!inner(calendar_id, title, start_at, end_at, is_all_day)");
     expect(inFilter).toHaveBeenCalledWith("events.calendar_id", ["cal-1", "cal-2"]);
+    expect(order).toHaveBeenCalledWith("sort_order", { ascending: true });
   });
 
   it("returns an empty list without querying when given no calendar ids", async () => {
@@ -209,12 +216,13 @@ describe("listTodosByCalendars", () => {
 
   it("maps a Supabase error to Forbidden", async () => {
     const select = jest.fn().mockReturnThis();
-    const inFilter = jest.fn().mockResolvedValue({
+    const inFilter = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({
       data: null,
       error: { message: "permission denied", code: "42501" },
     });
     const client = {
-      from: jest.fn().mockReturnValue({ select, in: inFilter }),
+      from: jest.fn().mockReturnValue({ select, in: inFilter, order }),
     } as unknown as SupabaseClient;
 
     const result = await listTodosByCalendars(client, ["cal-1"]);
@@ -456,7 +464,7 @@ describe("deleteTodo", () => {
 });
 
 describe("listOrphanedTodos", () => {
-  it("returns todos whose event_id is null", async () => {
+  it("returns todos whose event_id is null, ordered by sort_order", async () => {
     const rows = [
       {
         id: "todo-1",
@@ -467,9 +475,11 @@ describe("listOrphanedTodos", () => {
         created_by: "user-1",
         created_at: "2026-08-18T00:00:00.000Z",
         updated_at: "2026-08-18T00:00:00.000Z",
+        sort_order: 1,
       },
     ];
-    const is = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const is = jest.fn().mockReturnValue({ order });
     const select = jest.fn().mockReturnValue({ is });
     const client = {
       from: jest.fn().mockReturnValue({ select }),
@@ -489,18 +499,21 @@ describe("listOrphanedTodos", () => {
           createdBy: "user-1",
           createdAt: "2026-08-18T00:00:00.000Z",
           updatedAt: "2026-08-18T00:00:00.000Z",
+          sortOrder: 1,
         },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("todos");
     expect(is).toHaveBeenCalledWith("event_id", null);
+    expect(order).toHaveBeenCalledWith("sort_order", { ascending: true });
   });
 
   it("maps a Supabase error to Forbidden", async () => {
-    const is = jest.fn().mockResolvedValue({
+    const order = jest.fn().mockResolvedValue({
       data: null,
       error: { message: "permission denied", code: "42501" },
     });
+    const is = jest.fn().mockReturnValue({ order });
     const select = jest.fn().mockReturnValue({ is });
     const client = {
       from: jest.fn().mockReturnValue({ select }),
@@ -648,7 +661,7 @@ describe("reattachTodoToNewPersonalEvent", () => {
 });
 
 describe("listTodosByEvent", () => {
-  it("returns the todos for the given event", async () => {
+  it("returns the todos for the given event, ordered by sort_order", async () => {
     const rows = [
       {
         id: "todo-1",
@@ -660,12 +673,14 @@ describe("listTodosByEvent", () => {
         created_by: "user-1",
         created_at: "2026-08-18T00:00:00.000Z",
         updated_at: "2026-08-18T00:00:00.000Z",
+        sort_order: 1,
       },
     ];
     const select = jest.fn().mockReturnThis();
-    const eq = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const eq = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
     const client = {
-      from: jest.fn().mockReturnValue({ select, eq }),
+      from: jest.fn().mockReturnValue({ select, eq, order }),
     } as unknown as SupabaseClient;
 
     const result = await listTodosByEvent(client, "event-1");
@@ -683,24 +698,86 @@ describe("listTodosByEvent", () => {
           createdBy: "user-1",
           createdAt: "2026-08-18T00:00:00.000Z",
           updatedAt: "2026-08-18T00:00:00.000Z",
+          sortOrder: 1,
         },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("todos");
     expect(eq).toHaveBeenCalledWith("event_id", "event-1");
+    expect(order).toHaveBeenCalledWith("sort_order", { ascending: true });
   });
 
   it("maps a Supabase error to Forbidden", async () => {
     const select = jest.fn().mockReturnThis();
-    const eq = jest.fn().mockResolvedValue({
+    const eq = jest.fn().mockReturnThis();
+    const order = jest.fn().mockResolvedValue({
       data: null,
       error: { message: "permission denied", code: "42501" },
     });
     const client = {
-      from: jest.fn().mockReturnValue({ select, eq }),
+      from: jest.fn().mockReturnValue({ select, eq, order }),
     } as unknown as SupabaseClient;
 
     const result = await listTodosByEvent(client, "event-1");
+
+    expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
+  });
+});
+
+describe("reorderTodo", () => {
+  it("updates the todo's sort_order and returns it on success", async () => {
+    const row = {
+      id: "todo-1",
+      event_id: "event-1",
+      title: "飲み物を買う",
+      is_done: false,
+      completed_at: null,
+      created_by: "user-1",
+      created_at: "2026-08-18T00:00:00.000Z",
+      updated_at: "2026-08-18T00:00:00.000Z",
+      sort_order: 1.5,
+    };
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({ data: row, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await reorderTodo(client, "todo-1", 1.5);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: "todo-1",
+        eventId: "event-1",
+        title: "飲み物を買う",
+        isDone: false,
+        completedAt: null,
+        createdBy: "user-1",
+        createdAt: "2026-08-18T00:00:00.000Z",
+        updatedAt: "2026-08-18T00:00:00.000Z",
+        sortOrder: 1.5,
+      },
+    });
+    expect(update).toHaveBeenCalledWith({ sort_order: 1.5 });
+    expect(eq).toHaveBeenCalledWith("id", "todo-1");
+  });
+
+  it("maps a permission error to Forbidden", async () => {
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const select = jest.fn().mockReturnThis();
+    const single = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: "permission denied", code: "42501" },
+    });
+    const client = {
+      from: jest.fn().mockReturnValue({ update, eq, select, single }),
+    } as unknown as SupabaseClient;
+
+    const result = await reorderTodo(client, "todo-1", 1.5);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

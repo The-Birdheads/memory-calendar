@@ -31,6 +31,7 @@ import {
 import {
   useCreateTodo,
   useDeleteTodo,
+  useReorderTodo,
   useToggleDone,
   useTodosByEvent,
   useUpdateTodo,
@@ -102,6 +103,7 @@ jest.mock("../../../src/features/todos/hooks", () => ({
   useToggleDone: jest.fn(),
   useDeleteTodo: jest.fn(),
   useUpdateTodo: jest.fn(),
+  useReorderTodo: jest.fn(),
 }));
 
 const FUTURE_EVENT: Event = {
@@ -289,6 +291,11 @@ function mockCommonHooks(
   });
   (useUpdateTodo as jest.Mock).mockReturnValue({
     updateTodo: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useReorderTodo as jest.Mock).mockReturnValue({
+    reorderTodo: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -776,6 +783,75 @@ describe("EventDetailScreen", () => {
     await waitFor(() => expect(updateTodoMock).toHaveBeenCalledWith("todo-1", { title: "炭酸水を買う" }));
     await waitFor(() => expect(refetchTodos).toHaveBeenCalled());
     expect(queryByText("削除")).toBeNull();
+  });
+
+  describe("ToDoの並べ替え", () => {
+    const TWO_TODOS = [
+      { id: "todo-1", eventId: "event-1", title: "飲み物を買う", isDone: false, completedAt: null, reminderAt: null, sortOrder: 1 },
+      { id: "todo-2", eventId: "event-1", title: "お菓子を買う", isDone: false, completedAt: null, reminderAt: null, sortOrder: 2 },
+    ];
+
+    it("does not show the reorder toggle when there's 0 or 1 todo", async () => {
+      mockCommonHooks({
+        todos: [{ id: "todo-1", eventId: "event-1", title: "飲み物を買う", isDone: false, completedAt: null, reminderAt: null }],
+      });
+
+      const { queryByTestId } = await render(<EventDetailScreen />);
+
+      expect(queryByTestId("event-todo-reorder-start")).toBeNull();
+    });
+
+    it("shows the reorder toggle once there are 2 or more todos", async () => {
+      mockCommonHooks({ todos: TWO_TODOS });
+
+      const { getByTestId } = await render(<EventDetailScreen />);
+
+      expect(getByTestId("event-todo-reorder-start")).toBeTruthy();
+    });
+
+    it("entering reorder mode shows a drag handle per row (not a checkbox) and hides the add-todo row", async () => {
+      mockCommonHooks({ todos: TWO_TODOS });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+      await fireEvent.press(getByTestId("event-todo-reorder-start"));
+
+      expect(getByTestId("event-todo-drag-handle-todo-1")).toBeTruthy();
+      expect(getByTestId("event-todo-drag-handle-todo-2")).toBeTruthy();
+      expect(queryByTestId("event-todo-checkbox-todo-1")).toBeNull();
+      expect(queryByTestId("event-todo-input")).toBeNull();
+      expect(getByTestId("event-todo-reorder-confirm")).toBeTruthy();
+      expect(getByTestId("event-todo-reorder-cancel")).toBeTruthy();
+    });
+
+    it("cancelling reorder mode discards without calling reorderTodo, and restores the checkboxes/add row", async () => {
+      const reorderTodoMock = jest.fn();
+      mockCommonHooks({ todos: TWO_TODOS });
+      (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+      await fireEvent.press(getByTestId("event-todo-reorder-start"));
+      await fireEvent.press(getByTestId("event-todo-reorder-cancel"));
+
+      expect(reorderTodoMock).not.toHaveBeenCalled();
+      expect(getByTestId("event-todo-checkbox-todo-1")).toBeTruthy();
+      expect(getByTestId("event-todo-input")).toBeTruthy();
+      expect(queryByTestId("event-todo-drag-handle-todo-1")).toBeNull();
+    });
+
+    it("confirming without dragging anything does not call reorderTodo (nothing actually changed)", async () => {
+      const reorderTodoMock = jest.fn();
+      const { refetchTodos } = mockCommonHooks({ todos: TWO_TODOS });
+      (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+      await fireEvent.press(getByTestId("event-todo-reorder-start"));
+      await fireEvent.press(getByTestId("event-todo-reorder-confirm"));
+
+      expect(reorderTodoMock).not.toHaveBeenCalled();
+      expect(refetchTodos).not.toHaveBeenCalled();
+      expect(getByTestId("event-todo-checkbox-todo-1")).toBeTruthy();
+      expect(queryByTestId("event-todo-drag-handle-todo-1")).toBeNull();
+    });
   });
 
   it("shows the timed reminder options for a timed event, with none checked by default when no reminders exist yet", async () => {

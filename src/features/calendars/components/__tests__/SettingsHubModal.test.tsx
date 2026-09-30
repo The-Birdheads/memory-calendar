@@ -194,6 +194,25 @@ describe("SettingsHubModal", () => {
       expect(getByTestId("personal-settings-name-display").props.children).toBe("たろう");
     });
 
+    it("notifies the caller via onChange when the week-start day is switched from personal settings (regression: the calendar screen's own useMyProfile never learned about the change)", async () => {
+      mockHooks();
+      (useUpdateWeekStartsOn as jest.Mock).mockReturnValue({
+        updateWeekStartsOn: jest.fn().mockResolvedValue({ id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 }),
+        isSubmitting: false,
+        error: null,
+      });
+      const onChange = jest.fn();
+
+      const { getByTestId } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} onChange={onChange} />,
+      );
+
+      await fireEvent.press(getByTestId("settings-hub-open-personal"));
+      await fireEvent.press(getByTestId("personal-settings-week-starts-on-monday"));
+
+      await waitFor(() => expect(onChange).toHaveBeenCalled());
+    });
+
     it("opens calendar settings and shows the calendar list", async () => {
       mockHooks();
 
@@ -1044,6 +1063,42 @@ describe("SettingsHubModal", () => {
         expect(updateTagMock).toHaveBeenCalledWith("tag-1", { color: TAG_COLORS.find((c) => c.name === "green")!.hex }),
       );
       await waitFor(() => expect(refetchTags).toHaveBeenCalled());
+    });
+
+    it("stays on the tag edit screen after saving the name (regression: each field's auto-save used to close the screen back to the tag list)", async () => {
+      mockHooks();
+      (useUpdateTag as jest.Mock).mockReturnValue({
+        updateTag: jest.fn().mockResolvedValue(true),
+        isSubmitting: false,
+        error: null,
+      });
+
+      const { getByTestId, queryByTestId } = await openTagList();
+
+      await fireEvent.press(getByTestId("tag-management-tag-tag-1"));
+      await fireEvent.press(getByTestId("edit-tag-name-edit"));
+      await fireEvent.changeText(getByTestId("edit-tag-name-input"), "行楽");
+      await fireEvent.press(getByTestId("edit-tag-name-confirm"));
+
+      await waitFor(() => expect(getByTestId("edit-tag-name-display")).toBeTruthy());
+      expect(queryByTestId("tag-management-tag-tag-1")).toBeNull();
+    });
+
+    it("stays on the tag edit screen after saving the color (regression: each field's auto-save used to close the screen back to the tag list)", async () => {
+      mockHooks();
+      (useUpdateTag as jest.Mock).mockReturnValue({
+        updateTag: jest.fn().mockResolvedValue(true),
+        isSubmitting: false,
+        error: null,
+      });
+
+      const { getByTestId, queryByTestId } = await openTagList();
+
+      await fireEvent.press(getByTestId("tag-management-tag-tag-1"));
+      await fireEvent.press(getByTestId("edit-tag-color-green"));
+
+      await waitFor(() => expect(getByTestId("edit-tag-color-green-check")).toBeTruthy());
+      expect(queryByTestId("tag-management-tag-tag-1")).toBeNull();
     });
 
     it("deletes the selected tag after confirming and returns to the list", async () => {

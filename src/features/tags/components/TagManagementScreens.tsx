@@ -92,15 +92,25 @@ export function TagFormScreen({ tagId, onChange, onSaved }: TagFormScreenProps) 
     // 連打で同じタグが2件作られてしまうのを防ぐ(下のEditTagForm側のdisabledと
     // 二重で防御する)。
     if (isSavingTag) return;
-    const success = tagId
-      ? await updateTag(tagId, input)
-      : await createTag({
-          name: input.name ?? "",
-          color: input.color ?? "#2f6fed",
-          level: input.level ?? "major",
-          parentId: input.parentId ?? null,
-        });
-    if (success) {
+    if (tagId) {
+      // 既存タグの編集は、名前・色・分類・親タグそれぞれが選択/確定するたびに
+      // 個別に即保存される(EditTagFormのisEditing挙動)。1つ保存するたびに
+      // 画面を閉じてしまうと連続して編集できないため、閉じるのはユーザーが
+      // 明示的に戻るボタンを押した時だけにする。
+      const success = await updateTag(tagId, input);
+      if (success) {
+        await refetch();
+        onChange?.();
+      }
+      return;
+    }
+    const created = await createTag({
+      name: input.name ?? "",
+      color: input.color ?? "#2f6fed",
+      level: input.level ?? "major",
+      parentId: input.parentId ?? null,
+    });
+    if (created) {
       await refetch();
       onChange?.();
       onSaved();

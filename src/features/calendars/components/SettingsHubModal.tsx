@@ -151,7 +151,9 @@ export function SettingsHubModal({
             </View>
           ) : null}
 
-          {current.name === "personal" && currentUserId ? <PersonalSettingsPanel userId={currentUserId} /> : null}
+          {current.name === "personal" && currentUserId ? (
+            <PersonalSettingsPanel userId={currentUserId} onChange={onChange} />
+          ) : null}
 
           {current.name === "calendar-list" ? (
             <CalendarListScreen
