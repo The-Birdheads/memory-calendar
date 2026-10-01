@@ -42,6 +42,11 @@ function eligibleParentsFor(level: TagLevel, allTags: Tag[], excludeId: string):
   return allTags.filter((candidate) => candidate.level === parentLevel && candidate.id !== excludeId);
 }
 
+function initialGrandparentId(tag: Tag, allTags: Tag[]): string | null {
+  if (tag.level !== "minor" || !tag.parentId) return null;
+  return allTags.find((candidate) => candidate.id === tag.parentId)?.parentId ?? null;
+}
+
 export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isEditing }: EditTagFormProps) {
   const [name, setName] = useState(tag.name);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -49,6 +54,10 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
   const [level, setLevel] = useState<TagLevel>(tag.level);
   const [parentId, setParentId] = useState<string | null>(tag.parentId);
   const [majorColor, setMajorColor] = useState<string | null>(tag.level === "major" ? tag.color : TAG_COLORS[0].hex);
+  // 分類(大分類/中分類/小分類・親タグ)も、既存タグの編集時はデフォルトで
+  // 平文表示にし、鉛筆アイコンを押した時だけレベル/親タグの選択UIを出す
+  // (名前の鉛筆編集と同じ考え方)。新規作成時は従来通り常に選択UIを出す。
+  const [isEditingCategory, setIsEditingCategory] = useState(false);
   const usageByColor = useMemo<Record<string, ColorUsageEntry>>(
     () =>
       Object.fromEntries(
@@ -62,10 +71,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
   // For a 小分類 (minor) tag, the parent (中分類) is chosen in two steps: first
   // pick its 大分類, then pick one of that 大分類's 中分類 children as the
   // actual parent. grandparentId tracks the first step.
-  const [grandparentId, setGrandparentId] = useState<string | null>(() => {
-    if (tag.level !== "minor" || !tag.parentId) return null;
-    return allTags.find((candidate) => candidate.id === tag.parentId)?.parentId ?? null;
-  });
+  const [grandparentId, setGrandparentId] = useState<string | null>(() => initialGrandparentId(tag, allTags));
 
   const eligibleParentLevel = PARENT_LEVEL[level];
   const eligibleParents = eligibleParentsFor(level, allTags, tag.id);
@@ -100,10 +106,12 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
     setLevel(nextLevel);
     setParentId(null);
     setGrandparentId(null);
-    // 大分類への変更は親タグ不要でその場で状態が確定するので即保存する。
-    // 中分類/小分類への変更は親タグを選ぶまで未確定のまま(下のparent選択で保存)。
+    // 大分類への変更は親タグ不要でその場で状態が確定するので即保存し、分類
+    // 編集も閉じる。中分類/小分類への変更は親タグを選ぶまで未確定のまま
+    // (下のparent選択で保存・分類編集を閉じる)。
     if (isEditing && nextLevel === "major") {
       onSave({ level: "major", parentId: null, color: majorColor });
+      setIsEditingCategory(false);
     }
   };
 
@@ -119,6 +127,7 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
       const newColor =
         newParentTag && newParentTag.color !== null ? lightenHexColor(newParentTag.color, AUTO_SHADE_AMOUNT) : null;
       onSave({ level, parentId: newParentId, color: newColor });
+      setIsEditingCategory(false);
     }
   };
 
@@ -127,6 +136,17 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
     if (isEditing) {
       onSave({ color: hex });
     }
+  };
+
+  const handleStartEditCategory = () => {
+    setIsEditingCategory(true);
+  };
+
+  const handleCancelEditCategory = () => {
+    setLevel(tag.level);
+    setParentId(tag.parentId);
+    setGrandparentId(initialGrandparentId(tag, allTags));
+    setIsEditingCategory(false);
   };
 
   const handleStartEditName = () => {
@@ -149,87 +169,33 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
     onSave({ name, color: computedColor, level, parentId: level === "major" ? null : parentId });
   };
 
-  return (
-    <View style={styles.container}>
-      {isEditing ? (
-        isEditingName ? (
-          <View style={styles.nameRow}>
-            <TextInput
-              testID="edit-tag-name-input"
-              style={[styles.input, styles.nameInput]}
-              value={nameDraft}
-              onChangeText={setNameDraft}
-              autoFocus
-            />
-            <TouchableOpacity
-              testID="edit-tag-name-confirm"
-              onPress={handleConfirmEditName}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.confirmCheck}>✓</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              testID="edit-tag-name-cancel"
-              onPress={handleCancelEditName}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.cancelText}>✕</Text>
-            </TouchableOpacity>
+  const parentBreadcrumbElements =
+    parentBreadcrumb.length === 0 ? (
+      <Text testID="edit-tag-parent-tag-unselected" style={styles.parentTagUnselected}>
+        未選択
+      </Text>
+    ) : (
+      parentBreadcrumb.map((ancestor, index) => (
+        <View key={ancestor.id} style={styles.parentTagBreadcrumbItem}>
+          {index > 0 ? <Text style={styles.parentTagChevron}>›</Text> : null}
+          <View
+            testID={index === parentBreadcrumb.length - 1 ? "edit-tag-parent-tag-badge" : "edit-tag-major-ancestor-badge"}
+            style={[styles.parentTagBadge, { backgroundColor: ancestor.color ?? "#999999" }]}
+          >
+            <Text style={styles.parentTagBadgeText}>{ancestor.name}</Text>
           </View>
-        ) : (
-          <View style={styles.nameRow}>
-            <Text testID="edit-tag-name-display" style={styles.nameDisplay}>
-              {name}
-            </Text>
-            <TouchableOpacity
-              testID="edit-tag-name-edit"
-              onPress={handleStartEditName}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Icon name="edit" size={16} color="#2f6fed" />
-            </TouchableOpacity>
-          </View>
-        )
-      ) : (
-        <TextInput testID="edit-tag-name-input" style={styles.input} value={name} onChangeText={setName} />
-      )}
+        </View>
+      ))
+    );
 
-      <View style={styles.colorSection}>
-        {level === "major" ? (
-          <ColorSwatchPicker
-            testIDPrefix="edit-tag-color"
-            selected={majorColor}
-            onSelect={handleSelectMajorColor}
-            usageByColor={usageByColor}
-            allowUnset
-          />
-        ) : (
-          <View style={styles.parentTagRow}>
-            <Text style={styles.parentTagLabel}>親タグ</Text>
-            {parentBreadcrumb.length === 0 ? (
-              <Text testID="edit-tag-parent-tag-unselected" style={styles.parentTagUnselected}>
-                未選択
-              </Text>
-            ) : (
-              parentBreadcrumb.map((ancestor, index) => (
-                <View key={ancestor.id} style={styles.parentTagBreadcrumbItem}>
-                  {index > 0 ? <Text style={styles.parentTagChevron}>›</Text> : null}
-                  <View
-                    testID={
-                      index === parentBreadcrumb.length - 1
-                        ? "edit-tag-parent-tag-badge"
-                        : "edit-tag-major-ancestor-badge"
-                    }
-                    style={[styles.parentTagBadge, { backgroundColor: ancestor.color ?? "#999999" }]}
-                  >
-                    <Text style={styles.parentTagBadgeText}>{ancestor.name}</Text>
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
-        )}
-      </View>
+  const categoryEditorBody = (
+    <>
+      {level !== "major" ? (
+        <View style={styles.parentTagRow}>
+          <Text style={styles.parentTagLabel}>親タグ</Text>
+          {parentBreadcrumbElements}
+        </View>
+      ) : null}
 
       <View style={styles.levelRow}>
         {LEVELS.map((l) => {
@@ -296,6 +262,99 @@ export function EditTagForm({ tag, allTags, calendars, onSave, isSubmitting, isE
         </View>
       ) : null}
 
+      {isEditing ? (
+        <TouchableOpacity
+          testID="edit-tag-category-cancel"
+          style={styles.categoryCancelButton}
+          onPress={handleCancelEditCategory}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={styles.cancelText}>✕</Text>
+        </TouchableOpacity>
+      ) : null}
+    </>
+  );
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.sectionLabel}>タグ名</Text>
+      {isEditing ? (
+        isEditingName ? (
+          <View style={styles.nameRow}>
+            <TextInput
+              testID="edit-tag-name-input"
+              style={[styles.input, styles.nameInput]}
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              autoFocus
+            />
+            <TouchableOpacity
+              testID="edit-tag-name-confirm"
+              onPress={handleConfirmEditName}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.confirmCheck}>✓</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="edit-tag-name-cancel"
+              onPress={handleCancelEditName}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.cancelText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.nameRow}>
+            <Text testID="edit-tag-name-display" style={styles.nameDisplay}>
+              {name}
+            </Text>
+            <TouchableOpacity
+              testID="edit-tag-name-edit"
+              onPress={handleStartEditName}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Icon name="edit" size={16} color="#2f6fed" />
+            </TouchableOpacity>
+          </View>
+        )
+      ) : (
+        <TextInput testID="edit-tag-name-input" style={styles.input} value={name} onChangeText={setName} />
+      )}
+
+      {level === "major" ? (
+        <View style={styles.colorSection}>
+          <Text style={styles.sectionLabel}>色</Text>
+          <ColorSwatchPicker
+            testIDPrefix="edit-tag-color"
+            selected={majorColor}
+            onSelect={handleSelectMajorColor}
+            usageByColor={usageByColor}
+            allowUnset
+          />
+        </View>
+      ) : null}
+
+      <Text style={styles.sectionLabel}>分類</Text>
+      {isEditing && !isEditingCategory ? (
+        <View style={styles.categorySummaryRow}>
+          <View style={styles.categoryBreadcrumb}>
+            <Text testID="edit-tag-category-level-label" style={styles.categoryLevelLabelText}>
+              {LEVEL_LABELS[level]}
+            </Text>
+            {parentBreadcrumbElements}
+          </View>
+          <TouchableOpacity
+            testID="edit-tag-category-edit"
+            onPress={handleStartEditCategory}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon name="edit" size={16} color="#2f6fed" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        categoryEditorBody
+      )}
+
       {isEditing ? null : (
         <TouchableOpacity
           testID="edit-tag-save-button"
@@ -315,10 +374,35 @@ const styles = StyleSheet.create({
   container: {
     gap: 8,
   },
+  // カレンダー設定画面と揃えた小見出し(タグ名/色/分類)。
+  sectionLabel: {
+    color: "#666",
+    fontSize: 12,
+    marginTop: 4,
+  },
   // タグ名の行のすぐ下に色選択/親タグが来ると距離が近すぎて見づらいため、
   // 追加で余白を空ける(2026-09)。
   colorSection: {
     marginTop: 12,
+  },
+  categorySummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  categoryBreadcrumb: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  categoryLevelLabelText: {
+    fontSize: 15,
+  },
+  categoryCancelButton: {
+    alignSelf: "flex-start",
   },
   input: {
     borderWidth: 1,

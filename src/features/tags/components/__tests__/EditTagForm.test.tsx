@@ -407,6 +407,7 @@ describe("EditTagForm", () => {
         <EditTagForm tag={midTag} allTags={[MAJOR_TAG, midTag]} calendars={CALENDARS} onSave={onSave} isEditing />
       );
 
+      await fireEvent.press(getByTestId("edit-tag-category-edit"));
       await fireEvent.press(getByTestId("edit-tag-level-major"));
 
       expect(onSave).toHaveBeenCalledWith({ level: "major", parentId: null, color: TAG_COLORS[0].hex });
@@ -424,6 +425,7 @@ describe("EditTagForm", () => {
         />
       );
 
+      await fireEvent.press(getByTestId("edit-tag-category-edit"));
       await fireEvent.press(getByTestId("edit-tag-level-mid"));
       expect(onSave).not.toHaveBeenCalled();
 
@@ -456,6 +458,7 @@ describe("EditTagForm", () => {
         />
       );
 
+      await fireEvent.press(getByTestId("edit-tag-category-edit"));
       await fireEvent.press(getByTestId("edit-tag-level-minor"));
       await fireEvent.press(getByTestId("edit-tag-grandparent-tag-2"));
       expect(onSave).not.toHaveBeenCalled();
@@ -466,6 +469,111 @@ describe("EditTagForm", () => {
         level: "minor",
         parentId: "tag-5",
         color: lightenHexColor("#00ff00", 0.35),
+      });
+    });
+
+    describe("分類の平文表示/編集トグル", () => {
+      it("shows the category as plain text (level label + parent breadcrumb) with an edit icon, hiding the level/parent picker", async () => {
+        const midTag = { ...MAJOR_TAG, id: "tag-3", level: "mid" as const, parentId: "tag-1" };
+        const { getByTestId, queryByTestId } = await render(
+          <EditTagForm tag={midTag} allTags={[MAJOR_TAG, midTag]} calendars={CALENDARS} onSave={jest.fn()} isEditing />
+        );
+
+        expect(getByTestId("edit-tag-category-level-label").props.children).toBe("中分類");
+        expect(within(getByTestId("edit-tag-parent-tag-badge")).getByText("行事")).toBeTruthy();
+        expect(getByTestId("edit-tag-category-edit")).toBeTruthy();
+        expect(queryByTestId("edit-tag-level-major")).toBeNull();
+        expect(queryByTestId("edit-tag-category-cancel")).toBeNull();
+      });
+
+      it("reveals the level/parent picker when the category's edit icon is pressed", async () => {
+        const { getByTestId, queryByTestId } = await render(
+          <EditTagForm tag={MAJOR_TAG} allTags={[MAJOR_TAG]} calendars={CALENDARS} onSave={jest.fn()} isEditing />
+        );
+
+        await fireEvent.press(getByTestId("edit-tag-category-edit"));
+
+        expect(getByTestId("edit-tag-level-major")).toBeTruthy();
+        expect(getByTestId("edit-tag-level-mid")).toBeTruthy();
+        expect(getByTestId("edit-tag-category-cancel")).toBeTruthy();
+        expect(queryByTestId("edit-tag-category-level-label")).toBeNull();
+      });
+
+      it("collapses back to plain text once a 大分類 change is saved", async () => {
+        const midTag = { ...MAJOR_TAG, id: "tag-3", level: "mid" as const, parentId: "tag-1" };
+        const { getByTestId, queryByTestId } = await render(
+          <EditTagForm tag={midTag} allTags={[MAJOR_TAG, midTag]} calendars={CALENDARS} onSave={jest.fn()} isEditing />
+        );
+
+        await fireEvent.press(getByTestId("edit-tag-category-edit"));
+        await fireEvent.press(getByTestId("edit-tag-level-major"));
+
+        expect(getByTestId("edit-tag-category-level-label").props.children).toBe("大分類");
+        expect(queryByTestId("edit-tag-level-major")).toBeNull();
+      });
+
+      it("collapses back to plain text once a 中分類 parent is picked and saved", async () => {
+        const onSave = jest.fn();
+        const { getByTestId, queryByTestId } = await render(
+          <EditTagForm
+            tag={MAJOR_TAG}
+            allTags={[MAJOR_TAG, OTHER_MAJOR_TAG]}
+            calendars={CALENDARS}
+            onSave={onSave}
+            isEditing
+          />
+        );
+
+        await fireEvent.press(getByTestId("edit-tag-category-edit"));
+        await fireEvent.press(getByTestId("edit-tag-level-mid"));
+        await fireEvent.press(getByTestId("edit-tag-parent-tag-2"));
+
+        expect(getByTestId("edit-tag-category-level-label").props.children).toBe("中分類");
+        expect(within(getByTestId("edit-tag-parent-tag-badge")).getByText("外出")).toBeTruthy();
+        expect(queryByTestId("edit-tag-level-mid")).toBeNull();
+      });
+
+      it("does not collapse after just the grandparent step of a 小分類 (parent still needs to be picked)", async () => {
+        const midOfTag2 = { ...MAJOR_TAG, id: "tag-5", level: "mid" as const, parentId: "tag-2", name: "国内旅行" };
+        const { getByTestId, queryByTestId } = await render(
+          <EditTagForm
+            tag={MAJOR_TAG}
+            allTags={[MAJOR_TAG, OTHER_MAJOR_TAG, midOfTag2]}
+            calendars={CALENDARS}
+            onSave={jest.fn()}
+            isEditing
+          />
+        );
+
+        await fireEvent.press(getByTestId("edit-tag-category-edit"));
+        await fireEvent.press(getByTestId("edit-tag-level-minor"));
+        await fireEvent.press(getByTestId("edit-tag-grandparent-tag-2"));
+
+        expect(getByTestId("edit-tag-level-minor")).toBeTruthy();
+        expect(queryByTestId("edit-tag-category-level-label")).toBeNull();
+      });
+
+      it("cancels category editing without saving, reverting to the tag's original level/parent", async () => {
+        const onSave = jest.fn();
+        const { getByTestId, queryByTestId } = await render(
+          <EditTagForm
+            tag={MAJOR_TAG}
+            allTags={[MAJOR_TAG, OTHER_MAJOR_TAG]}
+            calendars={CALENDARS}
+            onSave={onSave}
+            isEditing
+          />
+        );
+
+        await fireEvent.press(getByTestId("edit-tag-category-edit"));
+        await fireEvent.press(getByTestId("edit-tag-level-mid"));
+        expect(onSave).not.toHaveBeenCalled();
+
+        await fireEvent.press(getByTestId("edit-tag-category-cancel"));
+
+        expect(onSave).not.toHaveBeenCalled();
+        expect(getByTestId("edit-tag-category-level-label").props.children).toBe("大分類");
+        expect(queryByTestId("edit-tag-level-mid")).toBeNull();
       });
     });
   });
