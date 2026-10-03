@@ -20,6 +20,7 @@ import type { Calendar } from "../../calendars/types";
 import { Icon } from "../../../shared/components/Icon";
 import { RevealableTextField } from "../../../shared/components/RevealableTextField";
 import { formatDateOnly, toJstDateKey } from "../../../shared/utils/formatDateTime";
+import { DATE_PICKER_LOCALE } from "../../../shared/utils/pickerLocale";
 
 const MEAL_SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
@@ -276,6 +277,7 @@ function MealFormModalContent({
                   value={mealDate}
                   mode="date"
                   display={Platform.OS === "ios" ? "inline" : "default"}
+                  locale={DATE_PICKER_LOCALE}
                   onChange={(_event, selected) => {
                     if (selected) setMealDate(selected);
                   }}

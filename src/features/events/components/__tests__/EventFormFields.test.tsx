@@ -5,9 +5,10 @@ import { EventFormFields, type EventFormValue } from "../EventFormFields";
 jest.mock("@react-native-community/datetimepicker", () => {
   const React = require("react");
   const { TextInput } = require("react-native");
-  return function MockDateTimePicker({ testID, onChange }: any) {
+  return function MockDateTimePicker({ testID, onChange, locale }: any) {
     return React.createElement(TextInput, {
       testID,
+      locale,
       onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
     });
   };
@@ -104,6 +105,65 @@ describe("EventFormFields", () => {
     await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-09-05T10:00:00.000Z");
 
     expect(onChange).toHaveBeenCalledWith({ start: new Date("2026-09-05T10:00:00.000Z") });
+  });
+
+  it("renders the native picker in Japanese so the month and weekday labels aren't English", async () => {
+    const { getByTestId } = await render(
+      <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />
+    );
+
+    await fireEvent.press(getByTestId("event-create-start-button"));
+
+    expect(getByTestId("event-create-start-picker").props.locale).toBe("ja-JP");
+  });
+
+  describe("編集中の日時フィールドの強調", () => {
+    function borderColorOf(node: { props: { style?: unknown } }): unknown {
+      return flattenStyle(node.props.style).borderColor;
+    }
+
+    it("does not highlight either field while no picker is open", async () => {
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />
+      );
+
+      expect(borderColorOf(getByTestId("event-create-start-button"))).toBe("#ccc");
+      expect(borderColorOf(getByTestId("event-create-end-button"))).toBe("#ccc");
+    });
+
+    it("highlights only the 開始 field while its picker is open", async () => {
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />
+      );
+
+      await fireEvent.press(getByTestId("event-create-start-button"));
+
+      expect(borderColorOf(getByTestId("event-create-start-button"))).toBe("#2f6fed");
+      expect(borderColorOf(getByTestId("event-create-end-button"))).toBe("#ccc");
+    });
+
+    it("moves the highlight to the 終了 field when it is opened instead", async () => {
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />
+      );
+
+      await fireEvent.press(getByTestId("event-create-start-button"));
+      await fireEvent.press(getByTestId("event-create-end-button"));
+
+      expect(borderColorOf(getByTestId("event-create-start-button"))).toBe("#ccc");
+      expect(borderColorOf(getByTestId("event-create-end-button"))).toBe("#2f6fed");
+    });
+
+    it("clears the highlight after 完了", async () => {
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={jest.fn()} />
+      );
+
+      await fireEvent.press(getByTestId("event-create-end-button"));
+      await fireEvent.press(getByTestId("event-create-picker-done"));
+
+      expect(borderColorOf(getByTestId("event-create-end-button"))).toBe("#ccc");
+    });
   });
 
   it("calls onChange with the new location and url", async () => {

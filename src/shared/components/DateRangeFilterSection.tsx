@@ -3,6 +3,7 @@ import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "r
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { jstNow } from "../utils/formatDateTime";
+import { DATE_PICKER_LOCALE } from "../utils/pickerLocale";
 
 function todayDateKey(): string {
   return jstNow().toISOString().slice(0, 10);
@@ -95,6 +96,7 @@ export function DateRangeFilterSection({ testIDPrefix, startDate, endDate, onCha
               testID={activePicker === "start" ? `${testIDPrefix}-start-picker` : `${testIDPrefix}-end-picker`}
               value={new Date(`${activeDateKey}T00:00:00.000Z`)}
               mode="date"
+              locale={DATE_PICKER_LOCALE}
               onChange={(_event: unknown, selected?: Date) => {
                 if (selected) {
                   handlePickDate(activePicker, selected.toISOString().slice(0, 10));

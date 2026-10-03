@@ -4,6 +4,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { RevealableTextField } from "../../../shared/components/RevealableTextField";
 import { formatDateOnly, formatDateTime } from "../../../shared/utils/formatDateTime";
+import { DATE_PICKER_LOCALE } from "../../../shared/utils/pickerLocale";
 
 export interface EventFormValue {
   title: string;
@@ -55,19 +56,19 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
 
       <TouchableOpacity
         testID={`${testIDPrefix}-start-button`}
-        style={styles.dateField}
+        style={[styles.dateField, activePicker === "start" && styles.dateFieldActive]}
         onPress={() => setActivePicker("start")}
       >
-        <Text style={styles.dateFieldLabel}>開始</Text>
+        <Text style={[styles.dateFieldLabel, activePicker === "start" && styles.dateFieldLabelActive]}>開始</Text>
         <Text>{formatFieldLabel(value.start, value.isAllDay)}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         testID={`${testIDPrefix}-end-button`}
-        style={styles.dateField}
+        style={[styles.dateField, activePicker === "end" && styles.dateFieldActive]}
         onPress={() => setActivePicker("end")}
       >
-        <Text style={styles.dateFieldLabel}>終了</Text>
+        <Text style={[styles.dateFieldLabel, activePicker === "end" && styles.dateFieldLabelActive]}>終了</Text>
         <Text>{formatFieldLabel(value.end, value.isAllDay)}</Text>
       </TouchableOpacity>
 
@@ -91,6 +92,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
               value={activePicker === "start" ? value.start : value.end}
               mode={value.isAllDay ? "date" : "datetime"}
               display={Platform.OS === "ios" ? "inline" : "default"}
+              locale={DATE_PICKER_LOCALE}
               onChange={(_event: unknown, selected?: Date) => {
                 if (selected) {
                   onChange(activePicker === "start" ? { start: selected } : { end: selected });
@@ -192,8 +194,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  dateFieldActive: {
+    borderWidth: 2,
+    borderColor: "#2f6fed",
+    backgroundColor: "#e8f0fe",
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
   dateFieldLabel: {
     color: "#666",
+  },
+  dateFieldLabelActive: {
+    color: "#0c447c",
+    fontWeight: "700",
   },
   pickerContainer: {
     gap: 8,
