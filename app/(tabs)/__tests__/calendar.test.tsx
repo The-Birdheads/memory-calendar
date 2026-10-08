@@ -1,6 +1,6 @@
 import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Linking } from "react-native";
+import { Linking, StyleSheet } from "react-native";
 
 import CalendarScreen from "../calendar";
 import { useAuthActions, useAuthSession } from "../../../src/features/auth/hooks";
@@ -883,6 +883,44 @@ describe("CalendarScreen", () => {
     expect(allDayTitleStyle.color).toBe("#fff");
     expect(timedPillStyle.backgroundColor).toBe("rgba(229, 57, 53, 0.18)");
     expect(timedTitleStyle.color).toBe("#e53935");
+  });
+
+  it("separates each event in the day-events modal with a thin light line, but not before the first or after the last", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [TODAY_EVENT, { ...TODAY_EVENT, id: "event-today-2", title: "ランチ" }, { ...TODAY_EVENT, id: "event-today-3", title: "夕食" }],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId, getAllByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+    const separators = getAllByTestId("calendar-day-modal-separator");
+    expect(separators).toHaveLength(2);
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    const separatorStyle = flattenStyle(separators[0].props.style);
+    expect(separatorStyle.height).toBe(StyleSheet.hairlineWidth);
+    expect(separatorStyle.backgroundColor).toBe("#e5e7eb");
+  });
+
+  it("draws no separator in the day-events modal when the day has a single event", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+      events: [TODAY_EVENT],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+    await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+    expect(queryByTestId("calendar-day-modal-separator")).toBeNull();
   });
 
   it("shows the day-events modal as a fixed-size card centered over a dimmed backdrop, not a full-screen sheet", async () => {

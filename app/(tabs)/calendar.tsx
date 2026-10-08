@@ -137,6 +137,10 @@ function resolveEventPillStyle(
   return { backgroundColor: hexToRgba(color, TIMED_EVENT_BACKGROUND_ALPHA), textColor: color };
 }
 
+function DayModalEventSeparator() {
+  return <View testID="calendar-day-modal-separator" style={styles.dayModalEventSeparator} />;
+}
+
 export default function CalendarScreen() {
   const { date: dateParam, calendarId: calendarIdParam } = useLocalSearchParams<{
     date?: string;
@@ -1206,6 +1210,7 @@ export default function CalendarScreen() {
                 style={styles.dayModalEventList}
                 data={eventsForSelectedDate}
                 keyExtractor={(item) => item.id}
+                ItemSeparatorComponent={DayModalEventSeparator}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={styles.eventRow}
@@ -1694,6 +1699,11 @@ const styles = StyleSheet.create({
     color: "#999",
     paddingHorizontal: 20,
     paddingVertical: 12,
+  },
+  dayModalEventSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "#e5e7eb",
+    marginHorizontal: 16,
   },
   dayModalEventList: {
     flex: 1,
