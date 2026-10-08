@@ -923,6 +923,17 @@ describe("CalendarScreen", () => {
     expect(queryByTestId("calendar-day-modal-separator")).toBeNull();
   });
 
+  it("draws the settings gear in the same neutral dark gray as the other header icons, not accent blue", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+    const { getByTestId } = await render(<CalendarScreen />);
+
+    const flatten = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    expect(flatten(getByTestId("calendar-settings-icon").props.style).tintColor).toBe("#444");
+  });
+
   it("shows the day-events modal as a fixed-size card centered over a dimmed backdrop, not a full-screen sheet", async () => {
     mockCommonHooks();
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });

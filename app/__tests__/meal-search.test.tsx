@@ -161,18 +161,22 @@ describe("MealSearchScreen", () => {
   });
 
   describe("結果のタップで編集（献立タブの一覧と同じ挙動）", () => {
-    it("opens the edit form pre-filled when a result is tapped", async () => {
+    it("opens the detail with each item as plain text when a result is tapped", async () => {
       mockCommonHooks();
 
-      const { getByTestId } = await render(<MealSearchScreen />);
+      const { getByTestId, getByText, queryByTestId } = await render(<MealSearchScreen />);
 
       await fireEvent.press(getByTestId("meal-item-meal-2"));
 
+      expect(getByText("献立の詳細")).toBeTruthy();
+      expect(getByText("https://example.com/curry")).toBeTruthy();
+      expect(queryByTestId("meal-form-title-input")).toBeNull();
+
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
       expect(getByTestId("meal-form-title-input").props.value).toBe("カレー");
-      expect(getByTestId("meal-form-url-input").props.value).toBe("https://example.com/curry");
     });
 
-    it("saves an edit and refetches the results", async () => {
+    it("saves one edited item, refetches the results, and keeps the detail open", async () => {
       const refetch = jest.fn();
       mockCommonHooks(RECORDS, refetch);
       const updateMealRecordMock = jest.fn().mockResolvedValue(true);
@@ -182,23 +186,19 @@ describe("MealSearchScreen", () => {
         error: null,
       });
 
-      const { getByTestId, queryByTestId } = await render(<MealSearchScreen />);
+      const { getByTestId, getByText } = await render(<MealSearchScreen />);
 
       await fireEvent.press(getByTestId("meal-item-meal-1"));
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
       await fireEvent.changeText(getByTestId("meal-form-title-input"), "トースト（改）");
-      await fireEvent.press(getByTestId("meal-form-save"));
+      await fireEvent.press(getByTestId("meal-detail-title-confirm"));
 
-      await waitFor(() =>
-        expect(updateMealRecordMock).toHaveBeenCalledWith(
-          "meal-1",
-          expect.objectContaining({ title: "トースト（改）" })
-        )
-      );
+      await waitFor(() => expect(updateMealRecordMock).toHaveBeenCalledWith("meal-1", { title: "トースト（改）" }));
       await waitFor(() => expect(refetch).toHaveBeenCalled());
-      await waitFor(() => expect(queryByTestId("meal-form-title-input")).toBeNull());
+      expect(getByText("献立の詳細")).toBeTruthy();
     });
 
-    it("shows a calendar picker in the edit form when there's more than one calendar, and saves with the newly chosen calendarId (regression: the calendar used to be locked in edit mode)", async () => {
+    it("lets the calendar be changed from the detail when there's more than one calendar (regression: the calendar used to be locked in edit mode)", async () => {
       mockCommonHooks();
       (useMyCalendars as jest.Mock).mockReturnValue({
         calendars: [...CALENDARS, CALENDAR_2],
@@ -216,14 +216,12 @@ describe("MealSearchScreen", () => {
       const { getByTestId } = await render(<MealSearchScreen />);
 
       await fireEvent.press(getByTestId("meal-item-meal-1")); // meal-1 is on cal-1
+      await fireEvent.press(getByTestId("meal-detail-calendar-edit"));
       expect(getByTestId("meal-form-calendar-picker")).toBeTruthy();
-
       await fireEvent.press(getByTestId("meal-form-calendar-cal-2"));
-      await fireEvent.press(getByTestId("meal-form-save"));
+      await fireEvent.press(getByTestId("meal-detail-calendar-confirm"));
 
-      await waitFor(() =>
-        expect(updateMealRecordMock).toHaveBeenCalledWith("meal-1", expect.objectContaining({ calendarId: "cal-2" }))
-      );
+      await waitFor(() => expect(updateMealRecordMock).toHaveBeenCalledWith("meal-1", { calendarId: "cal-2" }));
     });
 
     it("deletes a record after confirming, closing the form and refetching", async () => {

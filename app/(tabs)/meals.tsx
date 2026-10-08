@@ -13,6 +13,8 @@ import {
   useUpdateMealRecord,
 } from "../../src/features/meals/hooks";
 import { MealFormModal, type MealFormTarget, type MealFormValues } from "../../src/features/meals/components/MealFormModal";
+import { MealNotificationBell } from "../../src/features/meals/components/MealNotificationBell";
+import { mealFormPatchToUpdateInput } from "../../src/features/meals/formPatch";
 import { MealRow } from "../../src/features/meals/components/MealRow";
 import type { MealRecord, MealSlot } from "../../src/features/meals/types";
 import { DateRangeFilterSection } from "../../src/shared/components/DateRangeFilterSection";
@@ -198,6 +200,17 @@ function useMealFormController(createTargetCalendarId: string, refetch: () => Pr
     }
   };
 
+  // 詳細(編集モード)の項目単位の保存。フォームは開いたままにして(次の項目も
+  // 続けて直せるように)、一覧だけ最新にする。
+  const handleUpdateField = async (recordId: string, patch: Partial<MealFormValues>): Promise<boolean> => {
+    if (isSavingMeal) return false;
+    const success = await updateMealRecord(recordId, mealFormPatchToUpdateInput(patch));
+    if (success) {
+      await refetch();
+    }
+    return success;
+  };
+
   const handleDelete = async (recordId: string) => {
     if (isDeletingMeal) return;
     const success = await deleteMealRecord(recordId);
@@ -207,7 +220,17 @@ function useMealFormController(createTargetCalendarId: string, refetch: () => Pr
     }
   };
 
-  return { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal };
+  return {
+    formTarget,
+    openCreate,
+    openEdit,
+    closeForm,
+    handleSave,
+    handleUpdateField,
+    handleDelete,
+    isSavingMeal,
+    isDeletingMeal,
+  };
 }
 
 function PlanPanel() {
@@ -224,7 +247,7 @@ function PlanPanel() {
   // 表示中のカレンダーが複数ある時だけ、行にどのカレンダーの献立かを添える
   // (1つしかない時はどうせ全部同じなので出さない)。
   const calendarById = useMemo(() => new Map(calendars.map((calendar) => [calendar.id, calendar])), [calendars]);
-  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
+  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleUpdateField, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
     createTargetCalendarId,
     refetch
   );
@@ -241,6 +264,7 @@ function PlanPanel() {
     <View style={styles.panel}>
       <Tabs.Screen
         options={{
+          headerLeft: () => <MealNotificationBell />,
           headerRight: () => (
             <View style={styles.headerRightRow}>
               <FilterButton testID="meals-filter" isActive={isFilterActive} onReset={handleResetFilter}>
@@ -263,7 +287,7 @@ function PlanPanel() {
                   router.push({ pathname: "/meal-search", params: { calendarId: createTargetCalendarId } })
                 }
               >
-                <Icon name="search" size={20} color="#2f6fed" />
+                <Icon name="search" size={22} color="#2f6fed" />
               </TouchableOpacity>
             </View>
           ),
@@ -320,6 +344,7 @@ function PlanPanel() {
         calendars={calendars}
         onClose={closeForm}
         onSave={handleSave}
+        onUpdateField={handleUpdateField}
         isSaving={isSavingMeal}
         isDeleting={isDeletingMeal}
         onDelete={formTarget?.mode === "edit" ? handleDelete : undefined}
@@ -339,7 +364,7 @@ function LogPanel() {
     resolveMemberLabel,
   } = useCalendarFilter();
   const { mealRecords, isLoading, refetch } = useMealRecordsByCalendars(activeCalendarIds);
-  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
+  const { formTarget, openCreate, openEdit, closeForm, handleSave, handleUpdateField, handleDelete, isSavingMeal, isDeletingMeal } = useMealFormController(
     createTargetCalendarId,
     refetch
   );
@@ -378,6 +403,7 @@ function LogPanel() {
     <View style={styles.panel}>
       <Tabs.Screen
         options={{
+          headerLeft: () => <MealNotificationBell />,
           headerRight: () => (
             <View style={styles.headerRightRow}>
               <FilterButton testID="meals-filter" isActive={isFilterActive} onReset={handleResetFilter}>
@@ -411,7 +437,7 @@ function LogPanel() {
                   router.push({ pathname: "/meal-search", params: { calendarId: createTargetCalendarId } })
                 }
               >
-                <Icon name="search" size={20} color="#2f6fed" />
+                <Icon name="search" size={22} color="#2f6fed" />
               </TouchableOpacity>
             </View>
           ),
@@ -473,6 +499,7 @@ function LogPanel() {
         calendars={calendars}
         onClose={closeForm}
         onSave={handleSave}
+        onUpdateField={handleUpdateField}
         isSaving={isSavingMeal}
         isDeleting={isDeletingMeal}
         onDelete={formTarget?.mode === "edit" ? handleDelete : undefined}

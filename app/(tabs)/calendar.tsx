@@ -657,7 +657,7 @@ export default function CalendarScreen() {
             onPress={() => setSettingsModalRequest({})}
             style={styles.headerTagButton}
           >
-            <Icon name="gear" size={18} color="#2f6fed" />
+            <Icon testID="calendar-settings-icon" name="gear" size={18} color="#444" />
           </TouchableOpacity>
           {viewMode === "list" ? (
             <TouchableOpacity

@@ -4,6 +4,8 @@ import { router } from "expo-router";
 import MealsScreen from "../meals";
 import { useAuthSession } from "../../../src/features/auth/hooks";
 import { useCalendarMembersByCalendars, useMyCalendars } from "../../../src/features/calendars/hooks";
+import { useMealNotificationSettings } from "../../../src/features/meals/notificationHooks";
+import { DEFAULT_MEAL_NOTIFICATION_SETTINGS } from "../../../src/features/meals/notificationSettings";
 import {
   useCreateMealRecord,
   useDeleteMealRecord,
@@ -16,7 +18,13 @@ jest.mock("expo-router", () => {
   return {
     router: { push: jest.fn() },
     Tabs: {
-      Screen: ({ options }: any) => React.createElement(React.Fragment, null, options?.headerRight?.()),
+      Screen: ({ options }: any) =>
+        React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(React.Fragment, { key: "left" }, options?.headerLeft?.()),
+          React.createElement(React.Fragment, { key: "right" }, options?.headerRight?.())
+        ),
     },
     // Treats "focus" as "mount" and "blur" as "unmount" for testing purposes,
     // since there's no real navigation container here to fire actual
@@ -43,6 +51,10 @@ jest.mock("../../../src/features/meals/hooks", () => ({
   useCreateMealRecord: jest.fn(),
   useUpdateMealRecord: jest.fn(),
   useDeleteMealRecord: jest.fn(),
+}));
+
+jest.mock("../../../src/features/meals/notificationHooks", () => ({
+  useMealNotificationSettings: jest.fn(),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => {
@@ -76,6 +88,12 @@ function mockCommonHooks(mealRecords: typeof RECORDS, refetch = jest.fn(), calen
   (useDeleteMealRecord as jest.Mock).mockReturnValue({ deleteMealRecord: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1", email: "user1@example.com" } }, isLoading: false });
   (useCalendarMembersByCalendars as jest.Mock).mockReturnValue({ members: [], isLoading: false, error: null, refetch: jest.fn() });
+  (useMealNotificationSettings as jest.Mock).mockReturnValue({
+    settings: DEFAULT_MEAL_NOTIFICATION_SETTINGS,
+    isLoading: false,
+    error: null,
+    update: jest.fn().mockResolvedValue(true),
+  });
 }
 
 describe("MealsScreen", () => {
@@ -87,6 +105,46 @@ describe("MealsScreen", () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  describe("通知ベル(ヘッダー左)", () => {
+    const flatten = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+
+    it("shows a bell in the header of both the 記録 and 予定 panels, gray while notifications are off", async () => {
+      mockCommonHooks(RECORDS);
+
+      const { getByTestId } = await render(<MealsScreen />);
+      expect(getByTestId("meals-notification-button")).toBeTruthy();
+      expect(flatten(getByTestId("meals-notification-icon").props.style).tintColor).toBe("#444");
+
+      await fireEvent.press(getByTestId("meals-mode-plan"));
+      expect(getByTestId("meals-notification-button")).toBeTruthy();
+    });
+
+    it("turns the bell blue when meal notifications are on", async () => {
+      mockCommonHooks(RECORDS);
+      (useMealNotificationSettings as jest.Mock).mockReturnValue({
+        settings: { ...DEFAULT_MEAL_NOTIFICATION_SETTINGS, enabled: true },
+        isLoading: false,
+        error: null,
+        update: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<MealsScreen />);
+
+      expect(flatten(getByTestId("meals-notification-icon").props.style).tintColor).toBe("#2f6fed");
+    });
+
+    it("opens the 献立の通知 settings when the bell is pressed", async () => {
+      mockCommonHooks(RECORDS);
+
+      const { getByTestId, getByText } = await render(<MealsScreen />);
+      await fireEvent.press(getByTestId("meals-notification-button"));
+
+      expect(getByText("献立の通知")).toBeTruthy();
+      expect(getByText("予定に登録した献立の通知")).toBeTruthy();
+    });
   });
 
   it("shows the 記録/予定 mode switch, defaulting to 記録 (log)", async () => {
@@ -120,6 +178,18 @@ describe("MealsScreen", () => {
       await fireEvent.press(utils.getByTestId("meals-mode-plan"));
       return utils;
     }
+
+    it("draws the row's icons large enough to read (slot ≥ 16, url/memo ≥ 16, stars ≥ 15) (regression: they were too small)", async () => {
+      mockCommonHooks(RECORDS);
+
+      const { getByTestId } = await renderPlanPanel();
+
+      const flatten = (style: unknown): Record<string, number> =>
+        Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, number>);
+      expect(flatten(getByTestId("meal-item-slot-icon-meal-2").props.style).width).toBeGreaterThanOrEqual(16);
+      expect(flatten(getByTestId("meal-url-icon-meal-2").props.style).width).toBeGreaterThanOrEqual(16);
+      expect(flatten(getByTestId("meal-memo-icon-meal-2").props.style).width).toBeGreaterThanOrEqual(16);
+    });
 
     it("shows only future records, grouped under a date header", async () => {
       mockCommonHooks(RECORDS);
@@ -238,48 +308,75 @@ describe("MealsScreen", () => {
       await waitFor(() => expect(createMealRecordMock).toHaveBeenCalledWith(expect.objectContaining({ calendarId: "cal-2" })));
     });
 
-    it("opens the edit form (seeded with the record's own values) when a row is pressed, and updates on save", async () => {
+    it("opens the detail (plain text per item) when a row is pressed, and saves only the item whose pencil ✓ was pressed, keeping the form open", async () => {
       const refetch = jest.fn();
       mockCommonHooks(RECORDS, refetch);
       const updateMealRecordMock = jest.fn().mockResolvedValue(true);
       (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
 
-      const { getByTestId, getByText } = await renderPlanPanel();
+      const { getByTestId, getByText, queryByTestId } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meal-item-meal-2"));
 
       expect(getByText("献立の詳細")).toBeTruthy();
+      expect(queryByTestId("meal-form-title-input")).toBeNull(); // plain text until the pencil is pressed
+
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
       expect(getByTestId("meal-form-title-input").props.value).toBe("カレー");
-
       await fireEvent.changeText(getByTestId("meal-form-title-input"), "スパイスカレー");
-      await fireEvent.press(getByTestId("meal-form-save"));
+      await fireEvent.press(getByTestId("meal-detail-title-confirm"));
 
-      await waitFor(() =>
-        expect(updateMealRecordMock).toHaveBeenCalledWith(
-          "meal-2",
-          expect.objectContaining({ title: "スパイスカレー", mealDate: "2026-08-25", slot: "dinner" })
-        )
-      );
+      // Only the edited field is sent (not the whole form), and the form stays open.
+      await waitFor(() => expect(updateMealRecordMock).toHaveBeenCalledWith("meal-2", { title: "スパイスカレー" }));
       await waitFor(() => expect(refetch).toHaveBeenCalled());
+      expect(getByText("献立の詳細")).toBeTruthy();
+      expect(getByText("スパイスカレー")).toBeTruthy();
     });
 
-    it("shows a calendar picker in the edit form and saves with the newly chosen calendarId (regression: the calendar used to be locked in edit mode)", async () => {
-      const refetch = jest.fn();
-      mockCommonHooks(RECORDS, refetch);
+    it("maps an emptied URL/memo to null when saving a single item", async () => {
+      mockCommonHooks(RECORDS);
+      const updateMealRecordMock = jest.fn().mockResolvedValue(true);
+      (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
+
+      const { getByTestId } = await renderPlanPanel();
+
+      await fireEvent.press(getByTestId("meal-item-meal-2"));
+      await fireEvent.press(getByTestId("meal-detail-memo-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-memo-input"), "");
+      await fireEvent.press(getByTestId("meal-detail-memo-confirm"));
+
+      await waitFor(() => expect(updateMealRecordMock).toHaveBeenCalledWith("meal-2", { memo: null }));
+    });
+
+    it("keeps the item's editor open when saving it fails", async () => {
+      mockCommonHooks(RECORDS);
+      const updateMealRecordMock = jest.fn().mockResolvedValue(false);
+      (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
+
+      const { getByTestId } = await renderPlanPanel();
+
+      await fireEvent.press(getByTestId("meal-item-meal-2"));
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-title-input"), "スパイスカレー");
+      await fireEvent.press(getByTestId("meal-detail-title-confirm"));
+
+      await waitFor(() => expect(updateMealRecordMock).toHaveBeenCalled());
+      expect(getByTestId("meal-form-title-input").props.value).toBe("スパイスカレー");
+    });
+
+    it("lets the calendar be changed from the detail (regression: the calendar used to be locked in edit mode)", async () => {
+      mockCommonHooks(RECORDS);
       const updateMealRecordMock = jest.fn().mockResolvedValue(true);
       (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: updateMealRecordMock, isSubmitting: false, error: null });
 
       const { getByTestId } = await renderPlanPanel();
 
       await fireEvent.press(getByTestId("meal-item-meal-2")); // meal-2 is on cal-1
-      expect(getByTestId("meal-form-calendar-picker")).toBeTruthy();
-
+      await fireEvent.press(getByTestId("meal-detail-calendar-edit"));
       await fireEvent.press(getByTestId("meal-form-calendar-cal-2"));
-      await fireEvent.press(getByTestId("meal-form-save"));
+      await fireEvent.press(getByTestId("meal-detail-calendar-confirm"));
 
-      await waitFor(() =>
-        expect(updateMealRecordMock).toHaveBeenCalledWith("meal-2", expect.objectContaining({ calendarId: "cal-2" }))
-      );
+      await waitFor(() => expect(updateMealRecordMock).toHaveBeenCalledWith("meal-2", { calendarId: "cal-2" }));
     });
 
     it("deletes a record (after confirming) from the edit form, closing the form and refetching", async () => {
@@ -442,7 +539,7 @@ describe("MealsScreen", () => {
       });
     });
 
-    it("opens the edit form seeded with the record's rating, and can change it", async () => {
+    it("shows the record's rating as stars in the detail, and can change it with the rating pencil", async () => {
       const refetch = jest.fn();
       mockCommonHooks(RECORDS, refetch);
       const updateMealRecordMock = jest.fn().mockResolvedValue(true);
@@ -451,14 +548,13 @@ describe("MealsScreen", () => {
       const { getByTestId } = await renderLogPanel();
 
       await fireEvent.press(getByTestId("meal-item-meal-1"));
-      expect(getByTestId("meal-form-rating-4-label").props.children).toBe("★");
+      expect(getByTestId("meal-form-detail-rating-readonly-star-4").props.children).toBe("★");
 
+      await fireEvent.press(getByTestId("meal-detail-rating-edit"));
       await fireEvent.press(getByTestId("meal-form-rating-5"));
-      await fireEvent.press(getByTestId("meal-form-save"));
+      await fireEvent.press(getByTestId("meal-detail-rating-confirm"));
 
-      await waitFor(() =>
-        expect(updateMealRecordMock).toHaveBeenCalledWith("meal-1", expect.objectContaining({ rating: 5 }))
-      );
+      await waitFor(() => expect(updateMealRecordMock).toHaveBeenCalledWith("meal-1", { rating: 5 }));
     });
 
     it("shows a calendar switcher (in the header filter sheet) defaulting to all calendars selected, toggling a calendar off/on to narrow the list", async () => {

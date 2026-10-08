@@ -12,14 +12,16 @@ import {
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
+import { MealDetailFields } from "./MealDetailFields";
 import { RatingStars } from "./RatingStars";
+import { mealDateKeyFromPicked, mealDateToPickerValue } from "../mealDate";
 import type { MealSlot } from "../types";
 import { CalendarLabel } from "../../calendars/components/CalendarLabel";
 import { CalendarSwitchChip } from "../../calendars/components/CalendarSwitchChip";
 import type { Calendar } from "../../calendars/types";
 import { Icon } from "../../../shared/components/Icon";
 import { RevealableTextField } from "../../../shared/components/RevealableTextField";
-import { formatDateOnly, toJstDateKey } from "../../../shared/utils/formatDateTime";
+import { formatDateOnly } from "../../../shared/utils/formatDateTime";
 import { DATE_PICKER_LOCALE } from "../../../shared/utils/pickerLocale";
 
 const MEAL_SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
@@ -56,7 +58,13 @@ export interface MealFormModalProps {
    */
   calendars: Calendar[];
   onClose: () => void;
+  /** 作成モードの保存(✓)。編集モードは項目単位の保存(onUpdateField)を使う。 */
   onSave: (values: MealFormValues) => void;
+  /**
+   * 編集モードで、鉛筆→✓を押した項目1つ分だけを保存する。成功(true)したら
+   * その項目の編集を閉じ、失敗(false)なら開いたままにする。
+   */
+  onUpdateField?: (recordId: string, patch: Partial<MealFormValues>) => Promise<boolean>;
   /** Required to show the delete button (only relevant in edit mode). */
   onDelete?: (recordId: string) => void;
   /** 保存処理が実行中かどうか。連打で同じ献立が複数作られるのを防ぐため、
@@ -64,23 +72,6 @@ export interface MealFormModalProps {
   isSaving?: boolean;
   /** 削除処理が実行中かどうか。連打で削除処理が重複実行されるのを防ぐ。 */
   isDeleting?: boolean;
-}
-
-/**
- * A native date picker hands back a real absolute instant (e.g. tapping
- * "9/4" on a JST device yields JST-midnight-Sept-4, i.e. 15:00 UTC on the
- * 3rd) - reading its JST calendar day (not a raw UTC slice) is what keeps
- * the date you pick and the date that gets saved/displayed in sync.
- */
-function mealDateKeyFromPicked(date: Date): string {
-  return toJstDateKey(date.toISOString());
-}
-
-/** Parses a "YYYY-MM-DD" mealDate into a Date for the picker (UTC midnight -
- * round-trips correctly through mealDateKeyFromPicked's JST-day read, same
- * as the web date-input fallback). */
-function mealDateToPickerValue(mealDate: string): Date {
-  return new Date(`${mealDate}T00:00:00.000Z`);
 }
 
 /**
@@ -98,6 +89,7 @@ export function MealFormModal({
   calendars,
   onClose,
   onSave,
+  onUpdateField,
   onDelete,
   isSaving,
   isDeleting,
@@ -115,6 +107,7 @@ export function MealFormModal({
           calendars={calendars}
           onClose={onClose}
           onSave={onSave}
+          onUpdateField={onUpdateField}
           onDelete={onDelete}
           isSaving={isSaving}
           isDeleting={isDeleting}
@@ -129,6 +122,7 @@ function MealFormModalContent({
   calendars,
   onClose,
   onSave,
+  onUpdateField,
   onDelete,
   isSaving,
   isDeleting,
@@ -137,6 +131,7 @@ function MealFormModalContent({
   calendars: Calendar[];
   onClose: () => void;
   onSave: (values: MealFormValues) => void;
+  onUpdateField?: (recordId: string, patch: Partial<MealFormValues>) => Promise<boolean>;
   onDelete?: (recordId: string) => void;
   isSaving?: boolean;
   isDeleting?: boolean;
@@ -195,137 +190,149 @@ function MealFormModalContent({
             {target.mode === "create" ? "献立を追加" : "献立の詳細"}
           </Text>
 
-          {calendars.length > 1 ? (
-            <View
-              style={styles.calendarPickerField}
-              testID="meal-form-calendar-picker"
-            >
-              <Text style={styles.dateFieldLabel}>カレンダー</Text>
-              <View style={styles.calendarChipRow}>
-                {calendars.map((calendar) => (
-                  <CalendarSwitchChip
-                    key={calendar.id}
-                    testID={`meal-form-calendar-${calendar.id}`}
-                    calendar={calendar}
-                    isActive={calendar.id === calendarId}
-                    onPress={() => setCalendarId(calendar.id)}
-                  />
-                ))}
-              </View>
-            </View>
-          ) : (
-            <View style={styles.dateField} testID="meal-form-calendar-label">
-              <Text style={styles.dateFieldLabel}>カレンダー</Text>
-              {selectedCalendar ? (
-                <CalendarLabel calendar={selectedCalendar} />
-              ) : null}
-            </View>
-          )}
-
-          <TextInput
-            testID="meal-form-title-input"
-            style={styles.input}
-            placeholder="料理名"
-            returnKeyType="done"
-            value={title}
-            onChangeText={setTitle}
-          />
-
-          <View style={styles.slotRow}>
-            {MEAL_SLOTS.map((s) => (
-              <TouchableOpacity
-                key={s}
-                testID={`meal-form-slot-${s}`}
-                style={[
-                  styles.slotButton,
-                  s === slot && styles.slotButtonActive,
-                ]}
-                onPress={() => setSlot(s)}
-              >
-                <Text
-                  style={s === slot ? styles.slotButtonTextActive : undefined}
-                >
-                  {MEAL_SLOT_LABELS[s]}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <TouchableOpacity
-            testID="meal-form-date-button"
-            style={styles.dateField}
-            onPress={() => setIsDatePickerOpen(true)}
-          >
-            <Text style={styles.dateFieldLabel}>日付</Text>
-            <Text>{formatDateOnly(mealDate.toISOString())}</Text>
-          </TouchableOpacity>
-
-          {isDatePickerOpen ? (
-            <View testID="meal-form-date-picker-container" style={styles.pickerContainer}>
-              {Platform.OS === "web" ? (
-                <TextInput
-                  testID="meal-form-date-picker"
-                  style={styles.input}
-                  placeholder="YYYY-MM-DD"
-                  onChangeText={(text) => {
-                    const parsed = new Date(`${text}T00:00:00.000Z`);
-                    if (!Number.isNaN(parsed.getTime())) setMealDate(parsed);
-                  }}
-                />
-              ) : (
-                <DateTimePicker
-                  testID="meal-form-date-picker"
-                  value={mealDate}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "inline" : "default"}
-                  locale={DATE_PICKER_LOCALE}
-                  onChange={(_event, selected) => {
-                    if (selected) setMealDate(selected);
-                  }}
-                />
-              )}
-              <TouchableOpacity
-                testID="meal-form-date-picker-done"
-                style={styles.pickerDoneButton}
-                onPress={() => setIsDatePickerOpen(false)}
-              >
-                <Text>完了</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          <View style={styles.ratingRow}>
-            <Text style={styles.dateFieldLabel}>評価</Text>
-            <RatingStars
-              rating={rating}
-              onChange={setRating}
-              size={22}
-              testIDPrefix="meal-form-rating"
+          {target.mode === "edit" ? (
+            <MealDetailFields
+              initialValues={target.initialValues}
+              calendars={calendars}
+              isSaving={isSaving}
+              onUpdateField={(patch) => onUpdateField?.(target.recordId, patch) ?? Promise.resolve(false)}
             />
-          </View>
+          ) : (
+            <>
+            {calendars.length > 1 ? (
+              <View
+                style={styles.calendarPickerField}
+                testID="meal-form-calendar-picker"
+              >
+                <Text style={styles.dateFieldLabel}>カレンダー</Text>
+                <View style={styles.calendarChipRow}>
+                  {calendars.map((calendar) => (
+                    <CalendarSwitchChip
+                      key={calendar.id}
+                      testID={`meal-form-calendar-${calendar.id}`}
+                      calendar={calendar}
+                      isActive={calendar.id === calendarId}
+                      onPress={() => setCalendarId(calendar.id)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : (
+              <View style={styles.dateField} testID="meal-form-calendar-label">
+                <Text style={styles.dateFieldLabel}>カレンダー</Text>
+                {selectedCalendar ? (
+                  <CalendarLabel calendar={selectedCalendar} />
+                ) : null}
+              </View>
+            )}
 
-          <RevealableTextField
-            testID="meal-form-url-input"
-            addButtonTestID="meal-form-url-add"
-            addLabel="URLを追加"
-            style={styles.input}
-            placeholder="URL"
-            autoCapitalize="none"
-            keyboardType="url"
-            returnKeyType="done"
-            value={url}
-            onChangeText={setUrl}
-          />
-          <RevealableTextField
-            testID="meal-form-memo-input"
-            addButtonTestID="meal-form-memo-add"
-            addLabel="メモを追加"
-            style={styles.input}
-            placeholder="メモ"
-            multiline
-            value={memo}
-            onChangeText={setMemo}
-          />
+            <TextInput
+              testID="meal-form-title-input"
+              style={styles.input}
+              placeholder="料理名"
+              returnKeyType="done"
+              value={title}
+              onChangeText={setTitle}
+            />
+
+            <View style={styles.slotRow}>
+              {MEAL_SLOTS.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  testID={`meal-form-slot-${s}`}
+                  style={[
+                    styles.slotButton,
+                    s === slot && styles.slotButtonActive,
+                  ]}
+                  onPress={() => setSlot(s)}
+                >
+                  <Text
+                    style={s === slot ? styles.slotButtonTextActive : undefined}
+                  >
+                    {MEAL_SLOT_LABELS[s]}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              testID="meal-form-date-button"
+              style={styles.dateField}
+              onPress={() => setIsDatePickerOpen(true)}
+            >
+              <Text style={styles.dateFieldLabel}>日付</Text>
+              <Text>{formatDateOnly(mealDate.toISOString())}</Text>
+            </TouchableOpacity>
+
+            {isDatePickerOpen ? (
+              <View testID="meal-form-date-picker-container" style={styles.pickerContainer}>
+                {Platform.OS === "web" ? (
+                  <TextInput
+                    testID="meal-form-date-picker"
+                    style={styles.input}
+                    placeholder="YYYY-MM-DD"
+                    onChangeText={(text) => {
+                      const parsed = new Date(`${text}T00:00:00.000Z`);
+                      if (!Number.isNaN(parsed.getTime())) setMealDate(parsed);
+                    }}
+                  />
+                ) : (
+                  <DateTimePicker
+                    testID="meal-form-date-picker"
+                    value={mealDate}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "inline" : "default"}
+                    locale={DATE_PICKER_LOCALE}
+                    onChange={(_event, selected) => {
+                      if (selected) setMealDate(selected);
+                    }}
+                  />
+                )}
+                <TouchableOpacity
+                  testID="meal-form-date-picker-done"
+                  style={styles.pickerDoneButton}
+                  onPress={() => setIsDatePickerOpen(false)}
+                >
+                  <Text>完了</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            <View style={styles.ratingRow}>
+              <Text style={styles.dateFieldLabel}>評価</Text>
+              <RatingStars
+                rating={rating}
+                onChange={setRating}
+                size={22}
+                testIDPrefix="meal-form-rating"
+              />
+            </View>
+
+            <RevealableTextField
+              testID="meal-form-url-input"
+              addButtonTestID="meal-form-url-add"
+              addLabel="URLを追加"
+              style={styles.input}
+              placeholder="URL"
+              autoCapitalize="none"
+              keyboardType="url"
+              returnKeyType="done"
+              value={url}
+              onChangeText={setUrl}
+            />
+            <RevealableTextField
+              testID="meal-form-memo-input"
+              addButtonTestID="meal-form-memo-add"
+              addLabel="メモを追加"
+              style={styles.input}
+              placeholder="メモ"
+              multiline
+              value={memo}
+              onChangeText={setMemo}
+            />
+
+            </>
+          )}
 
           <View style={styles.modalActions}>
             {target.mode === "edit" ? (
@@ -347,14 +354,16 @@ function MealFormModalContent({
               >
                 <Text style={styles.cancelText}>✕</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                testID="meal-form-save"
-                onPress={handleSave}
-                disabled={isSaving}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={[styles.saveLink, isSaving && styles.saveLinkDisabled]}>✓</Text>
-              </TouchableOpacity>
+              {target.mode === "create" ? (
+                <TouchableOpacity
+                  testID="meal-form-save"
+                  onPress={handleSave}
+                  disabled={isSaving}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={[styles.saveLink, isSaving && styles.saveLinkDisabled]}>✓</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         </TouchableOpacity>

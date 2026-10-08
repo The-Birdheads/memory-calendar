@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 
 import { useMyCalendars } from "../src/features/calendars/hooks";
 import { MealFormModal, type MealFormTarget, type MealFormValues } from "../src/features/meals/components/MealFormModal";
+import { mealFormPatchToUpdateInput } from "../src/features/meals/formPatch";
 import { MEAL_SLOT_LABELS, MealRow } from "../src/features/meals/components/MealRow";
 import { RatingStars } from "../src/features/meals/components/RatingStars";
 import { useDeleteMealRecord, useMealRecords, useUpdateMealRecord } from "../src/features/meals/hooks";
@@ -58,21 +59,14 @@ export default function MealSearchScreen() {
 
   const closeForm = () => setFormTarget(null);
 
-  const handleSaveEdit = async (values: MealFormValues) => {
-    if (formTarget?.mode !== "edit" || isSavingMeal) return;
-    const success = await updateMealRecord(formTarget.recordId, {
-      title: values.title,
-      url: values.url || null,
-      memo: values.memo || null,
-      mealDate: values.mealDate,
-      slot: values.slot,
-      rating: values.rating,
-      calendarId: values.calendarId,
-    });
+  // 詳細の項目単位の保存。フォームは開いたままにして、検索結果だけ最新にする。
+  const handleUpdateField = async (recordId: string, patch: Partial<MealFormValues>): Promise<boolean> => {
+    if (isSavingMeal) return false;
+    const success = await updateMealRecord(recordId, mealFormPatchToUpdateInput(patch));
     if (success) {
-      closeForm();
       await refetch();
     }
+    return success;
   };
 
   const handleDelete = async (recordId: string) => {
@@ -231,7 +225,8 @@ export default function MealSearchScreen() {
         target={formTarget}
         calendars={calendars}
         onClose={closeForm}
-        onSave={handleSaveEdit}
+        onSave={() => {}}
+        onUpdateField={handleUpdateField}
         isSaving={isSavingMeal}
         isDeleting={isDeletingMeal}
         onDelete={formTarget?.mode === "edit" ? handleDelete : undefined}

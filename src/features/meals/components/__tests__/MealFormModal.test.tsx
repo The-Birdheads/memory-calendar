@@ -1,6 +1,17 @@
-import { fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import { MealFormModal } from "../MealFormModal";
+
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { TextInput } = require("react-native");
+  return function MockDateTimePicker({ testID, onChange }: any) {
+    return React.createElement(TextInput, {
+      testID,
+      onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
+    });
+  };
+});
 
 const CALENDAR_1 = { id: "cal-1", name: "我が家", kind: "group" as const, color: "#2f6fed", createdBy: "user-1", createdAt: "2026-08-01T00:00:00.000Z" };
 const CALENDAR_2 = { id: "cal-2", name: "友人グループ", kind: "group" as const, color: "#43a047", createdBy: "user-2", createdAt: "2026-08-01T00:00:00.000Z" };
@@ -50,7 +61,7 @@ describe("MealFormModal", () => {
     expect(getByTestId("meal-form-title-input").props.value).toBe("");
   });
 
-  it("shows a '献立の詳細' heading, a delete button, and fields seeded from the record in edit mode", async () => {
+  it("shows a '献立の詳細' heading and a delete button in edit mode", async () => {
     const { getByText, getByTestId } = await render(
       <MealFormModal
         target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
@@ -63,15 +74,10 @@ describe("MealFormModal", () => {
 
     expect(getByText("献立の詳細")).toBeTruthy();
     expect(getByTestId("meal-form-delete")).toBeTruthy();
-    expect(getByTestId("meal-form-title-input").props.value).toBe("肉じゃが");
-    expect(getByTestId("meal-form-url-input").props.value).toBe("https://example.com/recipe");
-    expect(getByTestId("meal-form-memo-input").props.value).toBe("醤油は控えめに");
-    expect(getByTestId("meal-form-rating-4-label").props.children).toBe("★");
-    expect(getByTestId("meal-form-rating-5-label").props.children).toBe("☆");
   });
 
-  it("uses icons instead of text for the delete/cancel/save buttons", async () => {
-    const { queryByText, getByTestId } = await render(
+  it("uses icons instead of text for the delete/close buttons in edit mode, and has no whole-form save button (each item saves on its own)", async () => {
+    const { queryByText, getByTestId, queryByTestId } = await render(
       <MealFormModal
         target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
         calendars={CALENDARS}
@@ -86,7 +92,7 @@ describe("MealFormModal", () => {
     expect(queryByText("保存")).toBeNull();
     expect(getByTestId("meal-form-delete")).toBeTruthy();
     expect(getByTestId("meal-form-cancel")).toBeTruthy();
-    expect(getByTestId("meal-form-save")).toBeTruthy();
+    expect(queryByTestId("meal-form-save")).toBeNull();
   });
 
   it("uses icons instead of text for the cancel/delete buttons in the delete-confirm dialog", async () => {
@@ -301,59 +307,10 @@ describe("MealFormModal", () => {
       expect(queryByTestId("meal-form-url-add")).toBeNull();
       expect(getByTestId("meal-form-url-input").props.value).toBe("");
     });
-
-    it("shows the inputs directly (no add button) in edit mode, since a value is already set", async () => {
-      const { getByTestId, queryByTestId } = await render(
-        <MealFormModal
-          target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
-          calendars={CALENDARS}
-          onClose={jest.fn()}
-          onSave={jest.fn()}
-        />
-      );
-
-      expect(queryByTestId("meal-form-url-add")).toBeNull();
-      expect(queryByTestId("meal-form-memo-add")).toBeNull();
-      expect(getByTestId("meal-form-url-input")).toBeTruthy();
-      expect(getByTestId("meal-form-memo-input")).toBeTruthy();
-    });
   });
 
   describe("追加先カレンダーの表示/選択", () => {
-    it("shows a calendar picker in edit mode too when there are multiple calendars, so the meal's calendar can be changed (regression: edit mode used to lock the calendar as a read-only label)", async () => {
-      const { getByTestId, queryByTestId } = await render(
-        <MealFormModal
-          target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
-          calendars={CALENDARS}
-          onClose={jest.fn()}
-          onSave={jest.fn()}
-        />
-      );
-
-      expect(getByTestId("meal-form-calendar-picker")).toBeTruthy();
-      expect(getByTestId("meal-form-calendar-cal-2-check")).toBeTruthy(); // EDIT_INITIAL_VALUES.calendarId = "cal-2"
-      expect(queryByTestId("meal-form-calendar-cal-1-check")).toBeNull();
-      expect(queryByTestId("meal-form-calendar-label")).toBeNull();
-    });
-
-    it("switches the target calendar when a different chip is tapped in edit mode, and saves with that calendarId (regression)", async () => {
-      const onSave = jest.fn();
-      const { getByTestId } = await render(
-        <MealFormModal
-          target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
-          calendars={CALENDARS}
-          onClose={jest.fn()}
-          onSave={onSave}
-        />
-      );
-
-      await fireEvent.press(getByTestId("meal-form-calendar-cal-1"));
-      await fireEvent.press(getByTestId("meal-form-save"));
-
-      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ calendarId: "cal-1" }));
-    });
-
-    it("shows a read-only label (no picker) when there's only one calendar to choose from, in either mode", async () => {
+    it("shows a read-only label (no picker) when there's only one calendar to choose from", async () => {
       const { getByTestId, getByText, queryByTestId } = await render(
         <MealFormModal
           target={{ mode: "create", initialValues: CREATE_INITIAL_VALUES }}
@@ -436,6 +393,219 @@ describe("MealFormModal", () => {
       const container = flattenStyle(getByTestId("meal-form-date-picker-container").props.style);
       expect(container.alignSelf).toBe("stretch");
       expect(container.overflow).toBe("hidden");
+    });
+  });
+
+  describe("詳細(編集モード)の項目別編集", () => {
+    function renderDetail(options: { onUpdateField?: jest.Mock; calendars?: typeof CALENDARS; isSaving?: boolean } = {}) {
+      const onUpdateField = options.onUpdateField ?? jest.fn().mockResolvedValue(true);
+      const utils = render(
+        <MealFormModal
+          target={{ mode: "edit", recordId: "meal-1", initialValues: EDIT_INITIAL_VALUES }}
+          calendars={options.calendars ?? CALENDARS}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onDelete={jest.fn()}
+          onUpdateField={onUpdateField}
+          isSaving={options.isSaving}
+        />
+      );
+      return { onUpdateField, utils };
+    }
+
+    it("shows every item as a label plus plain text with a pencil, and no inputs until a pencil is pressed", async () => {
+      const { utils } = renderDetail();
+      const { getByTestId, getByText, queryByTestId } = await utils;
+
+      for (const field of ["calendar", "title", "slot", "date", "rating", "url", "memo"]) {
+        expect(getByTestId(`meal-detail-${field}-edit`)).toBeTruthy();
+      }
+      for (const label of ["カレンダー", "料理名", "食事", "日付", "評価", "URL", "メモ"]) {
+        expect(getByText(label)).toBeTruthy();
+      }
+      expect(getByText("肉じゃが")).toBeTruthy();
+      expect(getByText("夕食")).toBeTruthy();
+      expect(getByText("2026/09/05")).toBeTruthy();
+      expect(getByText("https://example.com/recipe")).toBeTruthy();
+      expect(getByText("醤油は控えめに")).toBeTruthy();
+      expect(getByTestId("meal-form-detail-rating-readonly-star-4").props.children).toBe("★");
+      expect(getByTestId("meal-form-detail-rating-readonly-star-5").props.children).toBe("☆");
+      expect(queryByTestId("meal-form-title-input")).toBeNull();
+      expect(queryByTestId("meal-form-url-input")).toBeNull();
+      expect(queryByTestId("meal-form-memo-input")).toBeNull();
+      expect(queryByTestId("meal-detail-title-confirm")).toBeNull();
+    });
+
+    it("shows 未設定 for an empty URL, memo and rating", async () => {
+      const { getAllByText } = await render(
+        <MealFormModal
+          target={{
+            mode: "edit",
+            recordId: "meal-1",
+            initialValues: { ...EDIT_INITIAL_VALUES, url: "", memo: "", rating: null },
+          }}
+          calendars={CALENDARS}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onUpdateField={jest.fn()}
+        />
+      );
+
+      expect(getAllByText("未設定")).toHaveLength(3);
+    });
+
+    it("opens an input seeded with the current value when the pencil is pressed, and saves just that item on ✓", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId, getByText, queryByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
+      expect(getByTestId("meal-form-title-input").props.value).toBe("肉じゃが");
+
+      await fireEvent.changeText(getByTestId("meal-form-title-input"), "筑前煮");
+      await fireEvent.press(getByTestId("meal-detail-title-confirm"));
+
+      await waitFor(() => expect(onUpdateField).toHaveBeenCalledWith("meal-1", { title: "筑前煮" }));
+      await waitFor(() => expect(queryByTestId("meal-form-title-input")).toBeNull());
+      expect(getByText("筑前煮")).toBeTruthy();
+    });
+
+    it("discards the draft on ✕ without saving, keeping the original text", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId, getByText, queryByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-title-input"), "筑前煮");
+      await fireEvent.press(getByTestId("meal-detail-title-cancel"));
+
+      expect(onUpdateField).not.toHaveBeenCalled();
+      expect(queryByTestId("meal-form-title-input")).toBeNull();
+      expect(getByText("肉じゃが")).toBeTruthy();
+    });
+
+    it("keeps the editor open (and the old text) when saving fails, so the input isn't lost", async () => {
+      const { utils } = renderDetail({ onUpdateField: jest.fn().mockResolvedValue(false) });
+      const { getByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-title-input"), "筑前煮");
+      await fireEvent.press(getByTestId("meal-detail-title-confirm"));
+
+      await waitFor(() => expect(getByTestId("meal-form-title-input").props.value).toBe("筑前煮"));
+    });
+
+    it("does not allow saving an empty title", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-title-input"), "   ");
+      await fireEvent.press(getByTestId("meal-detail-title-confirm"));
+
+      expect(getByTestId("meal-detail-title-confirm").props.accessibilityState?.disabled).toBe(true);
+      expect(onUpdateField).not.toHaveBeenCalled();
+    });
+
+    it("disables ✓ while a save is in flight, so a double tap can't save twice", async () => {
+      const { onUpdateField, utils } = renderDetail({ isSaving: true });
+      const { getByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
+      await fireEvent.press(getByTestId("meal-detail-title-confirm"));
+
+      expect(getByTestId("meal-detail-title-confirm").props.accessibilityState?.disabled).toBe(true);
+      expect(onUpdateField).not.toHaveBeenCalled();
+    });
+
+    it("edits the meal slot with the four slot buttons", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-slot-edit"));
+      await fireEvent.press(getByTestId("meal-form-slot-snack"));
+      await fireEvent.press(getByTestId("meal-detail-slot-confirm"));
+
+      await waitFor(() => expect(onUpdateField).toHaveBeenCalledWith("meal-1", { slot: "snack" }));
+    });
+
+    it("edits the date with the inline picker, saving the JST calendar day", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-date-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-date-picker"), "2026-09-20T00:00:00.000Z");
+      await fireEvent.press(getByTestId("meal-detail-date-confirm"));
+
+      await waitFor(() => expect(onUpdateField).toHaveBeenCalledWith("meal-1", { mealDate: "2026-09-20" }));
+    });
+
+    it("edits the rating with the stars", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-rating-edit"));
+      await fireEvent.press(getByTestId("meal-form-rating-2"));
+      await fireEvent.press(getByTestId("meal-detail-rating-confirm"));
+
+      await waitFor(() => expect(onUpdateField).toHaveBeenCalledWith("meal-1", { rating: 2 }));
+    });
+
+    it("edits the URL and the memo, and allows clearing them", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-url-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-url-input"), "");
+      await fireEvent.press(getByTestId("meal-detail-url-confirm"));
+      await waitFor(() => expect(onUpdateField).toHaveBeenCalledWith("meal-1", { url: "" }));
+
+      await fireEvent.press(getByTestId("meal-detail-memo-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-memo-input"), "しょうゆ多め");
+      await fireEvent.press(getByTestId("meal-detail-memo-confirm"));
+      await waitFor(() => expect(onUpdateField).toHaveBeenCalledWith("meal-1", { memo: "しょうゆ多め" }));
+    });
+
+    it("edits the calendar with chips when there are several calendars (regression: the calendar must stay changeable)", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-calendar-edit"));
+      expect(getByTestId("meal-form-calendar-cal-2-check")).toBeTruthy(); // current = cal-2
+      await fireEvent.press(getByTestId("meal-form-calendar-cal-1"));
+      await fireEvent.press(getByTestId("meal-detail-calendar-confirm"));
+
+      await waitFor(() => expect(onUpdateField).toHaveBeenCalledWith("meal-1", { calendarId: "cal-1" }));
+    });
+
+    it("shows the calendar as plain read-only text, with no pencil, when there's only one calendar", async () => {
+      const { utils } = renderDetail({ calendars: [CALENDAR_2] }); // the edited meal is on cal-2
+      const { queryByTestId, getByText } = await utils;
+
+      expect(getByText("友人グループ")).toBeTruthy();
+      expect(queryByTestId("meal-detail-calendar-edit")).toBeNull();
+    });
+
+    it("keeps one editor open at a time: pressing another item's pencil closes (discards) the first", async () => {
+      const { onUpdateField, utils } = renderDetail();
+      const { getByTestId, queryByTestId } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-title-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-title-input"), "筑前煮");
+      await fireEvent.press(getByTestId("meal-detail-memo-edit"));
+
+      expect(queryByTestId("meal-form-title-input")).toBeNull();
+      expect(getByTestId("meal-form-memo-input")).toBeTruthy();
+      expect(onUpdateField).not.toHaveBeenCalled();
+    });
+
+    it("keeps the saved value visible after saving (the detail reflects each successful save without reopening)", async () => {
+      const { utils } = renderDetail();
+      const { getByTestId, getByText } = await utils;
+
+      await fireEvent.press(getByTestId("meal-detail-memo-edit"));
+      await fireEvent.changeText(getByTestId("meal-form-memo-input"), "しょうゆ多め");
+      await fireEvent.press(getByTestId("meal-detail-memo-confirm"));
+
+      await waitFor(() => expect(getByText("しょうゆ多め")).toBeTruthy());
     });
   });
 });

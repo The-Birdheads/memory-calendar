@@ -15,7 +15,7 @@ export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
 
 // 見た目だけでどの食事かひと目でわかるように、時間帯を表すアイコンを添える
 // (朝食=日の出、昼食=太陽、夕食=三日月、間食=クッキー)。
-const MEAL_SLOT_ICONS: Record<MealSlot, IconName> = {
+export const MEAL_SLOT_ICONS: Record<MealSlot, IconName> = {
   breakfast: "meal-breakfast",
   lunch: "meal-lunch",
   dinner: "meal-dinner",
@@ -51,7 +51,7 @@ export function MealRow({ record, onPress, dateLabel, calendar, creatorLabel }: 
   return (
     <TouchableOpacity testID={`meal-item-${record.id}`} style={styles.mealRow} onPress={onPress}>
       <View style={styles.mealRowSlotChip}>
-        <Icon testID={`meal-item-slot-icon-${record.id}`} name={MEAL_SLOT_ICONS[record.slot]} size={12} color="#666" />
+        <Icon testID={`meal-item-slot-icon-${record.id}`} name={MEAL_SLOT_ICONS[record.slot]} size={16} color="#666" />
         <Text style={styles.mealRowSlotText}>{MEAL_SLOT_LABELS[record.slot]}</Text>
       </View>
       <View style={styles.mealRowInfo}>
@@ -64,7 +64,7 @@ export function MealRow({ record, onPress, dateLabel, calendar, creatorLabel }: 
             <CalendarLabel
               calendar={calendar}
               textStyle={styles.mealRowCalendarLabel}
-              iconSize={11}
+              iconSize={14}
             />
           ) : null}
           {creatorLabel ? (
@@ -72,12 +72,12 @@ export function MealRow({ record, onPress, dateLabel, calendar, creatorLabel }: 
               {creatorLabel}が追加
             </Text>
           ) : null}
-          <RatingStars rating={record.rating} testIDPrefix={`meal-item-rating-${record.id}`} size={12} />
-          {record.url ? <Icon testID={`meal-url-icon-${record.id}`} name="link" size={12} color="#2f6fed" /> : null}
-          {record.memo ? <Icon testID={`meal-memo-icon-${record.id}`} name="note" size={12} color="#666" /> : null}
+          <RatingStars rating={record.rating} testIDPrefix={`meal-item-rating-${record.id}`} size={16} />
+          {record.url ? <Icon testID={`meal-url-icon-${record.id}`} name="link" size={16} color="#2f6fed" /> : null}
+          {record.memo ? <Icon testID={`meal-memo-icon-${record.id}`} name="note" size={16} color="#666" /> : null}
         </View>
       </View>
-      <Icon name="chevron-right" size={14} color="#ccc" />
+      <Icon name="chevron-right" size={16} color="#ccc" />
     </TouchableOpacity>
   );
 }
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   mealRowSlotText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: "#666",
   },
