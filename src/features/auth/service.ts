@@ -1,8 +1,11 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import * as AppleAuthentication from "expo-apple-authentication";
+import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 
 import { err, ok, type Result } from "../../shared/types/result";
+import { updateDisplayName } from "../profile/service";
 import type { AuthCredentials, AuthError } from "./types";
 
 export type { AuthCredentials, AuthError } from "./types";
@@ -89,6 +92,63 @@ export async function signInWithGoogle(client: SupabaseClient): Promise<Result<S
   }
 
   return ok(sessionData.session);
+}
+
+/** Apple が初回だけ返す氏名から表示名を作る。日本語の名前は「姓 名」、それ以外は「名 姓」。 */
+function formatAppleFullName(fullName: AppleAuthentication.AppleAuthenticationFullName | null): string | null {
+  const given = fullName?.givenName?.trim() ?? "";
+  const family = fullName?.familyName?.trim() ?? "";
+  if (!given && !family) return null;
+  const isJapanese = /[\u3040-\u30ff\u3400-\u9fff]/.test(`${given}${family}`);
+  return (isJapanese ? [family, given] : [given, family]).filter(Boolean).join(" ");
+}
+
+/**
+ * ネイティブの「Appleでサインイン」。Appleにはnonceのハッシュ、SupabaseにはAppleが
+ * 返したIDトークンと元のnonceを渡す(リプレイ攻撃対策)。氏名はAppleが初回しか
+ * 返さないので、受け取れた時にプロフィールの表示名として保存する(失敗しても
+ * ログイン自体は成功扱い)。
+ */
+export async function signInWithApple(client: SupabaseClient): Promise<Result<Session, AuthError>> {
+  const rawNonce = Crypto.randomUUID();
+  const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+
+  let credential: AppleAuthentication.AppleAuthenticationCredential;
+  try {
+    credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    });
+  } catch (e) {
+    const { code, message } = (e ?? {}) as { code?: string; message?: string };
+    if (code === "ERR_REQUEST_CANCELED") {
+      return err({ type: "Cancelled" });
+    }
+    return err({ type: "Unknown", message: message ?? "apple sign-in failed" });
+  }
+
+  if (!credential.identityToken) {
+    return err({ type: "Unknown", message: "no identity token returned from apple sign-in" });
+  }
+
+  const { data, error } = await client.auth.signInWithIdToken({
+    provider: "apple",
+    token: credential.identityToken,
+    nonce: rawNonce,
+  });
+  if (error || !data.session) {
+    return err(mapAuthError(error?.message ?? "no session returned"));
+  }
+
+  const displayName = formatAppleFullName(credential.fullName);
+  if (displayName) {
+    await updateDisplayName(client, data.session.user.id, displayName);
+  }
+
+  return ok(data.session);
 }
 
 export async function signOut(client: SupabaseClient): Promise<Result<void, AuthError>> {

@@ -8,11 +8,12 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.thebirdseed.memorycalendar",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -45,7 +46,8 @@
         {
           "photosPermission": "予定の思い出として写真を追加するために使用します。"
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "extra": {
       "router": {},

@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
 import { getExpoPushTokenAsync, invalidatePushToken } from "../../notifications/service";
-import { signIn, signInWithGoogle, signOut, signUp } from "../service";
+import { signIn, signInWithApple, signInWithGoogle, signOut, signUp } from "../service";
 import { useAuthActions, useAuthSession } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
@@ -14,6 +14,7 @@ jest.mock("../service", () => ({
   signUp: jest.fn(),
   signOut: jest.fn(),
   signInWithGoogle: jest.fn(),
+  signInWithApple: jest.fn(),
 }));
 
 jest.mock("../../notifications/service", () => ({
@@ -218,6 +219,37 @@ describe("useAuthActions", () => {
     let success = true;
     await act(async () => {
       success = await result.current.signInWithGoogle();
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toEqual({ type: "Cancelled" });
+  });
+
+  it("returns true and keeps error null when Apple sign-in succeeds", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (signInWithApple as jest.Mock).mockResolvedValue({ ok: true, value: { user: { id: "u1" } } });
+
+    const { result } = await renderHook(() => useAuthActions());
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.signInWithApple();
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(signInWithApple).toHaveBeenCalledWith({});
+  });
+
+  it("returns false and sets the error when Apple sign-in fails or is cancelled", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (signInWithApple as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Cancelled" } });
+
+    const { result } = await renderHook(() => useAuthActions());
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.signInWithApple();
     });
 
     expect(success).toBe(false);

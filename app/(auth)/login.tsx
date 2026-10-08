@@ -2,13 +2,14 @@ import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { router } from "expo-router";
 
+import { AppleSignInButton } from "../../src/features/auth/components/AppleSignInButton";
 import { useAuthActions } from "../../src/features/auth/hooks";
 import { getAuthErrorMessageJa } from "../../src/features/auth/service";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { signIn, signInWithGoogle, isSubmitting, error } = useAuthActions();
+  const { signIn, signInWithGoogle, signInWithApple, isSubmitting, error } = useAuthActions();
 
   const handleSubmit = async () => {
     const success = await signIn({ email, password });
@@ -19,6 +20,13 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     const success = await signInWithGoogle();
+    if (success) {
+      router.replace("/(tabs)/calendar");
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    const success = await signInWithApple();
     if (success) {
       router.replace("/(tabs)/calendar");
     }
@@ -69,6 +77,8 @@ export default function LoginScreen() {
       >
         <Text style={styles.googleButtonText}>Googleでログイン</Text>
       </TouchableOpacity>
+
+      <AppleSignInButton testID="login-apple-button" onPress={handleAppleSignIn} disabled={isSubmitting} />
 
       <TouchableOpacity testID="login-signup-link" onPress={() => router.push("/(auth)/signup")}>
         <Text style={styles.linkText}>アカウントをお持ちでない方はこちら</Text>

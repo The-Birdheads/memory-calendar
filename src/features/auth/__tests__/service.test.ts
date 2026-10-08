@@ -1,11 +1,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 
-import { getAuthErrorMessageJa, signIn, signInWithGoogle, signOut, signUp } from "../service";
+import { updateDisplayName } from "../../profile/service";
+import { getAuthErrorMessageJa, signIn, signInWithApple, signInWithGoogle, signOut, signUp } from "../service";
 
 jest.mock("expo-web-browser", () => ({
   openAuthSessionAsync: jest.fn(),
   maybeCompleteAuthSession: jest.fn(),
+}));
+
+jest.mock("expo-apple-authentication", () => ({
+  signInAsync: jest.fn(),
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+}));
+
+jest.mock("expo-crypto", () => ({
+  randomUUID: jest.fn(() => "raw-nonce"),
+  digestStringAsync: jest.fn(async () => "hashed-nonce"),
+  CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+}));
+
+jest.mock("../../profile/service", () => ({
+  updateDisplayName: jest.fn(),
 }));
 
 jest.mock("expo-linking", () => ({
@@ -19,6 +36,7 @@ function createMockClient(authOverrides: Record<string, jest.Mock> = {}): Supaba
       signInWithPassword: jest.fn(),
       signOut: jest.fn(),
       signInWithOAuth: jest.fn(),
+      signInWithIdToken: jest.fn(),
       setSession: jest.fn(),
       ...authOverrides,
     },
@@ -113,6 +131,130 @@ describe("signOut", () => {
     const result = await signOut(client);
 
     expect(result).toEqual({ ok: false, error: { type: "Unknown", message: "network down" } });
+  });
+});
+
+describe("signInWithApple", () => {
+  const SESSION = { user: { id: "u1" } };
+
+  beforeEach(() => {
+    (updateDisplayName as jest.Mock).mockResolvedValue({ ok: true, value: {} });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  function appleReturns(credential: Record<string, unknown>) {
+    (AppleAuthentication.signInAsync as jest.Mock).mockResolvedValue({
+      identityToken: "apple-id-token",
+      fullName: null,
+      ...credential,
+    });
+  }
+
+  it("asks Apple for name+email with a hashed nonce, then signs in to Supabase with the identity token and the raw nonce", async () => {
+    appleReturns({});
+    const client = createMockClient({
+      signInWithIdToken: jest.fn().mockResolvedValue({ data: { session: SESSION }, error: null }),
+    });
+
+    const result = await signInWithApple(client);
+
+    expect(result).toEqual({ ok: true, value: SESSION });
+    expect(AppleAuthentication.signInAsync).toHaveBeenCalledWith({
+      requestedScopes: [0, 1],
+      nonce: "hashed-nonce",
+    });
+    expect(client.auth.signInWithIdToken).toHaveBeenCalledWith({
+      provider: "apple",
+      token: "apple-id-token",
+      nonce: "raw-nonce",
+    });
+  });
+
+  it("returns Cancelled when the user dismisses the Apple sheet", async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockRejectedValue({ code: "ERR_REQUEST_CANCELED" });
+    const client = createMockClient();
+
+    const result = await signInWithApple(client);
+
+    expect(result).toEqual({ ok: false, error: { type: "Cancelled" } });
+    expect(client.auth.signInWithIdToken).not.toHaveBeenCalled();
+  });
+
+  it("returns Unknown when Apple fails for another reason", async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockRejectedValue({ code: "ERR_REQUEST_FAILED", message: "boom" });
+
+    const result = await signInWithApple(createMockClient());
+
+    expect(result).toEqual({ ok: false, error: { type: "Unknown", message: "boom" } });
+  });
+
+  it("returns Unknown when Apple returns no identity token", async () => {
+    appleReturns({ identityToken: null });
+    const client = createMockClient();
+
+    const result = await signInWithApple(client);
+
+    expect(result.ok).toBe(false);
+    expect(client.auth.signInWithIdToken).not.toHaveBeenCalled();
+  });
+
+  it("returns the mapped error when Supabase rejects the token", async () => {
+    appleReturns({});
+    const client = createMockClient({
+      signInWithIdToken: jest.fn().mockResolvedValue({ data: { session: null }, error: { message: "Invalid token" } }),
+    });
+
+    const result = await signInWithApple(client);
+
+    expect(result).toEqual({ ok: false, error: { type: "Unknown", message: "Invalid token" } });
+  });
+
+  it("saves the name Apple provides (first sign-in only) as the profile display name, family name first for Japanese names", async () => {
+    appleReturns({ fullName: { givenName: "太郎", familyName: "山田" } });
+    const client = createMockClient({
+      signInWithIdToken: jest.fn().mockResolvedValue({ data: { session: SESSION }, error: null }),
+    });
+
+    await signInWithApple(client);
+
+    expect(updateDisplayName).toHaveBeenCalledWith(client, "u1", "山田 太郎");
+  });
+
+  it("puts the given name first for non-Japanese names", async () => {
+    appleReturns({ fullName: { givenName: "John", familyName: "Doe" } });
+    const client = createMockClient({
+      signInWithIdToken: jest.fn().mockResolvedValue({ data: { session: SESSION }, error: null }),
+    });
+
+    await signInWithApple(client);
+
+    expect(updateDisplayName).toHaveBeenCalledWith(client, "u1", "John Doe");
+  });
+
+  it("does not touch the profile when Apple provides no name (every sign-in after the first)", async () => {
+    appleReturns({ fullName: { givenName: null, familyName: null } });
+    const client = createMockClient({
+      signInWithIdToken: jest.fn().mockResolvedValue({ data: { session: SESSION }, error: null }),
+    });
+
+    await signInWithApple(client);
+
+    expect(updateDisplayName).not.toHaveBeenCalled();
+  });
+
+  it("still signs in successfully when saving the display name fails", async () => {
+    appleReturns({ fullName: { givenName: "太郎", familyName: "山田" } });
+    (updateDisplayName as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Unknown", message: "x" } });
+    const client = createMockClient({
+      signInWithIdToken: jest.fn().mockResolvedValue({ data: { session: SESSION }, error: null }),
+    });
+
+    const result = await signInWithApple(client);
+
+    expect(result).toEqual({ ok: true, value: SESSION });
   });
 });
 
