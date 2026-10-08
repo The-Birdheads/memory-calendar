@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
@@ -139,6 +139,16 @@ function resolveEventPillStyle(
 
 function DayModalEventSeparator() {
   return <View testID="calendar-day-modal-separator" style={styles.dayModalEventSeparator} />;
+}
+
+// 月の一覧表示: 同じ日の予定同士は細く薄い線、日付の切れ目はそれより少し
+// 目立つ線で区切る(先頭の上・末尾の下には引かない)。
+function MonthListEventSeparator() {
+  return <View testID="calendar-month-list-event-separator" style={styles.dayModalEventSeparator} />;
+}
+
+function MonthListDateSeparator() {
+  return <View testID="calendar-month-list-date-separator" style={styles.monthListDateSeparator} />;
 }
 
 export default function CalendarScreen() {
@@ -567,7 +577,7 @@ export default function CalendarScreen() {
         ) : null}
         {event.hasTags ? (
           <View testID={`${testIDPrefix}-tag-mark-${event.id}`} style={styles.eventCountBadge}>
-            <Icon name="tag" size={11} color="#999" />
+            <Icon name="tag" size={12} color="#999" />
           </View>
         ) : null}
         {event.incompleteTodoCount > 0 ? (
@@ -1033,58 +1043,61 @@ export default function CalendarScreen() {
               data={monthEventGroups}
               keyExtractor={(group) => group.dateKey}
               contentContainerStyle={styles.monthListContent}
+              ItemSeparatorComponent={MonthListDateSeparator}
               renderItem={({ item: group }) => (
                 <View testID={`calendar-month-list-date-group-${group.dateKey}`}>
                   <Text style={styles.monthListDateHeader}>{group.label}</Text>
-                  {group.events.map((event) => {
+                  {group.events.map((event, index) => {
                     const tags = sortTagsHierarchically(tagsByEventId[event.id] ?? [], allTagsFlat);
                     return (
-                      <TouchableOpacity
-                        key={event.id}
-                        testID={`calendar-list-event-${event.id}`}
-                        style={styles.eventRow}
-                        onPress={() =>
-                          bulk.isActive ? bulk.toggleEvent(event.id) : router.push(`/event/${event.id}`)
-                        }
-                      >
-                        {bulk.isActive ? (
-                          <SelectionCircle
-                            testID={`calendar-list-event-select-${event.id}`}
-                            isSelected={bulk.selectedEventIds.includes(event.id)}
-                            onPress={() => bulk.toggleEvent(event.id)}
-                          />
-                        ) : null}
-                        <View style={styles.eventRowContent}>
-                          <View style={styles.eventRowMain}>
-                            <View
-                              style={[styles.categoryDot, { backgroundColor: resolveEventColor(event, calendarColorById) }]}
+                      <Fragment key={event.id}>
+                        {index > 0 ? <MonthListEventSeparator /> : null}
+                        <TouchableOpacity
+                          testID={`calendar-list-event-${event.id}`}
+                          style={styles.eventRow}
+                          onPress={() =>
+                            bulk.isActive ? bulk.toggleEvent(event.id) : router.push(`/event/${event.id}`)
+                          }
+                        >
+                          {bulk.isActive ? (
+                            <SelectionCircle
+                              testID={`calendar-list-event-select-${event.id}`}
+                              isSelected={bulk.selectedEventIds.includes(event.id)}
+                              onPress={() => bulk.toggleEvent(event.id)}
                             />
-                            {personalCalendarIds.has(event.calendarId) ? (
-                              <Icon
-                                testID={`calendar-list-event-personal-${event.id}`}
-                                name="lock"
-                                size={12}
-                                color="#666"
-                              />
-                            ) : null}
-                            <Text style={styles.eventTime}>
-                              {event.isAllDay ? "終日" : `${formatTime(event.startAt)}〜${formatTime(event.endAt)}`}
-                            </Text>
-                            <Text style={styles.eventTitle} numberOfLines={1}>
-                              {event.title}
-                            </Text>
-                            {renderEventCounts(event, "calendar-list-event")}
-                          </View>
-                          {renderEventSummaryLines(
-                            event,
-                            "calendar-list-event",
-                            personalCalendarIds.has(event.calendarId)
-                          )}
-                          {tags.length > 0 ? (
-                            <EventTagBadges tags={tags} fallbackColor={calendarColorById[event.calendarId]} />
                           ) : null}
-                        </View>
-                      </TouchableOpacity>
+                          <View style={styles.eventRowContent}>
+                            <View style={styles.eventRowMain}>
+                              <View
+                                style={[styles.categoryDot, { backgroundColor: resolveEventColor(event, calendarColorById) }]}
+                              />
+                              {personalCalendarIds.has(event.calendarId) ? (
+                                <Icon
+                                  testID={`calendar-list-event-personal-${event.id}`}
+                                  name="lock"
+                                  size={12}
+                                  color="#666"
+                                />
+                              ) : null}
+                              <Text style={styles.eventTime}>
+                                {event.isAllDay ? "終日" : `${formatTime(event.startAt)}〜${formatTime(event.endAt)}`}
+                              </Text>
+                              <Text style={styles.eventTitle} numberOfLines={1}>
+                                {event.title}
+                              </Text>
+                              {renderEventCounts(event, "calendar-list-event")}
+                            </View>
+                            {renderEventSummaryLines(
+                              event,
+                              "calendar-list-event",
+                              personalCalendarIds.has(event.calendarId)
+                            )}
+                            {tags.length > 0 ? (
+                              <EventTagBadges tags={tags} fallbackColor={calendarColorById[event.calendarId]} />
+                            ) : null}
+                          </View>
+                        </TouchableOpacity>
+                      </Fragment>
                     );
                   })}
                 </View>
@@ -1405,6 +1418,12 @@ const styles = StyleSheet.create({
   },
   monthListContent: {
     paddingBottom: 24,
+  },
+  monthListDateSeparator: {
+    height: 1,
+    backgroundColor: "#cfd3d9",
+    marginTop: 12,
+    marginHorizontal: 8,
   },
   monthListDateHeader: {
     fontSize: 14,

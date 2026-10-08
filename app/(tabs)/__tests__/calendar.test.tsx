@@ -2059,6 +2059,103 @@ describe("CalendarScreen", () => {
       expect(getByTestId("calendar-list-event-event-2")).toBeTruthy();
     });
 
+    it("shows each event's tag badges (name, with color) in the month list (regression: tags stopped showing in the event list)", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [TODAY_EVENT, OTHER_DAY_EVENT],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      (useEventTagsByEvents as jest.Mock).mockReturnValue({
+        tagsByEventId: {
+          "event-1": [
+            { id: "tag-a", calendarId: "cal-1", parentId: null, level: "major", name: "旅行", color: "#ff0000", createdAt: "2026-08-01T00:00:00.000Z" },
+          ],
+        },
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, queryByTestId, getByText } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+      expect(getByTestId("event-tag-badge-tag-a")).toBeTruthy();
+      expect(getByText("旅行")).toBeTruthy();
+      // event-2 has no tags, so only one badge is rendered in the whole list.
+      expect(queryByTestId("event-tag-badge-tag-b")).toBeNull();
+    });
+
+    it("looks up tags for every event in the displayed month, so each row can render its own", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [TODAY_EVENT, OTHER_DAY_EVENT],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      await render(<CalendarScreen />);
+
+      expect(useEventTagsByEvents).toHaveBeenCalledWith(["event-1", "event-2"]);
+    });
+
+    it("marks events that have tags with the tag icon in both the day modal and the month list", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [{ ...TODAY_EVENT, hasTags: true }, OTHER_DAY_EVENT],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+      expect(getByTestId("calendar-list-event-tag-mark-event-1")).toBeTruthy();
+      expect(queryByTestId("calendar-list-event-tag-mark-event-2")).toBeNull();
+
+      await fireEvent.press(getByTestId("calendar-view-mode-grid"));
+      await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+      expect(getByTestId("calendar-event-tag-mark-event-1")).toBeTruthy();
+    });
+
+    it("separates events within a day with a thin light line, and each date with a slightly stronger one", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [
+          TODAY_EVENT,
+          { ...TODAY_EVENT, id: "event-1b", title: "昼会" },
+          OTHER_DAY_EVENT,
+        ],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, getAllByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+      const flattenStyle = (style: unknown): Record<string, unknown> =>
+        Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+
+      // 2026-08-18 has two events (1 line between them); 08-20 has one (none).
+      const eventSeparators = getAllByTestId("calendar-month-list-event-separator");
+      expect(eventSeparators).toHaveLength(1);
+      // Two date groups -> exactly one line between them (not above the first / below the last).
+      const dateSeparators = getAllByTestId("calendar-month-list-date-separator");
+      expect(dateSeparators).toHaveLength(1);
+
+      const eventLine = flattenStyle(eventSeparators[0].props.style);
+      const dateLine = flattenStyle(dateSeparators[0].props.style);
+      expect(eventLine.height).toBe(StyleSheet.hairlineWidth);
+      expect(eventLine.backgroundColor).toBe("#e5e7eb");
+      // The date boundary must read as stronger than the event boundary.
+      expect(dateLine.height as number).toBeGreaterThan(eventLine.height as number);
+      expect(dateLine.backgroundColor).not.toBe(eventLine.backgroundColor);
+    });
+
     it("excludes events on padding days from the adjacent month, unlike the grid which still shows them", async () => {
       // 2026-07-31 is a padding (leading) day on August's grid but not part
       // of August itself.
