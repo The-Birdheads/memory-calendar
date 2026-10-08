@@ -90,4 +90,16 @@ describe("createFakeSupabaseClient", () => {
     expect(data).toEqual([{ id: "e1" }]);
     expect(client.storage.from("event-photos")).toBeTruthy();
   });
+
+  it("returns the first matching row (or null, without an error) via maybeSingle()", async () => {
+    const client = createFakeSupabaseClient({
+      meal_notification_settings: [{ user_id: "user-1", enabled: true }],
+    });
+
+    const found = await (client.from("meal_notification_settings") as any).select().eq("user_id", "user-1").maybeSingle();
+    expect(found).toEqual({ data: { user_id: "user-1", enabled: true }, error: null });
+
+    const missing = await (client.from("meal_notification_settings") as any).select().eq("user_id", "nobody").maybeSingle();
+    expect(missing).toEqual({ data: null, error: null });
+  });
 });

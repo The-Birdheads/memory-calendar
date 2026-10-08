@@ -76,6 +76,7 @@ export function createFakeSupabaseClient(seed: Record<string, Row[]> = {}): Fake
     const filters: ((row: Row) => boolean)[] = [];
     let orderBy: { column: string; ascending: boolean } | null = null;
     let isSingle = false;
+    let isMaybeSingle = false;
 
     async function execute(): Promise<{ data: unknown; error: { code?: string } | null }> {
       const rows = ensureTable(table);
@@ -120,6 +121,10 @@ export function createFakeSupabaseClient(seed: Record<string, Row[]> = {}): Fake
           if (av > bv) return ascending ? 1 : -1;
           return 0;
         });
+      }
+      if (isMaybeSingle) {
+        // 0件でもエラーにせず null を返す(single()との違い)。
+        return { data: result[0] ?? null, error: null };
       }
       if (isSingle) {
         return result[0]
@@ -171,6 +176,10 @@ export function createFakeSupabaseClient(seed: Record<string, Row[]> = {}): Fake
       },
       single() {
         isSingle = true;
+        return execute();
+      },
+      maybeSingle() {
+        isMaybeSingle = true;
         return execute();
       },
       then(
