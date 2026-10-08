@@ -376,6 +376,10 @@ verify_jwt = false
 [functions.event-change-notifier]
 verify_jwt = false
 
+# revoke-apple-token はアカウント削除時にアプリ(ログイン中ユーザー)から呼ばれる。JWTを必須にする。
+[functions.revoke-apple-token]
+verify_jwt = true
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

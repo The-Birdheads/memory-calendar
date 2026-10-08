@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
+import { revokeAppleAuthorizationIfNeeded } from "../auth/service";
 import { deleteOwnAccount, getMyProfile, updateDisplayName, updateWeekStartsOn } from "./service";
 import type { Profile, ProfileError } from "./types";
 
@@ -109,7 +110,17 @@ export function useDeleteAccount(): UseDeleteAccountResult {
   const runDeleteAccount = useCallback(async () => {
     setIsSubmitting(true);
     setError(null);
-    const result = await deleteOwnAccount(getSupabaseClient());
+    const client = getSupabaseClient();
+
+    // Appleでサインインしたユーザーは、削除前にAppleのトークンも失効させる(Appleの確認画面が
+    // 出る)。確認画面を閉じた場合は削除自体を中止する。失効に失敗しても削除は続行する。
+    const revocation = await revokeAppleAuthorizationIfNeeded(client);
+    if (revocation === "cancelled") {
+      setIsSubmitting(false);
+      return false;
+    }
+
+    const result = await deleteOwnAccount(client);
     setIsSubmitting(false);
     if (!result.ok) {
       setError(result.error);

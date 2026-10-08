@@ -3,7 +3,15 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 
 import { updateDisplayName } from "../../profile/service";
-import { getAuthErrorMessageJa, signIn, signInWithApple, signInWithGoogle, signOut, signUp } from "../service";
+import {
+  getAuthErrorMessageJa,
+  revokeAppleAuthorizationIfNeeded,
+  signIn,
+  signInWithApple,
+  signInWithGoogle,
+  signOut,
+  signUp,
+} from "../service";
 
 jest.mock("expo-web-browser", () => ({
   openAuthSessionAsync: jest.fn(),
@@ -255,6 +263,89 @@ describe("signInWithApple", () => {
     const result = await signInWithApple(client);
 
     expect(result).toEqual({ ok: true, value: SESSION });
+  });
+});
+
+describe("revokeAppleAuthorizationIfNeeded", () => {
+  const APPLE_USER = { identities: [{ provider: "apple" }] };
+  const EMAIL_USER = { identities: [{ provider: "email" }] };
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  function clientFor(user: unknown, invoke = jest.fn().mockResolvedValue({ data: { revoked: true }, error: null })) {
+    return {
+      client: {
+        auth: { getUser: jest.fn().mockResolvedValue({ data: { user }, error: null }) },
+        functions: { invoke },
+      } as unknown as SupabaseClient,
+      invoke,
+    };
+  }
+
+  it("does nothing for users who didn't sign in with Apple (no Apple prompt, no function call)", async () => {
+    const { client, invoke } = clientFor(EMAIL_USER);
+
+    const result = await revokeAppleAuthorizationIfNeeded(client);
+
+    expect(result).toBe("not-apple");
+    expect(AppleAuthentication.signInAsync).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("re-confirms with Apple for an Apple user, then sends the fresh authorization code to the revoke function", async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockResolvedValue({ authorizationCode: "code-123" });
+    const { client, invoke } = clientFor(APPLE_USER);
+
+    const result = await revokeAppleAuthorizationIfNeeded(client);
+
+    expect(result).toBe("revoked");
+    expect(AppleAuthentication.signInAsync).toHaveBeenCalledWith({ requestedScopes: [] });
+    expect(invoke).toHaveBeenCalledWith("revoke-apple-token", { body: { authorizationCode: "code-123" } });
+  });
+
+  it("returns cancelled (and calls nothing) when the user dismisses Apple's confirmation sheet", async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockRejectedValue({ code: "ERR_REQUEST_CANCELED" });
+    const { client, invoke } = clientFor(APPLE_USER);
+
+    const result = await revokeAppleAuthorizationIfNeeded(client);
+
+    expect(result).toBe("cancelled");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("returns failed when Apple's sheet fails for another reason", async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockRejectedValue({ code: "ERR_REQUEST_FAILED" });
+    const { client, invoke } = clientFor(APPLE_USER);
+
+    expect(await revokeAppleAuthorizationIfNeeded(client)).toBe("failed");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("returns failed when Apple returns no authorization code", async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockResolvedValue({ authorizationCode: null });
+    const { client, invoke } = clientFor(APPLE_USER);
+
+    expect(await revokeAppleAuthorizationIfNeeded(client)).toBe("failed");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("returns failed when the revoke function reports an error", async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockResolvedValue({ authorizationCode: "code-123" });
+    const { client } = clientFor(APPLE_USER, jest.fn().mockResolvedValue({ data: null, error: { message: "502" } }));
+
+    expect(await revokeAppleAuthorizationIfNeeded(client)).toBe("failed");
+  });
+
+  it("returns failed when the signed-in user can't be determined", async () => {
+    const client = {
+      auth: { getUser: jest.fn().mockResolvedValue({ data: { user: null }, error: { message: "no session" } }) },
+      functions: { invoke: jest.fn() },
+    } as unknown as SupabaseClient;
+
+    expect(await revokeAppleAuthorizationIfNeeded(client)).toBe("failed");
+    expect(client.functions.invoke).not.toHaveBeenCalled();
   });
 });
 

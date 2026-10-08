@@ -151,6 +151,43 @@ export async function signInWithApple(client: SupabaseClient): Promise<Result<Se
   return ok(data.session);
 }
 
+export type AppleRevocationOutcome = "not-apple" | "revoked" | "failed" | "cancelled";
+
+/**
+ * アカウント削除の直前に呼ぶ。Appleでサインインしたユーザーの場合だけ、Appleの確認画面で
+ * 本人確認(=新しい認可コードの取得)をしてから、Edge Function経由でAppleのトークンを失効させる
+ * (App Storeガイドライン5.1.1(v))。
+ * - "cancelled": 確認画面を閉じた(削除を中止すべき)
+ * - "failed": 失効に失敗(削除自体は続行してよい)
+ * - "not-apple": Appleのユーザーではないので何もしていない
+ */
+export async function revokeAppleAuthorizationIfNeeded(client: SupabaseClient): Promise<AppleRevocationOutcome> {
+  const {
+    data: { user },
+    error: userError,
+  } = await client.auth.getUser();
+  if (userError || !user) {
+    return "failed";
+  }
+  if (!user.identities?.some((identity) => identity.provider === "apple")) {
+    return "not-apple";
+  }
+
+  let authorizationCode: string | null;
+  try {
+    const credential = await AppleAuthentication.signInAsync({ requestedScopes: [] });
+    authorizationCode = credential.authorizationCode;
+  } catch (e) {
+    return (e as { code?: string })?.code === "ERR_REQUEST_CANCELED" ? "cancelled" : "failed";
+  }
+  if (!authorizationCode) {
+    return "failed";
+  }
+
+  const { error } = await client.functions.invoke("revoke-apple-token", { body: { authorizationCode } });
+  return error ? "failed" : "revoked";
+}
+
 export async function signOut(client: SupabaseClient): Promise<Result<void, AuthError>> {
   const { error } = await client.auth.signOut();
   if (error) {

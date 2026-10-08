@@ -1,11 +1,16 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
+import { revokeAppleAuthorizationIfNeeded } from "../../auth/service";
 import { deleteOwnAccount, getMyProfile, updateDisplayName } from "../service";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
   getSupabaseClient: jest.fn(),
+}));
+
+jest.mock("../../auth/service", () => ({
+  revokeAppleAuthorizationIfNeeded: jest.fn(),
 }));
 
 jest.mock("../service", () => ({
@@ -114,6 +119,55 @@ describe("useUpdateDisplayName", () => {
 describe("useDeleteAccount", () => {
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  beforeEach(() => {
+    (revokeAppleAuthorizationIfNeeded as jest.Mock).mockResolvedValue("not-apple");
+  });
+
+  async function runDelete() {
+    const { result } = await renderHook(() => useDeleteAccount());
+    let succeeded: boolean | undefined = undefined;
+    await act(async () => {
+      succeeded = await result.current.deleteAccount();
+    });
+    return { result, succeeded };
+  }
+
+  it("revokes the Apple authorization first (for Apple users), then deletes the account", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (revokeAppleAuthorizationIfNeeded as jest.Mock).mockResolvedValue("revoked");
+    (deleteOwnAccount as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    const { succeeded } = await runDelete();
+
+    expect(succeeded).toBe(true);
+    const revokeOrder = (revokeAppleAuthorizationIfNeeded as jest.Mock).mock.invocationCallOrder[0];
+    const deleteOrder = (deleteOwnAccount as jest.Mock).mock.invocationCallOrder[0];
+    expect(revokeOrder).toBeLessThan(deleteOrder);
+  });
+
+  it("aborts without deleting anything (and without an error message) when the user cancels Apple's confirmation", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (revokeAppleAuthorizationIfNeeded as jest.Mock).mockResolvedValue("cancelled");
+
+    const { result, succeeded } = await runDelete();
+
+    expect(succeeded).toBe(false);
+    expect(deleteOwnAccount).not.toHaveBeenCalled();
+    expect(result.current.error).toBeNull();
+    expect(result.current.isSubmitting).toBe(false);
+  });
+
+  it("still deletes the account when revoking the Apple token fails (deletion must always remain possible)", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (revokeAppleAuthorizationIfNeeded as jest.Mock).mockResolvedValue("failed");
+    (deleteOwnAccount as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    const { succeeded } = await runDelete();
+
+    expect(succeeded).toBe(true);
+    expect(deleteOwnAccount).toHaveBeenCalled();
   });
 
   it("returns true and clears the error on success", async () => {
