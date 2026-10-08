@@ -1,4 +1,5 @@
-// NotificationDispatcher: pg_cronから毎分起動され、期限到来したリマインダー(予定・ToDo)を配信する。
+// NotificationDispatcher: pg_cronから毎分起動され、期限到来したリマインダー(予定・ToDo)と、
+// 各ユーザーが設定した時刻の献立の通知(朝食/昼食/夕食/間食)を配信する。
 // 予定のリマインドはevent_reminders(各メンバーが自分で設定した個人単位のリマインド時刻)を
 // そのまま配信対象とする(「対象者」概念は廃止。行が存在する = 本人がその時刻に通知してほしいという意思表示)。
 // notification_log の一意制約により、再実行しても重複配信しない。
@@ -6,6 +7,13 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { sendExpoPushNotifications } from "../_shared/expoPush.ts";
+import {
+  buildMealReminderMessage,
+  dueMealSlots,
+  jstClock,
+  type MealNotificationSettingsRow,
+  type MealSlot,
+} from "../_shared/mealReminder.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -28,8 +36,8 @@ interface TodoReminderRow {
 interface SendReminderParams {
   notificationType: string;
   userId: string;
-  idempotencyColumn: "event_reminder_id" | "todo_id";
-  idempotencyValue: string;
+  /** notification_log の冪等性キー(列名 → 値)。例: { event_reminder_id: "..." } / { meal_date, meal_slot } */
+  idempotency: Record<string, string>;
   title: string;
   body: string;
 }
@@ -40,7 +48,7 @@ async function sendReminder(supabase: SupabaseClient, params: SendReminderParams
   const { error: reserveError } = await supabase.from("notification_log").insert({
     type: params.notificationType,
     target_user_id: params.userId,
-    [params.idempotencyColumn]: params.idempotencyValue,
+    ...params.idempotency,
     status: "pending",
   });
 
@@ -61,7 +69,7 @@ async function sendReminder(supabase: SupabaseClient, params: SendReminderParams
       .update({ status: "failed" })
       .eq("type", params.notificationType)
       .eq("target_user_id", params.userId)
-      .eq(params.idempotencyColumn, params.idempotencyValue);
+      .match(params.idempotency);
     return;
   }
 
@@ -77,7 +85,7 @@ async function sendReminder(supabase: SupabaseClient, params: SendReminderParams
     })
     .eq("type", params.notificationType)
     .eq("target_user_id", params.userId)
-    .eq(params.idempotencyColumn, params.idempotencyValue);
+    .match(params.idempotency);
 }
 
 async function dispatchEventReminders(supabase: SupabaseClient, now: string): Promise<void> {
@@ -90,8 +98,7 @@ async function dispatchEventReminders(supabase: SupabaseClient, now: string): Pr
     await sendReminder(supabase, {
       notificationType: "event_reminder",
       userId: reminder.user_id,
-      idempotencyColumn: "event_reminder_id",
-      idempotencyValue: reminder.id,
+      idempotency: { event_reminder_id: reminder.id },
       title: "予定のリマインドです",
       body: reminder.events?.title ?? "",
     });
@@ -111,12 +118,56 @@ async function dispatchTodoReminders(supabase: SupabaseClient, now: string): Pro
     await sendReminder(supabase, {
       notificationType: "todo_reminder",
       userId: todo.created_by,
-      idempotencyColumn: "todo_id",
-      idempotencyValue: todo.id,
+      idempotency: { todo_id: todo.id },
       title: "ToDoのリマインドです",
       body: todo.title,
     });
   }
+}
+
+// 設定した時刻になった献立の通知を配信する。その日のその時間帯に登録された献立が
+// 1件もなければ通知しない(「予定に登録した献立」の通知のため)。
+async function dispatchMealReminders(supabase: SupabaseClient, now: Date): Promise<void> {
+  const { dateKey, minutes } = jstClock(now);
+
+  const { data: settingsRows } = await supabase.from("meal_notification_settings").select("*").eq("enabled", true);
+
+  for (const settings of (settingsRows ?? []) as MealNotificationSettingsRow[]) {
+    for (const slot of dueMealSlots(settings, minutes)) {
+      await dispatchMealReminder(supabase, settings.user_id, dateKey, slot);
+    }
+  }
+}
+
+async function dispatchMealReminder(
+  supabase: SupabaseClient,
+  userId: string,
+  dateKey: string,
+  slot: MealSlot
+): Promise<void> {
+  // 本人が参加しているカレンダー(個人用・共有とも)の、その日・その時間帯の献立。
+  const { data: memberships } = await supabase.from("calendar_members").select("calendar_id").eq("user_id", userId);
+  const calendarIds = ((memberships ?? []) as { calendar_id: string }[]).map((row) => row.calendar_id);
+  if (calendarIds.length === 0) return;
+
+  const { data: meals } = await supabase
+    .from("meal_records")
+    .select("title")
+    .in("calendar_id", calendarIds)
+    .eq("meal_date", dateKey)
+    .eq("slot", slot)
+    .order("created_at", { ascending: true });
+
+  const titles = [...new Set(((meals ?? []) as { title: string }[]).map((meal) => meal.title.trim()).filter(Boolean))];
+  if (titles.length === 0) return;
+
+  await sendReminder(supabase, {
+    notificationType: "meal_reminder",
+    userId,
+    idempotency: { meal_date: dateKey, meal_slot: slot },
+    title: "献立のお知らせ",
+    body: buildMealReminderMessage(slot, titles),
+  });
 }
 
 Deno.serve(async (req) => {
@@ -125,10 +176,11 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-  const now = new Date().toISOString();
+  const now = new Date();
 
-  await dispatchEventReminders(supabase, now);
-  await dispatchTodoReminders(supabase, now);
+  await dispatchEventReminders(supabase, now.toISOString());
+  await dispatchTodoReminders(supabase, now.toISOString());
+  await dispatchMealReminders(supabase, now);
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { "Content-Type": "application/json" },
