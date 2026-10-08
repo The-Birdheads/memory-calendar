@@ -164,6 +164,23 @@ const TODOS_TWO_INCOMPLETE = [
   },
 ];
 
+const TODOS_THREE_INCOMPLETE = [
+  ...TODOS_TWO_INCOMPLETE,
+  {
+    id: "todo-3",
+    eventId: "event-1",
+    eventCalendarId: "cal-1",
+    title: "衣装準備",
+    isDone: false,
+    completedAt: null,
+    reminderAt: null,
+    eventTitle: "発表会",
+    eventStartAt: "2026-09-10T10:00:00.000Z",
+    eventEndAt: "2026-09-10T12:00:00.000Z",
+    eventIsAllDay: false,
+  },
+];
+
 const TODOS_PAST_DONE_EVENT = [
   {
     id: "todo-5",
@@ -727,15 +744,18 @@ describe("TodosScreen", () => {
       expect(getByTestId("todo-section-reorder-start-event-1")).toBeTruthy();
     });
 
-    it("entering reorder mode shows a drag handle per row (not a checkbox)", async () => {
+    it("entering reorder mode shows the plain rows (no checkbox, no drag handle, no move buttons until a row is selected)", async () => {
       mockCommonHooks(TODOS_TWO_INCOMPLETE);
 
       const { getByTestId, queryByTestId } = await render(<TodosScreen />);
       await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
 
-      expect(getByTestId("todo-drag-handle-todo-1")).toBeTruthy();
-      expect(getByTestId("todo-drag-handle-todo-2")).toBeTruthy();
+      expect(getByTestId("todo-item-todo-1")).toBeTruthy();
+      expect(getByTestId("todo-item-todo-2")).toBeTruthy();
+      expect(queryByTestId("todo-drag-handle-todo-1")).toBeNull();
       expect(queryByTestId("todo-checkbox-todo-1")).toBeNull();
+      expect(queryByTestId("todo-move-up-todo-1")).toBeNull();
+      expect(queryByTestId("todo-move-down-todo-1")).toBeNull();
       expect(getByTestId("todo-section-reorder-confirm-event-1")).toBeTruthy();
       expect(getByTestId("todo-section-reorder-cancel-event-1")).toBeTruthy();
     });
@@ -751,10 +771,10 @@ describe("TodosScreen", () => {
 
       expect(reorderTodoMock).not.toHaveBeenCalled();
       expect(getByTestId("todo-checkbox-todo-1")).toBeTruthy();
-      expect(queryByTestId("todo-drag-handle-todo-1")).toBeNull();
+      expect(queryByTestId("todo-move-down-todo-1")).toBeNull();
     });
 
-    it("confirming without dragging anything does not call reorderTodo (nothing actually changed)", async () => {
+    it("confirming without moving anything does not call reorderTodo (nothing actually changed)", async () => {
       const reorderTodoMock = jest.fn();
       const refetch = jest.fn();
       mockCommonHooks(TODOS_TWO_INCOMPLETE, refetch);
@@ -770,7 +790,138 @@ describe("TodosScreen", () => {
       expect(reorderTodoMock).not.toHaveBeenCalled();
       expect(refetch.mock.calls.length).toBe(callsBeforeConfirm);
       expect(getByTestId("todo-checkbox-todo-1")).toBeTruthy();
-      expect(queryByTestId("todo-drag-handle-todo-1")).toBeNull();
+      expect(queryByTestId("todo-move-down-todo-1")).toBeNull();
+    });
+
+    describe("ボタンで1つずつ上下に動かす", () => {
+      it("shows move up/down buttons only on the tapped row, and tapping it again hides them", async () => {
+        mockCommonHooks(TODOS_TWO_INCOMPLETE);
+
+        const { getByTestId, queryByTestId } = await render(<TodosScreen />);
+        await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+
+        await fireEvent.press(getByTestId("todo-item-todo-1"));
+        expect(getByTestId("todo-move-up-todo-1")).toBeTruthy();
+        expect(getByTestId("todo-move-down-todo-1")).toBeTruthy();
+        expect(queryByTestId("todo-move-down-todo-2")).toBeNull();
+
+        await fireEvent.press(getByTestId("todo-item-todo-2"));
+        expect(queryByTestId("todo-move-down-todo-1")).toBeNull();
+        expect(getByTestId("todo-move-up-todo-2")).toBeTruthy();
+
+        await fireEvent.press(getByTestId("todo-item-todo-2"));
+        expect(queryByTestId("todo-move-up-todo-2")).toBeNull();
+      });
+
+      it("moves the selected todo down one place and persists the new sequential order on confirm", async () => {
+        const reorderTodoMock = jest.fn().mockResolvedValue(true);
+        const refetch = jest.fn();
+        mockCommonHooks(TODOS_TWO_INCOMPLETE, refetch);
+        (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+        const { getByTestId } = await render(<TodosScreen />);
+        await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+        await fireEvent.press(getByTestId("todo-item-todo-1"));
+        await fireEvent.press(getByTestId("todo-move-down-todo-1"));
+        await fireEvent.press(getByTestId("todo-section-reorder-confirm-event-1"));
+
+        await waitFor(() => expect(reorderTodoMock).toHaveBeenCalledWith("todo-2", 1));
+        expect(reorderTodoMock).toHaveBeenCalledWith("todo-1", 2);
+        await waitFor(() => expect(refetch).toHaveBeenCalled());
+      });
+
+      it("moves the selected todo up one place", async () => {
+        const reorderTodoMock = jest.fn().mockResolvedValue(true);
+        mockCommonHooks(TODOS_TWO_INCOMPLETE);
+        (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+        const { getByTestId } = await render(<TodosScreen />);
+        await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+        await fireEvent.press(getByTestId("todo-item-todo-2"));
+        await fireEvent.press(getByTestId("todo-move-up-todo-2"));
+        await fireEvent.press(getByTestId("todo-section-reorder-confirm-event-1"));
+
+        await waitFor(() => expect(reorderTodoMock).toHaveBeenCalledWith("todo-2", 1));
+        expect(reorderTodoMock).toHaveBeenCalledWith("todo-1", 2);
+      });
+
+      it("disables moving the first todo up and the last todo down", async () => {
+        const reorderTodoMock = jest.fn().mockResolvedValue(true);
+        mockCommonHooks(TODOS_TWO_INCOMPLETE);
+        (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+        const { getByTestId } = await render(<TodosScreen />);
+        await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+
+        await fireEvent.press(getByTestId("todo-item-todo-1"));
+        expect(getByTestId("todo-move-up-todo-1").props.accessibilityState).toMatchObject({ disabled: true });
+        expect(getByTestId("todo-move-down-todo-1").props.accessibilityState).toMatchObject({ disabled: false });
+        await fireEvent.press(getByTestId("todo-move-up-todo-1"));
+
+        await fireEvent.press(getByTestId("todo-item-todo-1")); // deselect
+        await fireEvent.press(getByTestId("todo-item-todo-2"));
+        expect(getByTestId("todo-move-down-todo-2").props.accessibilityState).toMatchObject({ disabled: true });
+        await fireEvent.press(getByTestId("todo-move-down-todo-2"));
+
+        await fireEvent.press(getByTestId("todo-section-reorder-confirm-event-1"));
+        // Nothing actually moved, so nothing is persisted.
+        expect(reorderTodoMock).not.toHaveBeenCalled();
+      });
+
+      it("keeps the moved todo selected so it can be moved several places in a row", async () => {
+        const reorderTodoMock = jest.fn().mockResolvedValue(true);
+        mockCommonHooks(TODOS_THREE_INCOMPLETE);
+        (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+        const { getByTestId } = await render(<TodosScreen />);
+        await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+        await fireEvent.press(getByTestId("todo-item-todo-1"));
+        await fireEvent.press(getByTestId("todo-move-down-todo-1"));
+        await fireEvent.press(getByTestId("todo-move-down-todo-1"));
+        await fireEvent.press(getByTestId("todo-section-reorder-confirm-event-1"));
+
+        await waitFor(() => expect(reorderTodoMock).toHaveBeenCalledWith("todo-1", 3));
+        expect(reorderTodoMock).toHaveBeenCalledWith("todo-2", 1);
+        expect(reorderTodoMock).toHaveBeenCalledWith("todo-3", 2);
+      });
+
+      it("discards moves when reorder mode is cancelled", async () => {
+        const reorderTodoMock = jest.fn().mockResolvedValue(true);
+        mockCommonHooks(TODOS_TWO_INCOMPLETE);
+        (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+        const { getByTestId } = await render(<TodosScreen />);
+        await fireEvent.press(getByTestId("todo-section-reorder-start-event-1"));
+        await fireEvent.press(getByTestId("todo-item-todo-1"));
+        await fireEvent.press(getByTestId("todo-move-down-todo-1"));
+        await fireEvent.press(getByTestId("todo-section-reorder-cancel-event-1"));
+
+        expect(reorderTodoMock).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe("セクションヘッダーの「⋯」(予定詳細)の位置", () => {
+    it("places 予定詳細 (⋯) immediately to the left of the reorder icon, in the same right-aligned group", async () => {
+      mockCommonHooks(TODOS_TWO_INCOMPLETE);
+
+      const { getByTestId } = await render(<TodosScreen />);
+
+      const open = getByTestId("todo-section-open-event-event-1");
+      const reorder = getByTestId("todo-section-reorder-start-event-1");
+      // Same parent group => adjacent; and ⋯ comes first (left of) the reorder icon.
+      expect(open.parent).toBe(reorder.parent);
+      const siblings = open.parent!.children;
+      expect(siblings.indexOf(open as never)).toBe(siblings.indexOf(reorder as never) - 1);
+    });
+
+    it("keeps ⋯ at the far right when there is no reorder icon (fewer than 2 incomplete todos)", async () => {
+      mockCommonHooks(TODOS);
+
+      const { getByTestId, queryByTestId } = await render(<TodosScreen />);
+
+      expect(queryByTestId("todo-section-reorder-start-event-1")).toBeNull();
+      expect(getByTestId("todo-section-open-event-event-1")).toBeTruthy();
     });
   });
 

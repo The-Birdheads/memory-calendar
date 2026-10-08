@@ -34,7 +34,6 @@ const ICONS = {
   "meal-lunch": require("../../../assets/icons/meal-lunch.png"),
   "meal-dinner": require("../../../assets/icons/meal-dinner.png"),
   "meal-snack": require("../../../assets/icons/meal-snack.png"),
-  "drag-handle": require("../../../assets/icons/drag-handle.png"),
   reorder: require("../../../assets/icons/reorder.png"),
 } as const;
 

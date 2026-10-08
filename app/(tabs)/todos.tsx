@@ -1,9 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
-  Animated,
   FlatList,
   Modal,
-  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -37,9 +35,10 @@ import {
   useTodosByCalendars,
   useUpdateTodo,
 } from "../../src/features/todos/hooks";
+import { ReorderMoveButtons } from "../../src/features/todos/components/ReorderMoveButtons";
 import { sequentialSortOrders } from "../../src/features/todos/reorder";
 import type { Todo, TodoWithEventTitle } from "../../src/features/todos/types";
-import { useDragReorder } from "../../src/features/todos/useDragReorder";
+import { useSelectionReorder } from "../../src/features/todos/useSelectionReorder";
 import { todayJstDateKey, toJstDateKey } from "../../src/shared/utils/formatDateTime";
 import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
 
@@ -66,11 +65,16 @@ interface TodoItemRowProps {
   onDelete: (todoId: string) => void;
   onSetReminder: (todoId: string, reminderAt: string | null) => void;
   onEditTitle: (todoId: string, title: string) => void;
-  /** 並べ替えモード中は、チェックボックスの代わりにドラッグハンドルを出し、
-   * 編集/リマインド/削除は隠してドラッグだけに専念できるようにする。 */
+  /** 並べ替えモード中は、チェックボックスや編集/リマインド/削除を隠し、
+   * タイトルだけの行にする。行をタップすると選択され、選択中の行に
+   * 「1つ上へ/1つ下へ」ボタンが出る。 */
   isReordering?: boolean;
-  isDragging?: boolean;
-  dragHandlePanHandlers?: ReturnType<typeof PanResponder.create>["panHandlers"];
+  isSelected?: boolean;
+  onSelectForReorder?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 function TodoItemRow({
@@ -81,8 +85,12 @@ function TodoItemRow({
   onSetReminder,
   onEditTitle,
   isReordering,
-  isDragging,
-  dragHandlePanHandlers,
+  isSelected,
+  onSelectForReorder,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
 }: TodoItemRowProps) {
   const [isReminderModalVisible, setIsReminderModalVisible] = useState(false);
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
@@ -114,19 +122,28 @@ function TodoItemRow({
 
   if (isReordering) {
     return (
-      <View
-        style={[styles.todoRow, styles.reorderRow, isDragging && styles.reorderRowDragging]}
+      <TouchableOpacity
+        activeOpacity={0.7}
+        style={[styles.todoRow, styles.reorderRow, isSelected && styles.reorderRowSelected]}
         testID={`todo-item-${todo.id}`}
+        onPress={onSelectForReorder}
       >
         <View style={styles.todoMainRow}>
-          <View testID={`todo-drag-handle-${todo.id}`} {...dragHandlePanHandlers}>
-            <Icon name="drag-handle" size={16} color="#999" />
-          </View>
           <Text style={styles.todoTitle} numberOfLines={1}>
             {todo.title}
           </Text>
+          {isSelected ? (
+            <ReorderMoveButtons
+              upTestID={`todo-move-up-${todo.id}`}
+              downTestID={`todo-move-down-${todo.id}`}
+              canMoveUp={!!canMoveUp}
+              canMoveDown={!!canMoveDown}
+              onMoveUp={() => onMoveUp?.()}
+              onMoveDown={() => onMoveDown?.()}
+            />
+          ) : null}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -286,14 +303,12 @@ interface EventSectionProps {
   onSetReminder: (todoId: string, reminderAt: string | null) => void;
   onEditTodoTitle: (todoId: string, title: string) => void;
   onOpenEvent: (eventId: string) => void;
-  /** 並べ替え確定時、ドラッグ後の順番(未完了ToDoのid配列)を渡す。 */
+  /** 並べ替え確定時、動かした後の順番(未完了ToDoのid配列)を渡す。 */
   onConfirmReorder: (order: string[]) => Promise<void>;
   sectionRef?: (node: View | null) => void;
   /** 色未設定のタグをその予定のカレンダー色で表示するためのフォールバック。 */
   calendarColorById: Record<string, string>;
 }
-
-const TODO_ROW_HEIGHT = 56;
 
 function EventSection({
   group,
@@ -317,14 +332,11 @@ function EventSection({
   const doneTodos = group.todos.filter((todo) => todo.isDone);
   const urgency = incompleteTodos.length > 0 ? getEventUrgency(group.eventStartAt, today) : "none";
   const isOverdue = urgency === "overdue";
-  const todoDrag = useDragReorder(
-    incompleteTodos.map((todo) => todo.id),
-    TODO_ROW_HEIGHT
-  );
+  const todoReorder = useSelectionReorder(incompleteTodos.map((todo) => todo.id));
   const incompleteTodosById = new Map(incompleteTodos.map((todo) => [todo.id, todo]));
 
   const handleStartReorder = () => {
-    todoDrag.reset(incompleteTodos.map((todo) => todo.id));
+    todoReorder.reset(incompleteTodos.map((todo) => todo.id));
     setIsReorderingTodos(true);
   };
 
@@ -334,8 +346,8 @@ function EventSection({
 
   const handleConfirmReorder = async () => {
     const originalOrder = incompleteTodos.map((todo) => todo.id);
-    if (JSON.stringify(todoDrag.order) !== JSON.stringify(originalOrder)) {
-      await onConfirmReorder(todoDrag.order);
+    if (JSON.stringify(todoReorder.order) !== JSON.stringify(originalOrder)) {
+      await onConfirmReorder(todoReorder.order);
     }
     setIsReorderingTodos(false);
   };
@@ -377,68 +389,70 @@ function EventSection({
           <Text style={styles.sectionDateLabel}>
             {formatEventDateRangeLabel(group.eventStartAt, group.eventEndAt)}
           </Text>
-          <TouchableOpacity
-            testID={`todo-section-open-event-${group.eventId}`}
-            style={styles.moreButton}
-            onPress={() => onOpenEvent(group.eventId)}
-          >
-            <Text style={styles.moreButtonGlyph}>⋯</Text>
-          </TouchableOpacity>
-          {!isCollapsed && incompleteTodos.length > 1 ? (
-            isReorderingTodos ? (
-              <View style={styles.reorderActions}>
+        <View style={styles.sectionHeaderActions}>
+            <TouchableOpacity
+              testID={`todo-section-open-event-${group.eventId}`}
+              style={styles.moreButton}
+              onPress={() => onOpenEvent(group.eventId)}
+            >
+              <Text style={styles.moreButtonGlyph}>⋯</Text>
+            </TouchableOpacity>
+            {!isCollapsed && incompleteTodos.length > 1 ? (
+              isReorderingTodos ? (
+                <View style={styles.reorderActions}>
+                  <TouchableOpacity
+                    testID={`todo-section-reorder-confirm-${group.eventId}`}
+                    onPress={handleConfirmReorder}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={styles.confirmCheck}>✓</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    testID={`todo-section-reorder-cancel-${group.eventId}`}
+                    onPress={handleCancelReorder}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={styles.cancelText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
                 <TouchableOpacity
-                  testID={`todo-section-reorder-confirm-${group.eventId}`}
-                  onPress={handleConfirmReorder}
+                  testID={`todo-section-reorder-start-${group.eventId}`}
+                  onPress={handleStartReorder}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Text style={styles.confirmCheck}>✓</Text>
+                  <Icon name="reorder" size={16} color="#666" />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  testID={`todo-section-reorder-cancel-${group.eventId}`}
-                  onPress={handleCancelReorder}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Text style={styles.cancelText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                testID={`todo-section-reorder-start-${group.eventId}`}
-                onPress={handleStartReorder}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Icon name="reorder" size={16} color="#666" />
-              </TouchableOpacity>
-            )
-          ) : null}
+              )
+            ) : null}
+          </View>
         </View>
       </View>
 
       {!isCollapsed ? (
         <>
           {isReorderingTodos
-            ? todoDrag.order.map((todoId) => {
+            ? todoReorder.order.map((todoId) => {
                 const todo = incompleteTodosById.get(todoId);
                 if (!todo) return null;
-                const isDragging = todoDrag.draggingId === todoId;
+                const isSelected = todoReorder.selectedId === todoId;
                 return (
-                  <Animated.View
+                  <TodoItemRow
                     key={todoId}
-                    style={isDragging ? { transform: [{ translateY: todoDrag.dragY }], zIndex: 1 } : undefined}
-                  >
-                    <TodoItemRow
-                      todo={todo}
-                      emphasizeOverdue={isOverdue}
-                      onToggle={onToggleTodo}
-                      onDelete={onDeleteTodo}
-                      onSetReminder={onSetReminder}
-                      onEditTitle={onEditTodoTitle}
-                      isReordering
-                      isDragging={isDragging}
-                      dragHandlePanHandlers={todoDrag.panHandlersFor(todoId)}
-                    />
-                  </Animated.View>
+                    todo={todo}
+                    emphasizeOverdue={isOverdue}
+                    onToggle={onToggleTodo}
+                    onDelete={onDeleteTodo}
+                    onSetReminder={onSetReminder}
+                    onEditTitle={onEditTodoTitle}
+                    isReordering
+                    isSelected={isSelected}
+                    onSelectForReorder={() => todoReorder.select(todoId)}
+                    canMoveUp={todoReorder.canMoveUp}
+                    canMoveDown={todoReorder.canMoveDown}
+                    onMoveUp={todoReorder.moveSelectedUp}
+                    onMoveDown={todoReorder.moveSelectedDown}
+                  />
                 );
               })
             : incompleteTodos.map((todo) => (
@@ -1056,6 +1070,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  // 「⋯」(予定詳細)と並べ替えアイコンを右端に寄せて一組にする。並べ替えが
+  // 出ない時(未完了ToDoが1件以下)は「⋯」だけが右端に来る。
+  sectionHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
@@ -1124,14 +1145,8 @@ const styles = StyleSheet.create({
   reorderRow: {
     backgroundColor: "#fff",
   },
-  reorderRowDragging: {
-    backgroundColor: "#f2f3f5",
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+  reorderRowSelected: {
+    backgroundColor: "#e8f0fe",
   },
   doneToggleRow: {
     paddingHorizontal: 16,

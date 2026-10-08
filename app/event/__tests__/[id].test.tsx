@@ -809,15 +809,17 @@ describe("EventDetailScreen", () => {
       expect(getByTestId("event-todo-reorder-start")).toBeTruthy();
     });
 
-    it("entering reorder mode shows a drag handle per row (not a checkbox) and hides the add-todo row", async () => {
+    it("entering reorder mode shows plain rows (no checkbox/drag handle/move buttons until selected) and hides the add-todo row", async () => {
       mockCommonHooks({ todos: TWO_TODOS });
 
       const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
       await fireEvent.press(getByTestId("event-todo-reorder-start"));
 
-      expect(getByTestId("event-todo-drag-handle-todo-1")).toBeTruthy();
-      expect(getByTestId("event-todo-drag-handle-todo-2")).toBeTruthy();
+      expect(getByTestId("event-todo-todo-1")).toBeTruthy();
+      expect(getByTestId("event-todo-todo-2")).toBeTruthy();
+      expect(queryByTestId("event-todo-drag-handle-todo-1")).toBeNull();
       expect(queryByTestId("event-todo-checkbox-todo-1")).toBeNull();
+      expect(queryByTestId("event-todo-move-down-todo-1")).toBeNull();
       expect(queryByTestId("event-todo-input")).toBeNull();
       expect(getByTestId("event-todo-reorder-confirm")).toBeTruthy();
       expect(getByTestId("event-todo-reorder-cancel")).toBeTruthy();
@@ -835,10 +837,10 @@ describe("EventDetailScreen", () => {
       expect(reorderTodoMock).not.toHaveBeenCalled();
       expect(getByTestId("event-todo-checkbox-todo-1")).toBeTruthy();
       expect(getByTestId("event-todo-input")).toBeTruthy();
-      expect(queryByTestId("event-todo-drag-handle-todo-1")).toBeNull();
+      expect(queryByTestId("event-todo-move-down-todo-1")).toBeNull();
     });
 
-    it("confirming without dragging anything does not call reorderTodo (nothing actually changed)", async () => {
+    it("confirming without moving anything does not call reorderTodo (nothing actually changed)", async () => {
       const reorderTodoMock = jest.fn();
       const { refetchTodos } = mockCommonHooks({ todos: TWO_TODOS });
       (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
@@ -850,7 +852,84 @@ describe("EventDetailScreen", () => {
       expect(reorderTodoMock).not.toHaveBeenCalled();
       expect(refetchTodos).not.toHaveBeenCalled();
       expect(getByTestId("event-todo-checkbox-todo-1")).toBeTruthy();
-      expect(queryByTestId("event-todo-drag-handle-todo-1")).toBeNull();
+      expect(queryByTestId("event-todo-move-down-todo-1")).toBeNull();
+    });
+
+    describe("ボタンで1つずつ上下に動かす", () => {
+      it("shows move up/down buttons only on the tapped row, and tapping it again hides them", async () => {
+        mockCommonHooks({ todos: TWO_TODOS });
+
+        const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+        await fireEvent.press(getByTestId("event-todo-reorder-start"));
+
+        await fireEvent.press(getByTestId("event-todo-todo-1"));
+        expect(getByTestId("event-todo-move-up-todo-1")).toBeTruthy();
+        expect(getByTestId("event-todo-move-down-todo-1")).toBeTruthy();
+        expect(queryByTestId("event-todo-move-down-todo-2")).toBeNull();
+
+        await fireEvent.press(getByTestId("event-todo-todo-1"));
+        expect(queryByTestId("event-todo-move-down-todo-1")).toBeNull();
+      });
+
+      it("moves the selected todo down and persists the new sequential order, then refetches, on confirm", async () => {
+        const reorderTodoMock = jest.fn().mockResolvedValue(true);
+        const { refetchTodos } = mockCommonHooks({ todos: TWO_TODOS });
+        (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+        const { getByTestId } = await render(<EventDetailScreen />);
+        await fireEvent.press(getByTestId("event-todo-reorder-start"));
+        await fireEvent.press(getByTestId("event-todo-todo-1"));
+        await fireEvent.press(getByTestId("event-todo-move-down-todo-1"));
+        await fireEvent.press(getByTestId("event-todo-reorder-confirm"));
+
+        await waitFor(() => expect(reorderTodoMock).toHaveBeenCalledWith("todo-2", 1));
+        expect(reorderTodoMock).toHaveBeenCalledWith("todo-1", 2);
+        await waitFor(() => expect(refetchTodos).toHaveBeenCalled());
+      });
+
+      it("moves the selected todo up", async () => {
+        const reorderTodoMock = jest.fn().mockResolvedValue(true);
+        mockCommonHooks({ todos: TWO_TODOS });
+        (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+        const { getByTestId } = await render(<EventDetailScreen />);
+        await fireEvent.press(getByTestId("event-todo-reorder-start"));
+        await fireEvent.press(getByTestId("event-todo-todo-2"));
+        await fireEvent.press(getByTestId("event-todo-move-up-todo-2"));
+        await fireEvent.press(getByTestId("event-todo-reorder-confirm"));
+
+        await waitFor(() => expect(reorderTodoMock).toHaveBeenCalledWith("todo-2", 1));
+        expect(reorderTodoMock).toHaveBeenCalledWith("todo-1", 2);
+      });
+
+      it("disables moving the first todo up and the last todo down", async () => {
+        mockCommonHooks({ todos: TWO_TODOS });
+
+        const { getByTestId } = await render(<EventDetailScreen />);
+        await fireEvent.press(getByTestId("event-todo-reorder-start"));
+
+        await fireEvent.press(getByTestId("event-todo-todo-1"));
+        expect(getByTestId("event-todo-move-up-todo-1").props.accessibilityState).toMatchObject({ disabled: true });
+        expect(getByTestId("event-todo-move-down-todo-1").props.accessibilityState).toMatchObject({ disabled: false });
+
+        await fireEvent.press(getByTestId("event-todo-todo-1")); // deselect
+        await fireEvent.press(getByTestId("event-todo-todo-2"));
+        expect(getByTestId("event-todo-move-down-todo-2").props.accessibilityState).toMatchObject({ disabled: true });
+      });
+
+      it("discards moves when reorder mode is cancelled", async () => {
+        const reorderTodoMock = jest.fn().mockResolvedValue(true);
+        mockCommonHooks({ todos: TWO_TODOS });
+        (useReorderTodo as jest.Mock).mockReturnValue({ reorderTodo: reorderTodoMock, isSubmitting: false, error: null });
+
+        const { getByTestId } = await render(<EventDetailScreen />);
+        await fireEvent.press(getByTestId("event-todo-reorder-start"));
+        await fireEvent.press(getByTestId("event-todo-todo-1"));
+        await fireEvent.press(getByTestId("event-todo-move-down-todo-1"));
+        await fireEvent.press(getByTestId("event-todo-reorder-cancel"));
+
+        expect(reorderTodoMock).not.toHaveBeenCalled();
+      });
     });
   });
 

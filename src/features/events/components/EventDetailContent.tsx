@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -61,16 +60,11 @@ import {
 } from "../../todos/hooks";
 import { sequentialSortOrders } from "../../todos/reorder";
 import type { Todo } from "../../todos/types";
-import { useDragReorder } from "../../todos/useDragReorder";
+import { useSelectionReorder } from "../../todos/useSelectionReorder";
 import { EventTodoRow } from "./EventTodoRow";
 import { Icon } from "../../../shared/components/Icon";
 import { formatDateTimeRange, toJstDateKey } from "../../../shared/utils/formatDateTime";
 import { normalizeUrl } from "../../../shared/utils/url";
-
-// EventTodoRowの並べ替えモード時の行の高さ(概算) - ドラッグ中に指がどの行の
-// 位置まで来たかをこの値で割って判定するための目安値(可変長タイトルの
-// 実測はせず、単純さを優先する)。
-const TODO_ROW_HEIGHT = 40;
 
 export interface EventDetailContentProps {
   eventId: string;
@@ -147,13 +141,13 @@ export function EventDetailContent({
   const { updateTodo } = useUpdateTodo();
   const { reorderTodo } = useReorderTodo();
   const [newTodoTitle, setNewTodoTitle] = useState("");
-  // 並べ替えモード中は、確定(✓)を押すまでtodos自体には触れず、ドラッグ中の
-  // 並びだけをこのフックのローカル状態(todoDrag.order)で持つ。
+  // 並べ替えモード中は、確定(✓)を押すまでtodos自体には触れず、動かしている
+  // 並びだけをこのフックのローカル状態(todoReorder.order)で持つ。
   const [isReorderingTodos, setIsReorderingTodos] = useState(false);
-  const todoDrag = useDragReorder(todos.map((todo) => todo.id), TODO_ROW_HEIGHT);
+  const todoReorder = useSelectionReorder(todos.map((todo) => todo.id));
 
   const handleStartReorderTodos = () => {
-    todoDrag.reset(todos.map((todo) => todo.id));
+    todoReorder.reset(todos.map((todo) => todo.id));
     setIsReorderingTodos(true);
   };
 
@@ -163,8 +157,8 @@ export function EventDetailContent({
 
   const handleConfirmReorderTodos = async () => {
     const originalOrder = todos.map((todo) => todo.id);
-    if (JSON.stringify(todoDrag.order) !== JSON.stringify(originalOrder)) {
-      for (const { id, sortOrder } of sequentialSortOrders(todoDrag.order)) {
+    if (JSON.stringify(todoReorder.order) !== JSON.stringify(originalOrder)) {
+      for (const { id, sortOrder } of sequentialSortOrders(todoReorder.order)) {
         await reorderTodo(id, sortOrder);
       }
       await refetchTodos();
@@ -582,28 +576,27 @@ export function EventDetailContent({
       </View>
 
       {isReorderingTodos
-        ? todoDrag.order.map((todoId) => {
+        ? todoReorder.order.map((todoId) => {
             const todo = todosById.get(todoId);
             if (!todo) return null;
-            const isDragging = todoDrag.draggingId === todoId;
             return (
-              <Animated.View
+              <EventTodoRow
                 key={todoId}
-                style={isDragging ? { transform: [{ translateY: todoDrag.dragY }], zIndex: 1 } : undefined}
-              >
-                <EventTodoRow
-                  todo={todo}
-                  isAllDay={event.isAllDay}
-                  eventStartAt={event.startAt}
-                  onToggle={handleToggleTodo}
-                  onDelete={handleDeleteTodo}
-                  onSetReminder={handleSetTodoReminder}
-                  onEditTitle={handleEditTodoTitle}
-                  isReordering
-                  isDragging={isDragging}
-                  dragHandlePanHandlers={todoDrag.panHandlersFor(todoId)}
-                />
-              </Animated.View>
+                todo={todo}
+                isAllDay={event.isAllDay}
+                eventStartAt={event.startAt}
+                onToggle={handleToggleTodo}
+                onDelete={handleDeleteTodo}
+                onSetReminder={handleSetTodoReminder}
+                onEditTitle={handleEditTodoTitle}
+                isReordering
+                isSelected={todoReorder.selectedId === todoId}
+                onSelectForReorder={() => todoReorder.select(todoId)}
+                canMoveUp={todoReorder.canMoveUp}
+                canMoveDown={todoReorder.canMoveDown}
+                onMoveUp={todoReorder.moveSelectedUp}
+                onMoveDown={todoReorder.moveSelectedDown}
+              />
             );
           })
         : todos.map((todo) => (

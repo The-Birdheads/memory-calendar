@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { Modal, PanResponder, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Icon } from "../../../shared/components/Icon";
+import { ReorderMoveButtons } from "../../todos/components/ReorderMoveButtons";
 import { TodoReminderPicker } from "../../todos/components/TodoReminderPicker";
 import type { Todo } from "../../todos/types";
-
-type PanHandlers = ReturnType<typeof PanResponder.create>["panHandlers"];
 
 export interface EventTodoRowProps {
   todo: Todo;
@@ -17,11 +16,16 @@ export interface EventTodoRowProps {
   onDelete: (todoId: string) => void;
   onSetReminder: (todoId: string, reminderAt: string | null) => void;
   onEditTitle: (todoId: string, title: string) => void;
-  /** 並べ替えモード中は、チェックボックスの代わりにドラッグハンドルを出し、
-   * 編集/リマインド/削除は隠してドラッグだけに専念できるようにする。 */
+  /** 並べ替えモード中は、チェックボックスや編集/リマインド/削除を隠し、
+   * タイトルだけの行にする。行をタップすると選択され、選択中の行に
+   * 「1つ上へ/1つ下へ」ボタンが出る。 */
   isReordering?: boolean;
-  isDragging?: boolean;
-  dragHandlePanHandlers?: PanHandlers;
+  isSelected?: boolean;
+  onSelectForReorder?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 /**
@@ -40,8 +44,12 @@ export function EventTodoRow({
   onSetReminder,
   onEditTitle,
   isReordering,
-  isDragging,
-  dragHandlePanHandlers,
+  isSelected,
+  onSelectForReorder,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
 }: EventTodoRowProps) {
   const [isReminderModalVisible, setIsReminderModalVisible] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -66,17 +74,26 @@ export function EventTodoRow({
 
   if (isReordering) {
     return (
-      <View
-        style={[styles.row, styles.reorderRow, isDragging && styles.reorderRowDragging]}
+      <TouchableOpacity
+        activeOpacity={0.7}
+        style={[styles.row, styles.reorderRow, isSelected && styles.reorderRowSelected]}
         testID={`event-todo-${todo.id}`}
+        onPress={onSelectForReorder}
       >
-        <View testID={`event-todo-drag-handle-${todo.id}`} {...dragHandlePanHandlers}>
-          <Icon name="drag-handle" size={16} color="#999" />
-        </View>
         <Text style={[styles.title, todo.isDone && styles.doneText]} numberOfLines={1}>
           {todo.title}
         </Text>
-      </View>
+        {isSelected ? (
+          <ReorderMoveButtons
+            upTestID={`event-todo-move-up-${todo.id}`}
+            downTestID={`event-todo-move-down-${todo.id}`}
+            canMoveUp={!!canMoveUp}
+            canMoveDown={!!canMoveDown}
+            onMoveUp={() => onMoveUp?.()}
+            onMoveDown={() => onMoveDown?.()}
+          />
+        ) : null}
+      </TouchableOpacity>
     );
   }
 
@@ -188,14 +205,9 @@ const styles = StyleSheet.create({
   reorderRow: {
     backgroundColor: "#fff",
   },
-  reorderRowDragging: {
-    backgroundColor: "#f2f3f5",
+  reorderRowSelected: {
+    backgroundColor: "#e8f0fe",
     borderRadius: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
   title: {
     flex: 1,

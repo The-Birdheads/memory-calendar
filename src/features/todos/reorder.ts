@@ -1,7 +1,7 @@
 /**
- * Pure helpers behind the ToDo drag-and-drop reorder feature - kept free of
- * React/gesture code so they're easy to unit test. The gesture handling
- * itself (useDragReorder) just calls moveItem on every touch move; on
+ * Pure helpers behind the ToDo reorder feature - kept free of
+ * React/gesture code so they're easy to unit test. The button handling
+ * itself (useSelectionReorder) just calls moveItem for each ↑/↓ press; on
  * confirm, the caller reassigns every row in the final order a fresh
  * sequential sort_order (see sequentialSortOrders) - lists here are short,
  * so writing every row is simpler and more robust than fractional-indexing
