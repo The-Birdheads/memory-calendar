@@ -186,6 +186,7 @@ function MealFormModalContent({
         >
         <ScrollView contentContainerStyle={styles.modalScrollContent} keyboardShouldPersistTaps="handled">
         <TouchableOpacity
+          testID="meal-form-card"
           activeOpacity={1}
           onPress={() => {}}
           style={styles.modalCard}
@@ -260,7 +261,7 @@ function MealFormModalContent({
           </TouchableOpacity>
 
           {isDatePickerOpen ? (
-            <View style={styles.pickerContainer}>
+            <View testID="meal-form-date-picker-container" style={styles.pickerContainer}>
               {Platform.OS === "web" ? (
                 <TextInput
                   testID="meal-form-date-picker"
@@ -376,7 +377,7 @@ function MealFormModalContent({
           <TouchableOpacity
             activeOpacity={1}
             onPress={() => {}}
-            style={styles.modalCard}
+            style={[styles.modalCard, styles.confirmCard]}
           >
             <Text style={styles.modalTitle}>
               {title || "この献立"}を削除しますか?
@@ -431,12 +432,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  // iOSのinlineカレンダーは約320pt幅が要るので、幅は画面の94%・左右の余白は
+  // 16ptに絞って、カードの内側に収まるようにする(85%/余白20だと約294ptで
+  // はみ出していた)。削除確認ダイアログも同じカードスタイルを共有する。
   modalCard: {
-    width: "85%",
+    width: "94%",
     borderRadius: 12,
-    padding: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
     gap: 12,
     backgroundColor: "#fff",
+  },
+  confirmCard: {
+    width: "85%",
+    paddingHorizontal: 20,
   },
   modalTitle: {
     fontSize: 16,
@@ -472,9 +481,11 @@ const styles = StyleSheet.create({
   },
   pickerContainer: {
     gap: 8,
-    alignItems: "flex-end",
+    alignSelf: "stretch",
+    overflow: "hidden",
   },
   pickerDoneButton: {
+    alignSelf: "flex-end",
     paddingHorizontal: 12,
     paddingVertical: 6,
   },

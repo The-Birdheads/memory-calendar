@@ -401,4 +401,41 @@ describe("MealFormModal", () => {
       expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ calendarId: "cal-2" }));
     });
   });
+
+  describe("日付ピッカー(inlineカレンダー)の収まり", () => {
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+
+    it("makes the form card wide enough (>= 92% of the screen, with slim side padding) to hold iOS's inline calendar, which needs ~320pt (regression: the calendar overflowed the card)", async () => {
+      const { getByTestId } = await render(
+        <MealFormModal
+          target={{ mode: "create", initialValues: CREATE_INITIAL_VALUES }}
+          calendars={CALENDARS}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+        />
+      );
+
+      const card = flattenStyle(getByTestId("meal-form-card").props.style);
+      expect(parseFloat(String(card.width))).toBeGreaterThanOrEqual(92);
+      expect(card.paddingHorizontal).toBeLessThanOrEqual(16);
+    });
+
+    it("lets the opened picker fill the card's inner width and clips anything beyond it, instead of overhanging the card", async () => {
+      const { getByTestId } = await render(
+        <MealFormModal
+          target={{ mode: "create", initialValues: CREATE_INITIAL_VALUES }}
+          calendars={CALENDARS}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+        />
+      );
+
+      await fireEvent.press(getByTestId("meal-form-date-button"));
+
+      const container = flattenStyle(getByTestId("meal-form-date-picker-container").props.style);
+      expect(container.alignSelf).toBe("stretch");
+      expect(container.overflow).toBe("hidden");
+    });
+  });
 });
