@@ -23,6 +23,7 @@ export function FilterIcon({ size = 18, color = "#444" }: FilterIconProps) {
       {widths.map((width, index) => (
         <View
           key={index}
+          testID="filter-icon-bar"
           style={[
             styles.bar,
             { width, height: barHeight, borderRadius: barHeight / 2, backgroundColor: color },

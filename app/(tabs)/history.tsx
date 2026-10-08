@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { FlatList, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Tabs, useFocusEffect } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
@@ -29,6 +29,7 @@ import { flattenTagTree, sortTagsHierarchically } from "../../src/features/tags/
 import { DateRangeFilterSection } from "../../src/shared/components/DateRangeFilterSection";
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
+import { KeywordFilterField } from "../../src/shared/components/KeywordFilterField";
 import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
 import { matchesKeyword } from "../../src/shared/utils/keywordFilter";
 import { jstNow, todayJstDateKey, toJstDateKey } from "../../src/shared/utils/formatDateTime";
@@ -103,7 +104,12 @@ function TimelinePanel() {
   const [isUntaggedSelected, setIsUntaggedSelected] = useState(false);
   const [periodStart, setPeriodStart] = useState<string | null>(null);
   const [periodEnd, setPeriodEnd] = useState<string | null>(null);
+  // keyword = 絞り込みに反映済みの値。入力中の値はKeywordFilterField内で持ち、
+  // 「絞り込み」ボタンを押した時だけここへ反映する(入力のたびに画面を
+  // 再描画すると日本語の変換が途切れるため)。
   const [keyword, setKeyword] = useState("");
+  const keywordDraftRef = useRef("");
+  const [keywordFieldResetCount, setKeywordFieldResetCount] = useState(0);
 
   const bulk = useBulkTagSelection();
   const { attachTagsToEvents } = useAttachTagsToEvents();
@@ -116,6 +122,8 @@ function TimelinePanel() {
     setPeriodStart(null);
     setPeriodEnd(null);
     setKeyword("");
+    keywordDraftRef.current = "";
+    setKeywordFieldResetCount((count) => count + 1);
   }, []);
 
   const handleSelectAllTags = () => {
@@ -259,18 +267,20 @@ function TimelinePanel() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <FilterButton testID="history-filter" isActive={isFilterActive} onReset={handleResetFilters}>
+            <FilterButton
+              testID="history-filter"
+              isActive={isFilterActive}
+              onReset={handleResetFilters}
+              onApply={() => setKeyword(keywordDraftRef.current)}
+            >
               <FilterSection title="キーワード(予定のタイトル)">
-                <TextInput
+                <KeywordFilterField
+                  key={keywordFieldResetCount}
                   testID="history-keyword-input"
-                  style={styles.keywordInput}
-                  placeholder="タイトルで検索"
-                  value={keyword}
-                  onChangeText={setKeyword}
-                  returnKeyType="search"
-                  clearButtonMode="while-editing"
-                  autoCapitalize="none"
-                  autoCorrect={false}
+                  appliedValue={keyword}
+                  onDraftChange={(value) => {
+                    keywordDraftRef.current = value;
+                  }}
                 />
               </FilterSection>
               <FilterSection title="カレンダー">
@@ -831,15 +841,6 @@ const styles = StyleSheet.create({
   },
   // カレンダー選択チップ(CalendarSwitchChip)・タグ選択チップ(TagPickerRow)と
   // 同じ大きさ・角丸に揃える(選択時はborder 1→2の分だけpaddingを1px減らす)。
-  keywordInput: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#fff",
-  },
   filterChip: {
     borderWidth: 1,
     borderColor: "#ccc",

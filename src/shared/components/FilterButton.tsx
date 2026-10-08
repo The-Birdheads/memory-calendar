@@ -14,11 +14,18 @@ import {
 import { FilterIcon } from "./FilterIcon";
 
 export interface FilterButtonProps {
-  /** Base testID - also prefixes the close/reset/active-dot testIDs. */
+  /** Base testID - also prefixes the close/reset/apply/active-indicator testIDs. */
   testID: string;
   /** Whether to show the small active-indicator dot on the collapsed icon. */
   isActive: boolean;
   onReset: () => void;
+  /**
+   * 指定すると、シート下部の「閉じる」の左に「絞り込み」ボタンが出る。押すと
+   * このコールバックを呼んでシートを閉じる。入力のたびに絞り込みが走ると
+   * 日本語の変換が途切れるキーワード入力のように、「確定してから一括で
+   * 反映したい」フィルターがある時に使う(未指定ならボタン自体を出さない)。
+   */
+  onApply?: () => void;
   /** The filter controls to show inside the sheet (e.g. FilterSection blocks). */
   children: ReactNode;
 }
@@ -33,14 +40,20 @@ export interface FilterButtonProps {
  * own selection logic, so each screen stays free to offer only the
  * dimensions (calendar/tag/period/...) that make sense for it.
  */
-export function FilterButton({ testID, isActive, onReset, children }: FilterButtonProps) {
+export function FilterButton({ testID, isActive, onReset, onApply, children }: FilterButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <>
       <TouchableOpacity testID={testID} style={styles.trigger} onPress={() => setIsOpen(true)}>
-        <FilterIcon size={18} color="#444" />
-        {isActive ? <View testID={`${testID}-active-dot`} style={styles.activeDot} /> : null}
+        {/* 絞り込み中は青の塗りつぶし+白いアイコンにして、効いていることが
+            一目で分かるようにする(小さな赤い点だと気づきにくかった)。 */}
+        <View
+          testID={isActive ? `${testID}-active-indicator` : undefined}
+          style={[styles.iconBox, isActive && styles.iconBoxActive]}
+        >
+          <FilterIcon size={18} color={isActive ? "#fff" : "#444"} />
+        </View>
       </TouchableOpacity>
 
       <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => setIsOpen(false)}>
@@ -67,13 +80,27 @@ export function FilterButton({ testID, isActive, onReset, children }: FilterButt
 
                 <ScrollView style={styles.sheetBody}>{children}</ScrollView>
 
-                <TouchableOpacity
-                  testID={`${testID}-close`}
-                  style={styles.closeButton}
-                  onPress={() => setIsOpen(false)}
-                >
-                  <Text style={styles.closeButtonText}>閉じる</Text>
-                </TouchableOpacity>
+                <View style={styles.footer}>
+                  {onApply ? (
+                    <TouchableOpacity
+                      testID={`${testID}-apply`}
+                      style={[styles.footerButton, styles.applyButton]}
+                      onPress={() => {
+                        onApply();
+                        setIsOpen(false);
+                      }}
+                    >
+                      <Text style={styles.applyButtonText}>絞り込み</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    testID={`${testID}-close`}
+                    style={[styles.footerButton, styles.closeButton]}
+                    onPress={() => setIsOpen(false)}
+                  >
+                    <Text style={styles.closeButtonText}>閉じる</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </TouchableWithoutFeedback>
           </TouchableOpacity>
@@ -102,14 +129,15 @@ const styles = StyleSheet.create({
   trigger: {
     padding: 8,
   },
-  activeDot: {
-    position: "absolute",
-    top: 2,
-    right: 2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#e24b4a",
+  iconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconBoxActive: {
+    backgroundColor: "#2f6fed",
   },
   keyboardAvoider: {
     flex: 1,
@@ -165,13 +193,28 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 8,
   },
-  closeButton: {
-    alignItems: "center",
-    paddingVertical: 16,
+  footer: {
+    flexDirection: "row",
+    gap: 10,
     marginHorizontal: 20,
     marginTop: 8,
     marginBottom: 20,
+  },
+  footerButton: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 16,
     borderRadius: 12,
+  },
+  applyButton: {
+    backgroundColor: "#2f6fed",
+  },
+  applyButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  closeButton: {
     backgroundColor: "#f2f3f5",
   },
   closeButtonText: {

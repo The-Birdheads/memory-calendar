@@ -498,16 +498,16 @@ describe("HistoryScreen", () => {
 
       const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
 
-      expect(queryByTestId("history-filter-active-dot")).toBeNull();
+      expect(queryByTestId("history-filter-active-indicator")).toBeNull();
 
       await fireEvent.press(getByTestId("history-filter"));
       await fireEvent.press(getByTestId("history-calendar-filter-cal-2"));
 
-      expect(getByTestId("history-filter-active-dot")).toBeTruthy();
+      expect(getByTestId("history-filter-active-indicator")).toBeTruthy();
 
       await fireEvent.press(getByTestId("history-filter-reset"));
 
-      expect(queryByTestId("history-filter-active-dot")).toBeNull();
+      expect(queryByTestId("history-filter-active-indicator")).toBeNull();
     });
 
     it("resets both the calendar and tag selections when the sheet's reset link is pressed", async () => {
@@ -562,61 +562,123 @@ describe("HistoryScreen", () => {
       expect(queryByText("発表会")).toBeNull();
     });
 
-    it("narrows the timeline by a title keyword typed into the filter sheet, and shows everything again when it is cleared", async () => {
-      mockCommonHooks();
-      (usePastEventsByTag as jest.Mock).mockReturnValue({
-        events: [
-          { id: "event-1", calendarId: "cal-1", title: "夏祭り", startAt: "2026-08-01T10:00:00.000Z" },
-          { id: "event-2", calendarId: "cal-1", title: "発表会", startAt: "2026-09-10T10:00:00.000Z" },
-        ],
-        isLoading: false,
-        error: null,
+    describe("キーワード検索(「絞り込み」ボタンで確定)", () => {
+      const TWO_EVENTS = [
+        { id: "event-1", calendarId: "cal-1", title: "夏祭り", startAt: "2026-08-01T10:00:00.000Z" },
+        { id: "event-2", calendarId: "cal-1", title: "発表会", startAt: "2026-09-10T10:00:00.000Z" },
+      ];
+
+      function mockTwoEvents() {
+        mockCommonHooks();
+        (usePastEventsByTag as jest.Mock).mockReturnValue({ events: TWO_EVENTS, isLoading: false, error: null });
+      }
+
+      it("narrows the timeline by the title keyword only after 「絞り込み」 is pressed, and shows everything again when applied empty", async () => {
+        mockTwoEvents();
+
+        const { getByTestId, getByText, queryByText } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-filter"));
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
+
+        // Typing alone doesn't filter - IME composition must not be interrupted.
+        expect(getByText("夏祭り")).toBeTruthy();
+        expect(getByText("発表会")).toBeTruthy();
+
+        await fireEvent.press(getByTestId("history-filter-apply"));
+
+        expect(getByText("夏祭り")).toBeTruthy();
+        expect(queryByText("発表会")).toBeNull();
+
+        await fireEvent.press(getByTestId("history-filter"));
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "");
+        await fireEvent.press(getByTestId("history-filter-apply"));
+
+        expect(getByText("夏祭り")).toBeTruthy();
+        expect(getByText("発表会")).toBeTruthy();
       });
 
-      const { getByTestId, getByText, queryByText } = await render(<HistoryScreen />);
-      await fireEvent.press(getByTestId("history-filter"));
+      it("does not re-render the screen on each keystroke (a controlled input rebuilt from screen state broke Japanese IME conversion)", async () => {
+        mockTwoEvents();
 
-      await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
+        const { getByTestId } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-filter"));
+        const callsBefore = (usePastEventsByTag as jest.Mock).mock.calls.length;
 
-      expect(getByText("夏祭り")).toBeTruthy();
-      expect(queryByText("発表会")).toBeNull();
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "あ");
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "あし");
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "あした");
 
-      await fireEvent.changeText(getByTestId("history-keyword-input"), "");
-
-      expect(getByText("夏祭り")).toBeTruthy();
-      expect(getByText("発表会")).toBeTruthy();
-    });
-
-    it("shows the empty message when no event title matches the keyword", async () => {
-      mockCommonHooks();
-      (usePastEventsByTag as jest.Mock).mockReturnValue({
-        events: [{ id: "event-1", calendarId: "cal-1", title: "夏祭り", startAt: "2026-08-01T10:00:00.000Z" }],
-        isLoading: false,
-        error: null,
+        expect((usePastEventsByTag as jest.Mock).mock.calls.length).toBe(callsBefore);
+        expect(getByTestId("history-keyword-input").props.value).toBe("あした");
       });
 
-      const { getByTestId, getByText } = await render(<HistoryScreen />);
-      await fireEvent.press(getByTestId("history-filter"));
-      await fireEvent.changeText(getByTestId("history-keyword-input"), "ハロウィン");
+      it("keeps the applied keyword in the input when the sheet is reopened", async () => {
+        mockTwoEvents();
 
-      expect(getByText("該当する予定がありません")).toBeTruthy();
-    });
+        const { getByTestId } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-filter"));
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
+        await fireEvent.press(getByTestId("history-filter-apply"));
 
-    it("counts the keyword as an active filter (indicator dot) and clears it via reset", async () => {
-      mockCommonHooks();
+        await fireEvent.press(getByTestId("history-filter"));
 
-      const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
-      await fireEvent.press(getByTestId("history-filter"));
+        expect(getByTestId("history-keyword-input").props.value).toBe("祭り");
+      });
 
-      expect(queryByTestId("history-filter-active-dot")).toBeNull();
+      it("discards an unapplied keyword when the sheet is closed with 「閉じる」", async () => {
+        mockTwoEvents();
 
-      await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
-      expect(getByTestId("history-filter-active-dot")).toBeTruthy();
+        const { getByTestId, getByText } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-filter"));
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
+        await fireEvent.press(getByTestId("history-filter-close"));
 
-      await fireEvent.press(getByTestId("history-filter-reset"));
+        expect(getByText("発表会")).toBeTruthy();
+        await fireEvent.press(getByTestId("history-filter"));
+        expect(getByTestId("history-keyword-input").props.value).toBe("");
+      });
 
-      expect(queryByTestId("history-filter-active-dot")).toBeNull();
-      expect(getByTestId("history-keyword-input").props.value).toBe("");
+      it("shows the empty message when no event title matches the applied keyword", async () => {
+        mockTwoEvents();
+
+        const { getByTestId, getByText } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-filter"));
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "ハロウィン");
+        await fireEvent.press(getByTestId("history-filter-apply"));
+
+        expect(getByText("該当する予定がありません")).toBeTruthy();
+      });
+
+      it("counts only an applied keyword as an active filter (blue trigger) and clears it, input included, via reset", async () => {
+        mockCommonHooks();
+
+        const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-filter"));
+
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
+        expect(queryByTestId("history-filter-active-indicator")).toBeNull();
+
+        await fireEvent.press(getByTestId("history-filter-apply"));
+        expect(getByTestId("history-filter-active-indicator")).toBeTruthy();
+
+        await fireEvent.press(getByTestId("history-filter"));
+        await fireEvent.press(getByTestId("history-filter-reset"));
+
+        expect(queryByTestId("history-filter-active-indicator")).toBeNull();
+        expect(getByTestId("history-keyword-input").props.value).toBe("");
+      });
+
+      it("clears a typed-but-unapplied keyword from the input when reset is pressed", async () => {
+        mockCommonHooks();
+
+        const { getByTestId } = await render(<HistoryScreen />);
+        await fireEvent.press(getByTestId("history-filter"));
+        await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
+
+        await fireEvent.press(getByTestId("history-filter-reset"));
+
+        expect(getByTestId("history-keyword-input").props.value).toBe("");
+      });
     });
 
     it("opens the event detail in an in-tab modal (not navigation) when a past event row is pressed, showing its own go-to-calendar button, and closes it via onBack", async () => {
