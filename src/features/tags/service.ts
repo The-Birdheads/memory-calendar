@@ -1,6 +1,7 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
 import { err, ok, type Result } from "../../shared/types/result";
+import { chunk } from "../../shared/utils/chunk";
 import type { CreateTagInput, Tag, TagError, TagTreeNode, UpdateTagInput } from "./types";
 
 interface TagRow {
@@ -233,19 +234,25 @@ export async function listTagsForEvents(
     return ok({});
   }
 
-  const { data, error } = await client
-    .from("event_tags")
-    .select("event_id, tags(*)")
-    .in("event_id", eventIds);
-
-  if (error || !data) {
-    return err(mapTagError(error as PostgrestError));
-  }
+  // .in()はIDがURLに載るので、件数が多いとリクエストごと失敗する。分けて問い合わせる。
+  const results = await Promise.all(
+    chunk(eventIds).map((ids) =>
+      client.from("event_tags").select("event_id, tags(*)").in("event_id", ids)
+    )
+  );
 
   const tagsByEventId: Record<string, Tag[]> = {};
-  for (const row of data as unknown as { event_id: string; tags: TagRow }[]) {
-    const tags = tagsByEventId[row.event_id] ?? (tagsByEventId[row.event_id] = []);
-    tags.push(mapTagRow(row.tags));
+  for (const { data, error } of results) {
+    if (error || !data) {
+      return err(mapTagError(error as PostgrestError));
+    }
+    for (const row of data as unknown as { event_id: string; tags: TagRow | null }[]) {
+      // 読めないタグ(RLSなどで取得できない行)が1件あっても、他の予定のタグ表示を
+      // 巻き込んで全滅させない。
+      if (!row.tags) continue;
+      const tags = tagsByEventId[row.event_id] ?? (tagsByEventId[row.event_id] = []);
+      tags.push(mapTagRow(row.tags));
+    }
   }
 
   return ok(tagsByEventId);

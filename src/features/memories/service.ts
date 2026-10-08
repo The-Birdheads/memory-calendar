@@ -3,6 +3,7 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { listEventsInRangeForCalendars } from "../events/service";
 import type { DateRange, Event, EventError } from "../events/types";
 import { err, ok, type Result } from "../../shared/types/result";
+import { chunk } from "../../shared/utils/chunk";
 import type { EventPhoto, MemoryEntry, MemoryError, MemoryFilter, PhotoUploadInput } from "./types";
 
 interface EventPhotoRow {
@@ -194,13 +195,20 @@ export async function listEventIdsWithPhotos(
     return ok(new Set());
   }
 
-  const { data, error } = await client.from("event_photos").select("event_id").in("event_id", eventIds);
+  // .in()はIDがURLに載るので、件数が多いとリクエストごと失敗する。分けて問い合わせる。
+  const results = await Promise.all(
+    chunk(eventIds).map((ids) => client.from("event_photos").select("event_id").in("event_id", ids))
+  );
 
-  if (error || !data) {
-    return err(mapMemoryError(error as PostgrestError));
+  const withPhotos = new Set<string>();
+  for (const { data, error } of results) {
+    if (error || !data) {
+      return err(mapMemoryError(error as PostgrestError));
+    }
+    (data as { event_id: string }[]).forEach((row) => withPhotos.add(row.event_id));
   }
 
-  return ok(new Set((data as { event_id: string }[]).map((row) => row.event_id)));
+  return ok(withPhotos);
 }
 
 export async function listMemoriesTimeline(
@@ -227,20 +235,21 @@ export async function listMemoriesTimeline(
   const eventIds = pastEvents.map((event) => event.id);
   // サムネイルが設定された予定だけをタイムラインに出す(カメラロールのように、
   // 誰かが「これ」と選んだ写真がある予定のみ)。
-  const { data, error } = await client
-    .from("event_photos")
-    .select()
-    .in("event_id", eventIds)
-    .eq("is_thumbnail", true);
-
-  if (error) {
-    return err(mapMemoryError(error as PostgrestError));
-  }
+  const thumbnailResults = await Promise.all(
+    chunk(eventIds).map((ids) =>
+      client.from("event_photos").select().in("event_id", ids).eq("is_thumbnail", true)
+    )
+  );
 
   const thumbnailByEventId = new Map<string, string>();
-  ((data as EventPhotoRow[]) ?? []).forEach((row) => {
-    thumbnailByEventId.set(row.event_id, row.storage_path);
-  });
+  for (const { data, error } of thumbnailResults) {
+    if (error) {
+      return err(mapMemoryError(error as PostgrestError));
+    }
+    ((data as EventPhotoRow[]) ?? []).forEach((row) => {
+      thumbnailByEventId.set(row.event_id, row.storage_path);
+    });
+  }
 
   return ok(
     pastEvents

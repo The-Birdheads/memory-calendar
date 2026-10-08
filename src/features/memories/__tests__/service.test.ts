@@ -328,6 +328,28 @@ describe("listPhotosForEvent", () => {
 });
 
 describe("listEventIdsWithPhotos", () => {
+  it("queries in chunks of at most 100 event ids and unions the results (same URL-length reason as listTagsForEvents)", async () => {
+    const ids = Array.from({ length: 230 }, (_, i) => `event-${i}`);
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest
+      .fn()
+      .mockImplementation(async (_column: string, chunkIds: string[]) => ({
+        data: chunkIds.filter((eid) => eid === "event-5" || eid === "event-229").map((eid) => ({ event_id: eid })),
+        error: null,
+      }));
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn }),
+    } as unknown as SupabaseClient;
+
+    const result = await listEventIdsWithPhotos(client, ids);
+
+    expect(inFn).toHaveBeenCalledTimes(3);
+    for (const call of inFn.mock.calls) {
+      expect(call[1].length).toBeLessThanOrEqual(100);
+    }
+    expect(result).toEqual({ ok: true, value: new Set(["event-5", "event-229"]) });
+  });
+
   it("returns the set of event ids that have at least one photo", async () => {
     const rows = [{ event_id: "event-1" }, { event_id: "event-1" }, { event_id: "event-3" }];
     const select = jest.fn().mockReturnThis();

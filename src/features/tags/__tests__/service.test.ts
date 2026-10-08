@@ -462,6 +462,72 @@ describe("listTagsForEvent", () => {
 });
 
 describe("listTagsForEvents", () => {
+  it("queries in chunks of at most 100 event ids and merges the results, so a long timeline doesn't blow the URL length limit (regression: tags vanished once events piled up)", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `event-${i}`);
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest.fn().mockImplementation(async (_column: string, chunkIds: string[]) => ({
+      data: chunkIds.map((eid) => ({
+        event_id: eid,
+        tags: { id: `tag-${eid}`, parent_id: null, level: "major", name: `タグ${eid}`, color: "#ff0000", created_at: "2026-08-18T00:00:00.000Z" },
+      })),
+      error: null,
+    }));
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn }),
+    } as unknown as SupabaseClient;
+
+    const result = await listTagsForEvents(client, ids);
+
+    expect(inFn).toHaveBeenCalledTimes(3);
+    for (const call of inFn.mock.calls) {
+      expect(call[1].length).toBeLessThanOrEqual(100);
+    }
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Object.keys(result.value)).toHaveLength(250);
+      expect(result.value["event-249"][0].name).toBe("タグevent-249");
+    }
+  });
+
+  it("fails the whole lookup when any chunk fails, rather than silently showing a partial set", async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `event-${i}`);
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest
+      .fn()
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: "boom" } });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn }),
+    } as unknown as SupabaseClient;
+
+    const result = await listTagsForEvents(client, ids);
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("skips an event_tags row whose tag can't be read (null), instead of throwing and dropping every other event's tags", async () => {
+    const rows = [
+      { event_id: "event-1", tags: null },
+      {
+        event_id: "event-2",
+        tags: { id: "tag-3", parent_id: null, level: "major", name: "旅行", color: "#0000ff", created_at: "2026-08-18T00:02:00.000Z" },
+      },
+    ];
+    const select = jest.fn().mockReturnThis();
+    const inFn = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const client = {
+      from: jest.fn().mockReturnValue({ select, in: inFn }),
+    } as unknown as SupabaseClient;
+
+    const result = await listTagsForEvents(client, ["event-1", "event-2"]);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value["event-1"]).toBeUndefined();
+      expect(result.value["event-2"]).toHaveLength(1);
+    }
+  });
+
   it("groups the tags attached to each of the given events by event id", async () => {
     const rows = [
       {
