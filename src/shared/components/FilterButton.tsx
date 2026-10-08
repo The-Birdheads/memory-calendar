@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -42,36 +44,40 @@ export function FilterButton({ testID, isActive, onReset, children }: FilterButt
       </TouchableOpacity>
 
       <Modal visible={isOpen} transparent animationType="slide" onRequestClose={() => setIsOpen(false)}>
-        <TouchableOpacity
-          testID={`${testID}-overlay`}
-          style={styles.overlay}
-          activeOpacity={1}
-          onPress={() => setIsOpen(false)}
-        >
-          {/* Swallows the press so tapping the sheet itself doesn't bubble up
-              to the overlay's onPress (which would close it) - only tapping
-              outside the sheet should close it. */}
-          <TouchableWithoutFeedback onPress={() => {}}>
-            <View style={styles.sheet}>
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>絞り込み</Text>
-                <TouchableOpacity testID={`${testID}-reset`} onPress={onReset}>
-                  <Text style={styles.resetLink}>リセット</Text>
+        {/* キーワード入力欄などでキーボードが開いても、下端に張り付いたシートが
+            キーボードの下に隠れないよう持ち上げる。 */}
+        <KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <TouchableOpacity
+            testID={`${testID}-overlay`}
+            style={styles.overlay}
+            activeOpacity={1}
+            onPress={() => setIsOpen(false)}
+          >
+            {/* Swallows the press so tapping the sheet itself doesn't bubble up
+                to the overlay's onPress (which would close it) - only tapping
+                outside the sheet should close it. */}
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.sheet}>
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>絞り込み</Text>
+                  <TouchableOpacity testID={`${testID}-reset`} onPress={onReset}>
+                    <Text style={styles.resetLink}>リセット</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.sheetBody}>{children}</ScrollView>
+
+                <TouchableOpacity
+                  testID={`${testID}-close`}
+                  style={styles.closeButton}
+                  onPress={() => setIsOpen(false)}
+                >
+                  <Text style={styles.closeButtonText}>閉じる</Text>
                 </TouchableOpacity>
               </View>
-
-              <ScrollView style={styles.sheetBody}>{children}</ScrollView>
-
-              <TouchableOpacity
-                testID={`${testID}-close`}
-                style={styles.closeButton}
-                onPress={() => setIsOpen(false)}
-              >
-                <Text style={styles.closeButtonText}>閉じる</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableWithoutFeedback>
-        </TouchableOpacity>
+            </TouchableWithoutFeedback>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -104,6 +110,9 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: "#e24b4a",
+  },
+  keyboardAvoider: {
+    flex: 1,
   },
   overlay: {
     flex: 1,

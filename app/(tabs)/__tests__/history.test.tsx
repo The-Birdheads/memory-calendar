@@ -562,6 +562,63 @@ describe("HistoryScreen", () => {
       expect(queryByText("発表会")).toBeNull();
     });
 
+    it("narrows the timeline by a title keyword typed into the filter sheet, and shows everything again when it is cleared", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({
+        events: [
+          { id: "event-1", calendarId: "cal-1", title: "夏祭り", startAt: "2026-08-01T10:00:00.000Z" },
+          { id: "event-2", calendarId: "cal-1", title: "発表会", startAt: "2026-09-10T10:00:00.000Z" },
+        ],
+        isLoading: false,
+        error: null,
+      });
+
+      const { getByTestId, getByText, queryByText } = await render(<HistoryScreen />);
+      await fireEvent.press(getByTestId("history-filter"));
+
+      await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
+
+      expect(getByText("夏祭り")).toBeTruthy();
+      expect(queryByText("発表会")).toBeNull();
+
+      await fireEvent.changeText(getByTestId("history-keyword-input"), "");
+
+      expect(getByText("夏祭り")).toBeTruthy();
+      expect(getByText("発表会")).toBeTruthy();
+    });
+
+    it("shows the empty message when no event title matches the keyword", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({
+        events: [{ id: "event-1", calendarId: "cal-1", title: "夏祭り", startAt: "2026-08-01T10:00:00.000Z" }],
+        isLoading: false,
+        error: null,
+      });
+
+      const { getByTestId, getByText } = await render(<HistoryScreen />);
+      await fireEvent.press(getByTestId("history-filter"));
+      await fireEvent.changeText(getByTestId("history-keyword-input"), "ハロウィン");
+
+      expect(getByText("該当する予定がありません")).toBeTruthy();
+    });
+
+    it("counts the keyword as an active filter (indicator dot) and clears it via reset", async () => {
+      mockCommonHooks();
+
+      const { getByTestId, queryByTestId } = await render(<HistoryScreen />);
+      await fireEvent.press(getByTestId("history-filter"));
+
+      expect(queryByTestId("history-filter-active-dot")).toBeNull();
+
+      await fireEvent.changeText(getByTestId("history-keyword-input"), "祭り");
+      expect(getByTestId("history-filter-active-dot")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("history-filter-reset"));
+
+      expect(queryByTestId("history-filter-active-dot")).toBeNull();
+      expect(getByTestId("history-keyword-input").props.value).toBe("");
+    });
+
     it("opens the event detail in an in-tab modal (not navigation) when a past event row is pressed, showing its own go-to-calendar button, and closes it via onBack", async () => {
       mockCommonHooks();
       (usePastEventsByTag as jest.Mock).mockReturnValue({

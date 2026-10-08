@@ -96,6 +96,9 @@ export function DateRangeFilterSection({ testIDPrefix, startDate, endDate, onCha
               testID={activePicker === "start" ? `${testIDPrefix}-start-picker` : `${testIDPrefix}-end-picker`}
               value={new Date(`${activeDateKey}T00:00:00.000Z`)}
               mode="date"
+              // iOSの既定(compact)は「英語の日付ボタン→タップでカレンダー」の
+              // 2段階になるため、最初からカレンダーを展開するinlineにする。
+              display={Platform.OS === "ios" ? "inline" : "default"}
               locale={DATE_PICKER_LOCALE}
               onChange={(_event: unknown, selected?: Date) => {
                 if (selected) {

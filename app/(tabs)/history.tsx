@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { FlatList, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Tabs, useFocusEffect } from "expo-router";
 
 import { useMyCalendars } from "../../src/features/calendars/hooks";
@@ -30,6 +30,7 @@ import { DateRangeFilterSection } from "../../src/shared/components/DateRangeFil
 import { FilterButton, FilterSection } from "../../src/shared/components/FilterButton";
 import { Icon } from "../../src/shared/components/Icon";
 import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
+import { matchesKeyword } from "../../src/shared/utils/keywordFilter";
 import { jstNow, todayJstDateKey, toJstDateKey } from "../../src/shared/utils/formatDateTime";
 
 /** "2年前"/"1年前" - どちらもJST日付キー("YYYY-MM-DD")なので年の部分の文字列比較だけで済む。 */
@@ -102,6 +103,7 @@ function TimelinePanel() {
   const [isUntaggedSelected, setIsUntaggedSelected] = useState(false);
   const [periodStart, setPeriodStart] = useState<string | null>(null);
   const [periodEnd, setPeriodEnd] = useState<string | null>(null);
+  const [keyword, setKeyword] = useState("");
 
   const bulk = useBulkTagSelection();
   const { attachTagsToEvents } = useAttachTagsToEvents();
@@ -113,6 +115,7 @@ function TimelinePanel() {
     setIsUntaggedSelected(false);
     setPeriodStart(null);
     setPeriodEnd(null);
+    setKeyword("");
   }, []);
 
   const handleSelectAllTags = () => {
@@ -152,9 +155,15 @@ function TimelinePanel() {
     isLoading: isLoadingEventsByTag,
     refetch: refetchEventsByTag,
   } = usePastEventsByTag(undefined, activeCalendarIds);
+  // 期間とタイトルのキーワードもタグ同様クライアント側で絞り込む。
   const periodFilteredEvents = useMemo(
-    () => eventsByTag.filter((event) => isDateKeyInRange(toJstDateKey(event.startAt), periodStart, periodEnd)),
-    [eventsByTag, periodStart, periodEnd]
+    () =>
+      eventsByTag.filter(
+        (event) =>
+          isDateKeyInRange(toJstDateKey(event.startAt), periodStart, periodEnd) &&
+          matchesKeyword(event.title, keyword)
+      ),
+    [eventsByTag, periodStart, periodEnd, keyword]
   );
 
   const allTagsFlat = useMemo(() => flattenTagTree(tagTree), [tagTree]);
@@ -209,7 +218,8 @@ function TimelinePanel() {
     selectedTagIds.length > 0 ||
     isUntaggedSelected ||
     periodStart !== null ||
-    periodEnd !== null;
+    periodEnd !== null ||
+    keyword.trim() !== "";
 
   const selectedTagNames = useMemo(
     () => bulk.selectedTagIds.flatMap((tagId) => allTagsFlat.find((tag) => tag.id === tagId)?.name ?? []),
@@ -250,6 +260,19 @@ function TimelinePanel() {
           ),
           headerRight: () => (
             <FilterButton testID="history-filter" isActive={isFilterActive} onReset={handleResetFilters}>
+              <FilterSection title="キーワード(予定のタイトル)">
+                <TextInput
+                  testID="history-keyword-input"
+                  style={styles.keywordInput}
+                  placeholder="タイトルで検索"
+                  value={keyword}
+                  onChangeText={setKeyword}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </FilterSection>
               <FilterSection title="カレンダー">
                 {calendars.map((calendar) => (
                   <CalendarSwitchChip
@@ -808,6 +831,15 @@ const styles = StyleSheet.create({
   },
   // カレンダー選択チップ(CalendarSwitchChip)・タグ選択チップ(TagPickerRow)と
   // 同じ大きさ・角丸に揃える(選択時はborder 1→2の分だけpaddingを1px減らす)。
+  keywordInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#fff",
+  },
   filterChip: {
     borderWidth: 1,
     borderColor: "#ccc",

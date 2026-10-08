@@ -5,9 +5,11 @@ import { DateRangeFilterSection } from "../DateRangeFilterSection";
 jest.mock("@react-native-community/datetimepicker", () => {
   const React = require("react");
   const { TextInput } = require("react-native");
-  return function MockDateTimePicker({ testID, onChange }: any) {
+  return function MockDateTimePicker({ testID, onChange, display, locale }: any) {
     return React.createElement(TextInput, {
       testID,
+      display,
+      locale,
       onChangeText: (text: string) => onChange({ type: "set" }, new Date(text)),
     });
   };
@@ -109,5 +111,16 @@ describe("DateRangeFilterSection", () => {
     await fireEvent.press(getByTestId("todos-period-all"));
 
     expect(onChange).toHaveBeenCalledWith({ startDate: null, endDate: null });
+  });
+
+  it("opens the calendar directly in one tap: the picker is shown inline (not the compact date button that needs a second tap), in Japanese", async () => {
+    const { getByTestId } = await render(
+      <DateRangeFilterSection testIDPrefix="todos-period" startDate="2026-09-01" endDate="2026-09-30" onChange={jest.fn()} />
+    );
+
+    await fireEvent.press(getByTestId("todos-period-start-button"));
+
+    expect(getByTestId("todos-period-start-picker").props.display).toBe("inline");
+    expect(getByTestId("todos-period-start-picker").props.locale).toBe("ja-JP");
   });
 });
