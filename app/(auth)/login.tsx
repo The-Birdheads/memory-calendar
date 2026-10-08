@@ -54,6 +54,11 @@ export default function LoginScreen() {
         onChangeText={setPassword}
       />
       {error ? <Text style={styles.error}>{getAuthErrorMessageJa(error)}</Text> : null}
+      {__DEV__ && error?.type === "Unknown" ? (
+        <Text testID="login-error-detail" style={styles.errorDetail}>
+          [dev] {error.message}
+        </Text>
+      ) : null}
       <TouchableOpacity
         testID="login-submit-button"
         style={styles.button}
@@ -112,6 +117,10 @@ const styles = StyleSheet.create({
   },
   error: {
     color: "#d32f2f",
+  },
+  errorDetail: {
+    color: "#999",
+    fontSize: 11,
   },
   linkText: {
     color: "#2f6fed",

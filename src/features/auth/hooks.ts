@@ -97,6 +97,8 @@ export function useAuthActions(): UseAuthActionsResult {
     const result = await signInWithApple(getSupabaseClient());
     setIsSubmitting(false);
     if (!result.ok) {
+      // 画面には汎用文言しか出ないため、原因調査用に開発中だけ詳細を出す。
+      if (__DEV__) console.warn("[signInWithApple] failed:", JSON.stringify(result.error));
       setError(result.error);
       return false;
     }
