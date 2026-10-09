@@ -1180,6 +1180,17 @@ describe("EventDetailScreen", () => {
     expect(openURLSpy).toHaveBeenCalledWith("https://example.com");
   });
 
+  it("draws the url's link icon in the same gray as the other detail-row icons, not blue", async () => {
+    mockCommonHooks({ event: { ...FUTURE_EVENT, location: "渋谷", url: "https://example.com" } });
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+
+    const flatten = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+    expect(flatten(getByTestId("event-detail-url-icon").props.style).tintColor).toBe("#444");
+    expect(flatten(getByTestId("event-detail-location-icon").props.style).tintColor).toBe("#444");
+  });
+
   it("truncates a long url to a single line with an ellipsis instead of wrapping", async () => {
     const longUrl = "https://example.com/" + "a".repeat(200);
     mockCommonHooks({ event: { ...FUTURE_EVENT, url: longUrl } });

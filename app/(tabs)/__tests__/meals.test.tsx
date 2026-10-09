@@ -191,6 +191,17 @@ describe("MealsScreen", () => {
       expect(flatten(getByTestId("meal-memo-icon-meal-2").props.style).width).toBeGreaterThanOrEqual(16);
     });
 
+    it("draws the url icon in the default icon gray like the other row icons, not blue", async () => {
+      mockCommonHooks(RECORDS);
+
+      const { getByTestId } = await renderPlanPanel();
+
+      const flatten = (style: unknown): Record<string, unknown> =>
+        Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+      expect(flatten(getByTestId("meal-url-icon-meal-2").props.style).tintColor).toBe("#666");
+      expect(flatten(getByTestId("meal-memo-icon-meal-2").props.style).tintColor).toBe("#666");
+    });
+
     it("shows only future records, grouped under a date header", async () => {
       mockCommonHooks(RECORDS);
 

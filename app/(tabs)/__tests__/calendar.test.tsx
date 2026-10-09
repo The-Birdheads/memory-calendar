@@ -2591,6 +2591,24 @@ describe("CalendarScreen", () => {
       expect(router.push).not.toHaveBeenCalledWith("/event/event-1");
     });
 
+    it("draws the url line's link icon in the same gray as the location/memo icons above it, not blue", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [EVENT_WITH_DETAILS],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+      const flatten = (style: unknown): Record<string, unknown> =>
+        Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+      expect(flatten(getByTestId("calendar-list-event-url-icon-event-1").props.style).tintColor).toBe("#999");
+      expect(flatten(getByTestId("calendar-list-event-location-icon-event-1").props.style).tintColor).toBe("#999");
+    });
+
     it("opens the url when its summary line is tapped, in the month list view, without navigating to the event detail (regression)", async () => {
       const openURLSpy = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
       mockCommonHooks();

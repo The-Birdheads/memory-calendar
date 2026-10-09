@@ -688,7 +688,7 @@ export function EventDetailContent({
         </View>
         {event.location ? (
           <View style={styles.detailRow}>
-            <Icon name="location" size={14} color="#444" />
+            <Icon testID="event-detail-location-icon" name="location" size={14} color="#444" />
             <Text testID="event-detail-location" style={styles.detailText}>
               {event.location}
             </Text>
@@ -696,7 +696,7 @@ export function EventDetailContent({
         ) : null}
         {event.url ? (
           <TouchableOpacity style={styles.detailRow} onPress={() => Linking.openURL(normalizeUrl(event.url!))}>
-            <Icon name="link" size={14} color="#2f6fed" />
+            <Icon testID="event-detail-url-icon" name="link" size={14} color="#444" />
             <Text testID="event-detail-url" style={styles.detailLink} numberOfLines={1} ellipsizeMode="tail">
               {event.url}
             </Text>

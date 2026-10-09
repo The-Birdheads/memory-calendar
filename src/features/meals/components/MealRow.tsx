@@ -73,8 +73,8 @@ export function MealRow({ record, onPress, dateLabel, calendar, creatorLabel }: 
             </Text>
           ) : null}
           <RatingStars rating={record.rating} testIDPrefix={`meal-item-rating-${record.id}`} size={16} />
-          {record.url ? <Icon testID={`meal-url-icon-${record.id}`} name="link" size={16} color="#2f6fed" /> : null}
-          {record.memo ? <Icon testID={`meal-memo-icon-${record.id}`} name="note" size={16} color="#666" /> : null}
+          {record.url ? <Icon testID={`meal-url-icon-${record.id}`} name="link" size={16} /> : null}
+          {record.memo ? <Icon testID={`meal-memo-icon-${record.id}`} name="note" size={16} /> : null}
         </View>
       </View>
       <Icon name="chevron-right" size={16} color="#ccc" />

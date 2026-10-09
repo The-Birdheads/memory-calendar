@@ -523,7 +523,7 @@ export default function CalendarScreen() {
     <View style={{ marginLeft: isPersonal ? EVENT_SUMMARY_INDENT_PERSONAL : EVENT_SUMMARY_INDENT, gap: 4 }}>
       {event.location ? (
         <View style={styles.eventSummaryLine}>
-          <Icon name="location" size={12} color="#999" />
+          <Icon testID={`${testIDPrefix}-location-icon-${event.id}`} name="location" size={12} color="#999" />
           <Text style={styles.eventSummaryText} numberOfLines={1} ellipsizeMode="tail">
             {event.location}
           </Text>
@@ -543,7 +543,7 @@ export default function CalendarScreen() {
           style={styles.eventSummaryLine}
           onPress={() => Linking.openURL(normalizeUrl(event.url!))}
         >
-          <Icon name="link" size={12} color="#2f6fed" />
+          <Icon testID={`${testIDPrefix}-url-icon-${event.id}`} name="link" size={12} color="#999" />
           <Text style={[styles.eventSummaryText, styles.eventSummaryLink]} numberOfLines={1} ellipsizeMode="tail">
             {event.url}
           </Text>
