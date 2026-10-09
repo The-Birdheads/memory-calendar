@@ -21,6 +21,14 @@ describe("app.json (App Store release config)", () => {
     expect(expo.ios.bundleIdentifier).toBe("com.thebirdseed.memorycalendar");
   });
 
+  it("shows 'Memory Calendar' as the name under the home-screen icon, matching the App Store name", () => {
+    expect(expo.name).toBe("Memory Calendar");
+  });
+
+  it("keeps the slug the EAS project and its credentials are registered under", () => {
+    expect(expo.slug).toBe("memory-calendar");
+  });
+
   it("is version 1.0.0 for the initial release", () => {
     expect(expo.version).toBe("1.0.0");
   });
