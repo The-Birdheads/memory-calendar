@@ -597,6 +597,23 @@ describe("MealFormModal", () => {
       expect(onUpdateField).not.toHaveBeenCalled();
     });
 
+    it("pins each row and the opened date picker to 100% width, so the picker's own width can't push the pencil outside the card after closing (regression: the date row's pencil overflowed after opening and closing the calendar)", async () => {
+      const { utils } = renderDetail();
+      const { getByTestId } = await utils;
+      const flatten = (style: unknown): Record<string, unknown> =>
+        Array.isArray(style) ? Object.assign({}, ...style.filter(Boolean)) : (style as Record<string, unknown>);
+
+      expect(flatten(getByTestId("meal-detail-date").props.style).width).toBe("100%");
+
+      await fireEvent.press(getByTestId("meal-detail-date-edit"));
+      expect(flatten(getByTestId("meal-detail-date").props.style).width).toBe("100%");
+      expect(flatten(getByTestId("meal-form-date-picker-container").props.style).width).toBe("100%");
+
+      await fireEvent.press(getByTestId("meal-detail-date-cancel"));
+      expect(flatten(getByTestId("meal-detail-date").props.style).width).toBe("100%");
+      expect(getByTestId("meal-detail-date-edit")).toBeTruthy();
+    });
+
     it("keeps the saved value visible after saving (the detail reflects each successful save without reopening)", async () => {
       const { utils } = renderDetail();
       const { getByTestId, getByText } = await utils;

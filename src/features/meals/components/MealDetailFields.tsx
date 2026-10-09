@@ -61,7 +61,7 @@ function FieldRow({
     <View style={styles.field} testID={`meal-detail-${field}`}>
       <Text style={styles.fieldLabel}>{label}</Text>
       {isEditing ? (
-        <View style={styles.editorBlock}>
+        <View key="editor" style={styles.editorBlock}>
           {editor}
           <View style={styles.editorActions}>
             <TouchableOpacity
@@ -83,7 +83,7 @@ function FieldRow({
           </View>
         </View>
       ) : (
-        <View style={styles.displayRow}>
+        <View key="display" style={styles.displayRow}>
           <View style={styles.displayValue}>{display}</View>
           {editable ? (
             <TouchableOpacity
@@ -317,8 +317,11 @@ const styles = StyleSheet.create({
   container: {
     gap: 14,
   },
+  // 幅を親の100%に固定する。開いたカレンダー(inlineのネイティブピッカー)の固有幅が
+  // 行の幅に残って、閉じたあとに鉛筆が枠の外へはみ出さないようにする。
   field: {
     gap: 4,
+    width: "100%",
   },
   fieldLabel: {
     color: "#666",
@@ -411,7 +414,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   pickerContainer: {
-    alignSelf: "stretch",
+    width: "100%",
     overflow: "hidden",
   },
 });
