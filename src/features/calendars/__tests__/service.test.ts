@@ -334,15 +334,23 @@ describe("leaveOrDeleteCalendar", () => {
 });
 
 describe("listMyCalendars", () => {
+  /** from("calendars").select() と from("calendar_member_colors").select() を出し分けるクライアント。 */
+  function makeClient(
+    calendarsResult: { data: unknown; error: unknown },
+    colorsResult: { data: unknown; error: unknown } = { data: [], error: null }
+  ) {
+    const from = jest.fn((table: string) => ({
+      select: jest.fn().mockResolvedValue(table === "calendar_member_colors" ? colorsResult : calendarsResult),
+    }));
+    return { client: { from } as unknown as SupabaseClient, from };
+  }
+
   it("returns the calendars the caller belongs to", async () => {
     const rows = [
       { id: "cal-1", name: "我が家", kind: "group", color: "#2f6fed", created_by: "user-1", created_at: "2026-08-17T00:00:00.000Z" },
       { id: "cal-2", name: "自分用", kind: "personal", color: "#e53935", created_by: "user-2", created_at: "2026-08-17T01:00:00.000Z" },
     ];
-    const select = jest.fn().mockResolvedValue({ data: rows, error: null });
-    const client = {
-      from: jest.fn().mockReturnValue({ select }),
-    } as unknown as SupabaseClient;
+    const { client, from } = makeClient({ data: rows, error: null });
 
     const result = await listMyCalendars(client);
 
@@ -355,7 +363,37 @@ describe("listMyCalendars", () => {
         { id: "cal-1", name: "我が家", kind: "group", color: "#2f6fed", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
       ],
     });
-    expect(client.from).toHaveBeenCalledWith("calendars");
+    expect(from).toHaveBeenCalledWith("calendars");
+  });
+
+  it("uses the caller's own color for a calendar when they chose one, and the calendar's creation color otherwise", async () => {
+    const rows = [
+      { id: "cal-1", name: "我が家", kind: "group", color: "#2f6fed", created_by: "user-1", created_at: "2026-08-17T00:00:00.000Z" },
+      { id: "cal-2", name: "友人グループ", kind: "group", color: "#43a047", created_by: "user-1", created_at: "2026-08-17T01:00:00.000Z" },
+    ];
+    const { client, from } = makeClient(
+      { data: rows, error: null },
+      { data: [{ calendar_id: "cal-1", color: "#e53935" }], error: null }
+    );
+
+    const result = await listMyCalendars(client);
+
+    expect(result.ok && result.value.map((calendar) => [calendar.id, calendar.color])).toEqual([
+      ["cal-1", "#e53935"],
+      ["cal-2", "#43a047"],
+    ]);
+    expect(from).toHaveBeenCalledWith("calendar_member_colors");
+  });
+
+  it("falls back to the creation colors when the per-member colors can't be loaded", async () => {
+    const rows = [
+      { id: "cal-1", name: "我が家", kind: "group", color: "#2f6fed", created_by: "user-1", created_at: "2026-08-17T00:00:00.000Z" },
+    ];
+    const { client } = makeClient({ data: rows, error: null }, { data: null, error: { message: "boom", code: "500" } });
+
+    const result = await listMyCalendars(client);
+
+    expect(result.ok && result.value[0].color).toBe("#2f6fed");
   });
 
   it("sorts the personal calendar first even when it isn't the first row returned", async () => {
@@ -364,10 +402,7 @@ describe("listMyCalendars", () => {
       { id: "cal-2", name: "友人グループ", kind: "group", color: "#43a047", created_by: "user-1", created_at: "2026-08-17T01:00:00.000Z" },
       { id: "cal-3", name: "自分用", kind: "personal", color: "#e53935", created_by: "user-1", created_at: "2026-08-17T02:00:00.000Z" },
     ];
-    const select = jest.fn().mockResolvedValue({ data: rows, error: null });
-    const client = {
-      from: jest.fn().mockReturnValue({ select }),
-    } as unknown as SupabaseClient;
+    const { client } = makeClient({ data: rows, error: null });
 
     const result = await listMyCalendars(client);
 
@@ -375,13 +410,7 @@ describe("listMyCalendars", () => {
   });
 
   it("maps a Supabase error to Forbidden", async () => {
-    const select = jest.fn().mockResolvedValue({
-      data: null,
-      error: { message: "network down", code: "500" },
-    });
-    const client = {
-      from: jest.fn().mockReturnValue({ select }),
-    } as unknown as SupabaseClient;
+    const { client } = makeClient({ data: null, error: { message: "network down", code: "500" } });
 
     const result = await listMyCalendars(client);
 

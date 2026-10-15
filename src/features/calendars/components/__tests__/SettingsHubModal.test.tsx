@@ -495,6 +495,26 @@ describe("SettingsHubModal", () => {
       await waitFor(() => expect(updateCalendarNameMock).toHaveBeenCalledWith("cal-1", "改名後の我が家"));
     });
 
+    it("tells members of a shared calendar that the color only changes their own view", async () => {
+      mockHooks({ members: MEMBERS_CAL_1 });
+
+      const { getByTestId } = await render(
+        <SettingsHubModal
+          calendars={CALENDARS}
+          currentUserId="user-2"
+          onClose={jest.fn()}
+          onChange={jest.fn()}
+          initialSection="calendar"
+        />,
+      );
+
+      await fireEvent.press(getByTestId("calendar-settings-calendar-cal-1"));
+
+      expect(getByTestId("calendar-settings-color-own-view-note").props.children).toBe(
+        "この色はあなたの画面にだけ反映されます(他のメンバーの表示色は変わりません)",
+      );
+    });
+
     it("lets a non-owner member change the color, via the member-level color update, immediately on tap", async () => {
       mockHooks({ members: MEMBERS_CAL_1 });
       const updateCalendarColorMock = jest.fn().mockResolvedValue(true);

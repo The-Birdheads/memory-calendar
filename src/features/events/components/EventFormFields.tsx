@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Keyboard, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { RevealableTextField } from "../../../shared/components/RevealableTextField";
-import { formatDateOnly, formatDateTime } from "../../../shared/utils/formatDateTime";
+import { formatDateOnly, formatTime } from "../../../shared/utils/formatDateTime";
 import { DATE_PICKER_LOCALE } from "../../../shared/utils/pickerLocale";
+import { adjustEndForNewStart } from "../eventRangeAdjust";
 
 export interface EventFormValue {
   title: string;
@@ -16,18 +17,65 @@ export interface EventFormValue {
   memo: string;
 }
 
-function formatFieldLabel(date: Date, isAllDay: boolean): string {
-  return isAllDay ? formatDateOnly(date.toISOString()) : formatDateTime(date.toISOString());
-}
-
 export interface EventFormFieldsProps {
   testIDPrefix: string;
   value: EventFormValue;
   onChange: (patch: Partial<EventFormValue>) => void;
 }
 
+type PickerTarget = { which: "start" | "end"; part: "date" | "time" };
+
 export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFieldsProps) {
-  const [activePicker, setActivePicker] = useState<"start" | "end" | null>(null);
+  const [activePicker, setActivePicker] = useState<PickerTarget | null>(null);
+
+  // キーボードとピッカーは同時に出さない: ピッカーを開くときはキーボードを閉じ、
+  // 文字入力欄にフォーカスが当たったときはピッカーを閉じる。
+  const openPicker = (target: PickerTarget) => {
+    Keyboard.dismiss();
+    setActivePicker(target);
+  };
+  const closePicker = () => setActivePicker(null);
+
+  const handlePicked = (which: "start" | "end", selected: Date) => {
+    if (which === "end") {
+      onChange({ end: selected });
+      return;
+    }
+    const adjustedEnd = adjustEndForNewStart(selected, value.end, value.isAllDay);
+    onChange(adjustedEnd === value.end ? { start: selected } : { start: selected, end: adjustedEnd });
+  };
+
+  const renderRow = (which: "start" | "end", label: string) => {
+    const date = value[which];
+    const isActive = (part: "date" | "time") => activePicker?.which === which && activePicker.part === part;
+    return (
+      <View style={styles.dateRow}>
+        <Text style={[styles.dateFieldLabel, activePicker?.which === which && styles.dateFieldLabelActive]}>
+          {label}
+        </Text>
+        <TouchableOpacity
+          testID={`${testIDPrefix}-${which}-button`}
+          style={[styles.dateField, styles.dateFieldDate, isActive("date") && styles.dateFieldActive]}
+          onPress={() => openPicker({ which, part: "date" })}
+        >
+          <Text>{formatDateOnly(date.toISOString())}</Text>
+        </TouchableOpacity>
+        {value.isAllDay ? null : (
+          <TouchableOpacity
+            testID={`${testIDPrefix}-${which}-time-button`}
+            style={[styles.dateField, isActive("time") && styles.dateFieldActive]}
+            onPress={() => openPicker({ which, part: "time" })}
+          >
+            <Text>{formatTime(date.toISOString())}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  const pickerTestID = activePicker
+    ? `${testIDPrefix}-${activePicker.which}-${activePicker.part === "time" ? "time-" : ""}picker`
+    : undefined;
 
   return (
     <>
@@ -37,6 +85,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         placeholder="タイトル"
         value={value.title}
         onChangeText={(title) => onChange({ title })}
+        onFocus={closePicker}
       />
 
       <TouchableOpacity
@@ -54,48 +103,33 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         </View>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        testID={`${testIDPrefix}-start-button`}
-        style={[styles.dateField, activePicker === "start" && styles.dateFieldActive]}
-        onPress={() => setActivePicker("start")}
-      >
-        <Text style={[styles.dateFieldLabel, activePicker === "start" && styles.dateFieldLabelActive]}>開始</Text>
-        <Text>{formatFieldLabel(value.start, value.isAllDay)}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        testID={`${testIDPrefix}-end-button`}
-        style={[styles.dateField, activePicker === "end" && styles.dateFieldActive]}
-        onPress={() => setActivePicker("end")}
-      >
-        <Text style={[styles.dateFieldLabel, activePicker === "end" && styles.dateFieldLabelActive]}>終了</Text>
-        <Text>{formatFieldLabel(value.end, value.isAllDay)}</Text>
-      </TouchableOpacity>
+      {renderRow("start", "開始")}
+      {renderRow("end", "終了")}
 
       {activePicker ? (
         <View style={styles.pickerContainer}>
           {Platform.OS === "web" ? (
             <TextInput
-              testID={activePicker === "start" ? `${testIDPrefix}-start-picker` : `${testIDPrefix}-end-picker`}
+              testID={pickerTestID}
               style={styles.input}
               placeholder={value.isAllDay ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm"}
               onChangeText={(text) => {
                 const parsed = new Date(value.isAllDay ? `${text}T00:00:00.000Z` : `${text}:00.000Z`);
                 if (!Number.isNaN(parsed.getTime())) {
-                  onChange(activePicker === "start" ? { start: parsed } : { end: parsed });
+                  handlePicked(activePicker.which, parsed);
                 }
               }}
             />
           ) : (
             <DateTimePicker
-              testID={activePicker === "start" ? `${testIDPrefix}-start-picker` : `${testIDPrefix}-end-picker`}
-              value={activePicker === "start" ? value.start : value.end}
-              mode={value.isAllDay ? "date" : "datetime"}
-              display={Platform.OS === "ios" ? "inline" : "default"}
+              testID={pickerTestID}
+              value={value[activePicker.which]}
+              mode={activePicker.part}
+              display={Platform.OS === "ios" ? (activePicker.part === "time" ? "spinner" : "inline") : "default"}
               locale={DATE_PICKER_LOCALE}
               onChange={(_event: unknown, selected?: Date) => {
                 if (selected) {
-                  onChange(activePicker === "start" ? { start: selected } : { end: selected });
+                  handlePicked(activePicker.which, selected);
                 }
               }}
             />
@@ -103,7 +137,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
           <TouchableOpacity
             testID={`${testIDPrefix}-picker-done`}
             style={styles.pickerDoneButton}
-            onPress={() => setActivePicker(null)}
+            onPress={closePicker}
           >
             <Text>完了</Text>
           </TouchableOpacity>
@@ -117,6 +151,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         placeholder="場所"
         value={value.location}
         onChangeText={(location) => onChange({ location })}
+        onFocus={closePicker}
       />
 
       <RevealableTextField
@@ -128,6 +163,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         keyboardType="url"
         value={value.url}
         onChangeText={(url) => onChange({ url })}
+        onFocus={closePicker}
       />
 
       <RevealableTextField
@@ -138,6 +174,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         multiline
         value={value.memo}
         onChangeText={(memo) => onChange({ memo })}
+        onFocus={closePicker}
       />
     </>
   );
@@ -183,16 +220,24 @@ const styles = StyleSheet.create({
   switchThumbOn: {
     transform: [{ translateX: 18 }],
   },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   dateField: {
     backgroundColor: "#fff",
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  dateFieldDate: {
+    flex: 1,
   },
   dateFieldActive: {
     borderWidth: 2,
@@ -202,6 +247,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   dateFieldLabel: {
+    width: 32,
     color: "#666",
   },
   dateFieldLabelActive: {

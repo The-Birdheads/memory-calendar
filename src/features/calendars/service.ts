@@ -116,9 +116,8 @@ export async function getPersonalCalendar(
   return ok(mapCalendarRow(data as CalendarRow));
 }
 
-/** 名前・色はどちらもメンバーなら誰でも変えられる(種別=kindはUIから変更
- * できないため、それ以外の直接UPDATEは使わずSECURITY DEFINER RPC経由で
- * 更新する)。 */
+/** 名前はメンバーなら誰でも変えられる(種別=kindはUIから変更できないため、
+ * それ以外の直接UPDATEは使わずSECURITY DEFINER RPC経由で更新する)。 */
 export async function updateCalendarName(
   client: SupabaseClient,
   calendarId: string,
@@ -140,6 +139,8 @@ export async function updateCalendarName(
   return ok(mapCalendarRow(data as CalendarRow));
 }
 
+/** カレンダーの色を、自分だけの色として保存する(他のメンバーの表示色は変わらない)。
+ * 戻り値のカレンダーは、色が保存した色になっている。 */
 export async function updateCalendarColor(
   client: SupabaseClient,
   calendarId: string,
@@ -207,16 +208,33 @@ export async function leaveOrDeleteCalendar(
   return ok(data as boolean);
 }
 
+/** 自分のカレンダー一覧。色はメンバーごとに持てるので、自分が選んだ色
+ * (calendar_member_colors、RLSで自分の行だけ読める)があればそれを、無ければ
+ * カレンダー作成時の色(calendars.color)を使う。色の取得に失敗しても、一覧自体は
+ * 作成時の色で返す。 */
 export async function listMyCalendars(
   client: SupabaseClient
 ): Promise<Result<Calendar[], CalendarError>> {
-  const { data, error } = await client.from("calendars").select();
+  const [calendarsResult, colorsResult] = await Promise.all([
+    client.from("calendars").select(),
+    client.from("calendar_member_colors").select("calendar_id, color"),
+  ]);
+  const { data, error } = calendarsResult;
 
   if (error || !data) {
     return err(mapCalendarError(error as PostgrestError));
   }
 
-  const calendars = (data as CalendarRow[]).map(mapCalendarRow);
+  const ownColors = new Map<string, string>();
+  if (!colorsResult.error && colorsResult.data) {
+    for (const row of colorsResult.data as { calendar_id: string; color: string }[]) {
+      ownColors.set(row.calendar_id, row.color);
+    }
+  }
+
+  const calendars = (data as CalendarRow[]).map((row) =>
+    mapCalendarRow({ ...row, color: ownColors.get(row.id) ?? row.color })
+  );
   // The personal calendar always sorts first, so it reads as "always there"
   // wherever the list is rendered (switcher chips, settings, etc.).
   calendars.sort((a, b) => (a.kind === "personal" ? -1 : b.kind === "personal" ? 1 : 0));

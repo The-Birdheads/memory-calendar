@@ -22,6 +22,8 @@ export interface RevealableTextFieldProps {
   addLabel: string;
   value: string;
   onChangeText: (text: string) => void;
+  /** 入力欄にフォーカスが当たったとき(「追加」ボタンで現れて自動フォーカスされた場合も含む)。 */
+  onFocus?: () => void;
   placeholder?: string;
   keyboardType?: TextInputProps["keyboardType"];
   autoCapitalize?: TextInputProps["autoCapitalize"];
@@ -46,6 +48,7 @@ export function RevealableTextField({
   addLabel,
   value,
   onChangeText,
+  onFocus,
   placeholder,
   keyboardType,
   autoCapitalize,
@@ -83,6 +86,7 @@ export function RevealableTextField({
       multiline={multiline}
       value={value}
       onChangeText={onChangeText}
+      onFocus={onFocus}
       autoFocus={manuallyRevealed}
     />
   );

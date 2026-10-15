@@ -344,6 +344,11 @@ export function CalendarEditScreen({
           {updateError ? <Text style={styles.errorText}>{getCalendarErrorMessageJa(updateError)}</Text> : null}
 
           <Text style={styles.sectionLabel}>色（タグのない予定はこの色で表示されます）</Text>
+          {selectedCalendar?.kind === "group" ? (
+            <Text testID="calendar-settings-color-own-view-note" style={styles.colorOwnViewNote}>
+              この色はあなたの画面にだけ反映されます(他のメンバーの表示色は変わりません)
+            </Text>
+          ) : null}
           <ColorSwatchPicker
             testIDPrefix="calendar-settings-color"
             selected={colorDraft}
@@ -494,6 +499,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f2f3f5",
     borderRadius: 8,
     padding: 10,
+  },
+  colorOwnViewNote: {
+    color: "#666",
+    fontSize: 12,
   },
   personalNote: {
     flex: 1,
