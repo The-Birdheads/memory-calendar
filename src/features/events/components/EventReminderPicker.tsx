@@ -22,6 +22,9 @@ export const ALL_DAY_OPTIONS: ReminderOption[] = [
 ];
 
 export const TIMED_OPTIONS: ReminderOption[] = [
+  // 「1日前」と同じ(前日のJST9時)。時刻指定の予定では「1日前」より「前日9時」の方が
+  // 何時に届くかが分かりやすいので、この表記にしている。
+  { kind: "day_before_1", label: "前日9時" },
   { kind: "at_start", label: "開始時" },
   { kind: "before_10m", label: "10分前" },
   { kind: "before_1h", label: "1時間前" },

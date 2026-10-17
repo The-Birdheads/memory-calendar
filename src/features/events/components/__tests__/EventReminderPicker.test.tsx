@@ -32,11 +32,12 @@ describe("EventReminderPicker", () => {
     expect(queryByText("1時間前")).toBeNull();
   });
 
-  it("shows the timed options (開始時/10分前/1時間前) when isAllDay is false", async () => {
+  it("shows the timed options (前日9時/開始時/10分前/1時間前) when isAllDay is false", async () => {
     const { getByText, queryByText } = await render(
       <EventReminderPicker testIDPrefix="event-reminder" isAllDay={false} reminders={[]} onAdd={jest.fn()} onRemove={jest.fn()} />
     );
 
+    expect(getByText("前日9時")).toBeTruthy();
     expect(getByText("開始時")).toBeTruthy();
     expect(getByText("10分前")).toBeTruthy();
     expect(getByText("1時間前")).toBeTruthy();

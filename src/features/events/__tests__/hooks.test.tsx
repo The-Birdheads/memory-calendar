@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
 import {
   addEventReminder,
-  createDefaultEventReminders,
+  createEventReminders,
   createEvent,
   deleteEvent,
   getEvent,
@@ -15,7 +15,7 @@ import {
 } from "../service";
 import {
   useAddEventReminder,
-  useCreateDefaultEventReminders,
+  useCreateEventReminders,
   useCreateEvent,
   useDeleteEvent,
   useEvent,
@@ -39,7 +39,7 @@ jest.mock("../service", () => ({
   listEventReminders: jest.fn(),
   addEventReminder: jest.fn(),
   removeEventReminder: jest.fn(),
-  createDefaultEventReminders: jest.fn(),
+  createEventReminders: jest.fn(),
   getEvent: jest.fn(),
 }));
 
@@ -522,36 +522,36 @@ describe("useRemoveEventReminder", () => {
   });
 });
 
-describe("useCreateDefaultEventReminders", () => {
+describe("useCreateEventReminders", () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
   it("returns true and clears the error when it succeeds", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (createDefaultEventReminders as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+    (createEventReminders as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
 
-    const { result } = await renderHook(() => useCreateDefaultEventReminders());
+    const { result } = await renderHook(() => useCreateEventReminders());
 
     let success = false;
     await act(async () => {
-      success = await result.current.createDefaultEventReminders("event-1", true);
+      success = await result.current.createEventReminders("event-1", [{ kind: "on_day" }]);
     });
 
     expect(success).toBe(true);
     expect(result.current.error).toBeNull();
-    expect(createDefaultEventReminders).toHaveBeenCalledWith({}, "event-1", true);
+    expect(createEventReminders).toHaveBeenCalledWith({}, "event-1", [{ kind: "on_day" }]);
   });
 
   it("returns false and sets the error when it fails", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    (createDefaultEventReminders as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
+    (createEventReminders as jest.Mock).mockResolvedValue({ ok: false, error: { type: "Forbidden" } });
 
-    const { result } = await renderHook(() => useCreateDefaultEventReminders());
+    const { result } = await renderHook(() => useCreateEventReminders());
 
     let success = true;
     await act(async () => {
-      success = await result.current.createDefaultEventReminders("event-1", false);
+      success = await result.current.createEventReminders("event-1", [{ kind: "day_before_1" }]);
     });
 
     expect(success).toBe(false);

@@ -31,6 +31,7 @@ function jstNineAmIso(dateKey: string): string {
   return new Date(`${dateKey}T09:00:00+09:00`).toISOString();
 }
 
+
 export function computeEventReminderAt(
   kind: EventReminderKind,
   eventStartAt: string,

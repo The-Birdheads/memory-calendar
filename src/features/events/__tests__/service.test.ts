@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   addEventReminder,
-  createDefaultEventReminders,
+  createEventReminders,
   createEvent,
   createRecurringSeries,
   deleteEvent,
@@ -1186,35 +1186,56 @@ describe("removeEventReminder", () => {
   });
 });
 
-describe("createDefaultEventReminders", () => {
-  it("inserts 当日+1日前 for an all-day event", async () => {
+describe("createEventReminders", () => {
+  it("inserts one row per chosen reminder in a single call", async () => {
     const insert = jest.fn().mockResolvedValue({ error: null });
     const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
 
-    const result = await createDefaultEventReminders(client, "event-1", true);
+    const result = await createEventReminders(client, "event-1", [{ kind: "on_day" }, { kind: "day_before_1" }]);
 
     expect(result).toEqual({ ok: true, value: undefined });
+    expect(client.from).toHaveBeenCalledWith("event_reminders");
     expect(insert).toHaveBeenCalledWith([
       { event_id: "event-1", kind: "on_day" },
       { event_id: "event-1", kind: "day_before_1" },
     ]);
   });
 
-  it("inserts 10分前 for a timed event", async () => {
+  it("inserts 前日9時(1日前) for a timed event", async () => {
     const insert = jest.fn().mockResolvedValue({ error: null });
     const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
 
-    const result = await createDefaultEventReminders(client, "event-1", false);
+    await createEventReminders(client, "event-1", [{ kind: "day_before_1" }]);
+
+    expect(insert).toHaveBeenCalledWith([{ event_id: "event-1", kind: "day_before_1" }]);
+  });
+
+  it("sends the custom offset for a custom reminder", async () => {
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
+
+    await createEventReminders(client, "event-1", [{ kind: "custom", custom: { value: 3, unit: "hour" } }]);
+
+    expect(insert).toHaveBeenCalledWith([
+      { event_id: "event-1", kind: "custom", custom_value: 3, custom_unit: "hour" },
+    ]);
+  });
+
+  it("does not hit the database when there is nothing to insert", async () => {
+    const insert = jest.fn();
+    const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
+
+    const result = await createEventReminders(client, "event-1", []);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    expect(insert).toHaveBeenCalledWith([{ event_id: "event-1", kind: "before_10m" }]);
+    expect(client.from).not.toHaveBeenCalled();
   });
 
   it("maps a permission error to Forbidden", async () => {
     const insert = jest.fn().mockResolvedValue({ error: { message: "denied", code: "42501" } });
     const client = { from: jest.fn().mockReturnValue({ insert }) } as unknown as SupabaseClient;
 
-    const result = await createDefaultEventReminders(client, "event-1", true);
+    const result = await createEventReminders(client, "event-1", [{ kind: "on_day" }]);
 
     expect(result).toEqual({ ok: false, error: { type: "Forbidden" } });
   });

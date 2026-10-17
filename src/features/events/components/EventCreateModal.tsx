@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -25,8 +25,25 @@ import { Icon } from "../../../shared/components/Icon";
 import { PersonalOnlyBadge } from "../../../shared/components/PersonalOnlyBadge";
 import { toJstDateKey, todayJstDateKey } from "../../../shared/utils/formatDateTime";
 import { EventFormFields, type EventFormValue } from "./EventFormFields";
-import { useCreateDefaultEventReminders, useCreateEvent } from "../hooks";
+import { defaultReminderKinds } from "../defaultReminders";
+import { useCreateEvent, useCreateEventReminders } from "../hooks";
+import { computeEventReminderAt } from "../reminderCompute";
+import type { EventReminder, EventReminderCustomOffset, EventReminderKind } from "../types";
+import { EventReminderPicker } from "./EventReminderPicker";
 import { getEventErrorMessageJa } from "../service";
+
+/** 作成画面で選択中のリマインド(予定がまだ無いので、保存は作成後にまとめて行う)。 */
+interface ReminderDraftItem {
+  id: string;
+  kind: EventReminderKind;
+  custom?: EventReminderCustomOffset;
+}
+
+let reminderDraftSequence = 0;
+function nextReminderDraftId(): string {
+  reminderDraftSequence += 1;
+  return `reminder-draft-${reminderDraftSequence}`;
+}
 
 export interface EventCreateModalProps {
   visible: boolean;
@@ -66,6 +83,9 @@ export function EventCreateModal({
     url: "",
     memo: "",
   }));
+  const makeReminderDrafts = (isAllDay: boolean): ReminderDraftItem[] =>
+    defaultReminderKinds(isAllDay).map((kind) => ({ id: nextReminderDraftId(), kind }));
+  const [reminderDrafts, setReminderDrafts] = useState<ReminderDraftItem[]>(() => makeReminderDrafts(true));
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [hasTodos, setHasTodos] = useState(false);
   const [todoItems, setTodoItems] = useState<string[]>([]);
@@ -87,6 +107,7 @@ export function EventCreateModal({
       memo: "",
     });
     setNewEventCalendarId(defaultCalendarId);
+    setReminderDrafts(makeReminderDrafts(true));
     setSelectedTagIds([]);
     setHasTodos(false);
     setTodoItems([]);
@@ -97,7 +118,7 @@ export function EventCreateModal({
 
   const { attachTagsToEvent } = useAttachTagsToEvent();
   const { createEvent, isSubmitting: isCreatingEvent, error: createEventError } = useCreateEvent();
-  const { createDefaultEventReminders } = useCreateDefaultEventReminders();
+  const { createEventReminders } = useCreateEventReminders();
   const { createTodo } = useCreateTodo();
   const { attachPhoto } = useAttachPhoto();
 
@@ -113,6 +134,50 @@ export function EventCreateModal({
   // eslint-disable-next-line react-hooks/purity -- 上のコメント参照
   const isNewEventPastTimed = newEventForm.end.getTime() < Date.now();
   const isNewEventPast = newEventForm.isAllDay ? isNewEventPastAllDay : isNewEventPastTimed;
+
+  // 終日/時刻指定で選べるリマインドが違うので、切り替えたらその種別の既定に戻す。
+  const handleFormChange = (patch: Partial<EventFormValue>) => {
+    if (patch.isAllDay !== undefined && patch.isAllDay !== newEventForm.isAllDay) {
+      setReminderDrafts(makeReminderDrafts(patch.isAllDay));
+    }
+    setNewEventForm((prev) => ({ ...prev, ...patch }));
+  };
+
+  // 開始日時が変わると通知時刻も変わるので、表示用の通知時刻(remindAt)は都度計算する。
+  const startIso = newEventForm.start.toISOString();
+  const reminders: EventReminder[] = useMemo(
+    () =>
+      reminderDrafts.map((draft) => ({
+        id: draft.id,
+        eventId: "",
+        userId: "",
+        kind: draft.kind,
+        customValue: draft.custom?.value ?? null,
+        customUnit: draft.custom?.unit ?? null,
+        remindAt: computeEventReminderAt(draft.kind, startIso, draft.custom),
+      })),
+    [reminderDrafts, startIso]
+  );
+  // 既に過ぎている時刻のリマインドは登録しない(作成直後に通知が届いてしまうため)。
+  // eslint-disable-next-line react-hooks/purity -- フォーム入力値に対する表示条件で、副作用のない参照
+  const nowMs = Date.now();
+  const hasPastReminder = reminders.some((reminder) => new Date(reminder.remindAt).getTime() <= nowMs);
+
+  const handleAddReminder = (kind: EventReminderKind, custom?: EventReminderCustomOffset) => {
+    setReminderDrafts((prev) => {
+      const duplicate = prev.some((draft) =>
+        kind === "custom"
+          ? draft.kind === "custom" && draft.custom?.value === custom?.value && draft.custom?.unit === custom?.unit
+          : draft.kind === kind
+      );
+      if (duplicate) return prev;
+      return [...prev, { id: nextReminderDraftId(), kind, custom }];
+    });
+  };
+
+  const handleRemoveReminder = (reminder: EventReminder) => {
+    setReminderDrafts((prev) => prev.filter((draft) => draft.id !== reminder.id));
+  };
 
   const handleSelectEventCalendar = (calendarId: string) => {
     setNewEventCalendarId(calendarId);
@@ -177,17 +242,43 @@ export function EventCreateModal({
       if (isNewEventPast && stagedMemoryPhoto) {
         await attachPhoto(createdEvent.id, stagedMemoryPhoto);
       }
-      // 自分の意思でリマインドを設定しなくても最低限通知が届くよう、
-      // 作成直後に既定のリマインド(終日: 当日+1日前 / 時刻指定: 10分前)を設定する。
-      // ただし過去日で登録した予定には設定しない(既に終わったことへの
-      // リマインドは意味がなく、登録直後に届いてしまうため)。
+      // 作成画面で選ばれているリマインド(既定: 終日=当日+1日前 / 時刻指定=前日9時)を
+      // 作成直後に登録する。既に時刻が過ぎているものは登録しない(過去日で登録した
+      // 記録目的の予定や、直前に作った予定で、作成直後に通知が届いてしまうため)。
       if (!isNewEventPast) {
-        await createDefaultEventReminders(createdEvent.id, newEventForm.isAllDay);
+        const toRegister = reminders
+          .filter((reminder) => new Date(reminder.remindAt).getTime() > Date.now())
+          .map((reminder) => {
+            const draft = reminderDrafts.find((item) => item.id === reminder.id);
+            return draft?.custom ? { kind: reminder.kind, custom: draft.custom } : { kind: reminder.kind };
+          });
+        if (toRegister.length > 0) {
+          await createEventReminders(createdEvent.id, toRegister);
+        }
       }
       onClose();
       onCreated();
     }
   };
+
+  // 自分にしか効かない設定なので、個人用の枠に入れる(予定詳細のリマインドと同じ選択肢)。
+  const reminderSection = (
+    <View testID="event-create-reminder-section" style={styles.reminderSection}>
+      <Text style={styles.reminderSectionTitle}>リマインド</Text>
+      <EventReminderPicker
+        testIDPrefix="event-create-reminder"
+        isAllDay={newEventForm.isAllDay}
+        reminders={reminders}
+        onAdd={handleAddReminder}
+        onRemove={handleRemoveReminder}
+      />
+      {hasPastReminder ? (
+        <Text testID="event-create-reminder-past-note" style={styles.reminderPastNote}>
+          通知時刻を過ぎているリマインドは登録されません
+        </Text>
+      ) : null}
+    </View>
+  );
 
   const todoSection = hasTodos ? (
     <View style={styles.todoChecklist}>
@@ -300,7 +391,7 @@ export function EventCreateModal({
                   <EventFormFields
                     testIDPrefix="event-create"
                     value={newEventForm}
-                    onChange={(patch) => setNewEventForm((prev) => ({ ...prev, ...patch }))}
+                    onChange={handleFormChange}
                   />
                   <TagPickerRow
                     testIDPrefix="event-create"
@@ -308,6 +399,7 @@ export function EventCreateModal({
                     selectedTagIds={selectedTagIds}
                     onToggle={handleToggleTagSelection}
                   />
+                  {reminderSection}
                   {todoSection}
                   {memoryPhotoSection}
                 </View>
@@ -324,7 +416,7 @@ export function EventCreateModal({
                     <EventFormFields
                       testIDPrefix="event-create"
                       value={newEventForm}
-                      onChange={(patch) => setNewEventForm((prev) => ({ ...prev, ...patch }))}
+                      onChange={handleFormChange}
                     />
                     {memoryPhotoSection}
                   </View>
@@ -338,6 +430,7 @@ export function EventCreateModal({
                       selectedTagIds={selectedTagIds}
                       onToggle={handleToggleTagSelection}
                     />
+                    {reminderSection}
                     {todoSection}
                   </View>
                 </>
@@ -435,6 +528,18 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#d32f2f",
+  },
+  reminderSection: {
+    gap: 4,
+  },
+  reminderSectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#555",
+  },
+  reminderPastNote: {
+    color: "#666",
+    fontSize: 12,
   },
   eventCalendarPickerRow: {
     flexDirection: "row",

@@ -117,6 +117,12 @@ export interface EventReminderCustomOffset {
   unit: EventReminderUnit;
 }
 
+/** 予定の作成画面で選んだリマインド(予定がまだ無いので kind とカスタムの指定だけを持つ)。 */
+export interface EventReminderDraft {
+  kind: EventReminderKind;
+  custom?: EventReminderCustomOffset;
+}
+
 export type EventError =
   | { type: "NotFound" }
   | { type: "Forbidden" }

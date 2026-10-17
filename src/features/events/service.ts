@@ -10,14 +10,13 @@ import type {
   EventError,
   EventReminder,
   EventReminderCustomOffset,
+  EventReminderDraft,
   EventReminderKind,
   EventReminderUnit,
   EventWithTagColor,
   UpdateEventInput,
 } from "./types";
 
-const DEFAULT_ALL_DAY_REMINDER_KINDS: EventReminderKind[] = ["on_day", "day_before_1"];
-const DEFAULT_TIMED_REMINDER_KINDS: EventReminderKind[] = ["before_10m"];
 
 const TAG_LEVEL_PRIORITY = ["major", "mid", "minor"];
 
@@ -369,19 +368,29 @@ export async function removeEventReminder(
   return ok(undefined);
 }
 
-/** Seeds the caller's default reminders right after creating an event, so a
- * reminder fires even if they never open the event again to configure one
- * (当日+1日前 for all-day events, 10分前 for timed events). */
-export async function createDefaultEventReminders(
+/** 予定の作成直後に、作成画面で選ばれたリマインドをまとめて登録する(作成画面の
+ * 選択状態は予定が出来るまで保存先が無いため、作成後に1回で入れる)。 */
+export async function createEventReminders(
   client: SupabaseClient,
   eventId: string,
-  isAllDay: boolean
+  reminders: EventReminderDraft[]
 ): Promise<Result<void, EventError>> {
-  const kinds = isAllDay ? DEFAULT_ALL_DAY_REMINDER_KINDS : DEFAULT_TIMED_REMINDER_KINDS;
+  if (reminders.length === 0) {
+    return ok(undefined);
+  }
 
-  const { error } = await client
-    .from("event_reminders")
-    .insert(kinds.map((kind) => ({ event_id: eventId, kind })));
+  const { error } = await client.from("event_reminders").insert(
+    reminders.map((reminder) =>
+      reminder.kind === "custom"
+        ? {
+            event_id: eventId,
+            kind: reminder.kind,
+            custom_value: reminder.custom?.value ?? null,
+            custom_unit: reminder.custom?.unit ?? null,
+          }
+        : { event_id: eventId, kind: reminder.kind }
+    )
+  );
 
   if (error) {
     return err(mapEventError(error));

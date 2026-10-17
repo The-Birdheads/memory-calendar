@@ -27,14 +27,28 @@ type PickerTarget = { which: "start" | "end"; part: "date" | "time" };
 
 export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFieldsProps) {
   const [activePicker, setActivePicker] = useState<PickerTarget | null>(null);
+  // 時刻ピッカー(スピナー)は回している途中の値を一旦ここに持ち、「完了」を
+  // 押したときに初めてフォームへ反映する(回している間に終了時刻の自動補正が
+  // 走って値が動き回らないように)。日付(カレンダー)はタップ=選択確定なので即時反映。
+  const [timeDraft, setTimeDraft] = useState<Date | null>(null);
 
   // キーボードとピッカーは同時に出さない: ピッカーを開くときはキーボードを閉じ、
   // 文字入力欄にフォーカスが当たったときはピッカーを閉じる。
   const openPicker = (target: PickerTarget) => {
     Keyboard.dismiss();
+    setTimeDraft(null);
     setActivePicker(target);
   };
-  const closePicker = () => setActivePicker(null);
+  const closePicker = () => {
+    setTimeDraft(null);
+    setActivePicker(null);
+  };
+  const confirmPicker = () => {
+    if (activePicker?.part === "time" && timeDraft) {
+      handlePicked(activePicker.which, timeDraft);
+    }
+    closePicker();
+  };
 
   const handlePicked = (which: "start" | "end", selected: Date) => {
     if (which === "end") {
@@ -123,12 +137,15 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
           ) : (
             <DateTimePicker
               testID={pickerTestID}
-              value={value[activePicker.which]}
+              value={activePicker.part === "time" && timeDraft ? timeDraft : value[activePicker.which]}
               mode={activePicker.part}
               display={Platform.OS === "ios" ? (activePicker.part === "time" ? "spinner" : "inline") : "default"}
               locale={DATE_PICKER_LOCALE}
               onChange={(_event: unknown, selected?: Date) => {
-                if (selected) {
+                if (!selected) return;
+                if (activePicker.part === "time") {
+                  setTimeDraft(selected);
+                } else {
                   handlePicked(activePicker.which, selected);
                 }
               }}
@@ -137,7 +154,7 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
           <TouchableOpacity
             testID={`${testIDPrefix}-picker-done`}
             style={styles.pickerDoneButton}
-            onPress={closePicker}
+            onPress={confirmPicker}
           >
             <Text>完了</Text>
           </TouchableOpacity>

@@ -4,7 +4,7 @@ import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import {
   addEventReminder,
-  createDefaultEventReminders,
+  createEventReminders,
   createEvent,
   deleteEvent,
   getEvent,
@@ -22,6 +22,7 @@ import type {
   EventError,
   EventReminder,
   EventReminderCustomOffset,
+  EventReminderDraft,
   EventReminderKind,
   EventWithTagColor,
   UpdateEventInput,
@@ -328,22 +329,21 @@ export function useRemoveEventReminder(): UseRemoveEventReminderResult {
   return { removeEventReminder: runRemoveEventReminder, isSubmitting, error };
 }
 
-export interface UseCreateDefaultEventRemindersResult {
-  createDefaultEventReminders: (eventId: string, isAllDay: boolean) => Promise<boolean>;
+export interface UseCreateEventRemindersResult {
+  createEventReminders: (eventId: string, reminders: EventReminderDraft[]) => Promise<boolean>;
   isSubmitting: boolean;
   error: EventError | null;
 }
 
-/** Seeds the caller's default reminders right after creating an event (see
- * service.ts createDefaultEventReminders for the default kinds chosen). */
-export function useCreateDefaultEventReminders(): UseCreateDefaultEventRemindersResult {
+/** Registers the reminders picked in the create form right after the event exists. */
+export function useCreateEventReminders(): UseCreateEventRemindersResult {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<EventError | null>(null);
 
-  const runCreateDefaultEventReminders = useCallback(async (eventId: string, isAllDay: boolean) => {
+  const runCreateEventReminders = useCallback(async (eventId: string, reminders: EventReminderDraft[]) => {
     setIsSubmitting(true);
     setError(null);
-    const result = await createDefaultEventReminders(getSupabaseClient(), eventId, isAllDay);
+    const result = await createEventReminders(getSupabaseClient(), eventId, reminders);
     setIsSubmitting(false);
     if (!result.ok) {
       setError(result.error);
@@ -352,7 +352,7 @@ export function useCreateDefaultEventReminders(): UseCreateDefaultEventReminders
     return true;
   }, []);
 
-  return { createDefaultEventReminders: runCreateDefaultEventReminders, isSubmitting, error };
+  return { createEventReminders: runCreateEventReminders, isSubmitting, error };
 }
 
 export interface UseEventResult {

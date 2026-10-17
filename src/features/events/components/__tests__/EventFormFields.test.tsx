@@ -319,6 +319,7 @@ describe("EventFormFields", () => {
 
       await fireEvent.press(getByTestId("event-create-end-time-button"));
       await fireEvent.changeText(getByTestId("event-create-end-time-picker"), "2026-09-01T11:00:00.000Z");
+      await fireEvent.press(getByTestId("event-create-picker-done"));
 
       expect(onChange).toHaveBeenCalledWith({ end: new Date("2026-09-01T11:00:00.000Z") });
     });
@@ -416,6 +417,7 @@ describe("EventFormFields", () => {
 
       await fireEvent.press(getByTestId("event-create-start-time-button"));
       await fireEvent.changeText(getByTestId("event-create-start-time-picker"), "2026-09-01T13:00:00.000Z");
+      await fireEvent.press(getByTestId("event-create-picker-done"));
 
       expect(onChange).toHaveBeenCalledWith({
         start: new Date("2026-09-01T13:00:00.000Z"),
@@ -431,6 +433,7 @@ describe("EventFormFields", () => {
 
       await fireEvent.press(getByTestId("event-create-start-time-button"));
       await fireEvent.changeText(getByTestId("event-create-start-time-picker"), "2026-09-01T09:30:00.000Z");
+      await fireEvent.press(getByTestId("event-create-picker-done"));
 
       expect(onChange).toHaveBeenCalledWith({ start: new Date("2026-09-01T09:30:00.000Z") });
     });
@@ -464,6 +467,78 @@ describe("EventFormFields", () => {
       await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-08-30T10:00:00.000Z");
 
       expect(onChange).toHaveBeenCalledWith({ end: new Date("2026-08-30T10:00:00.000Z") });
+    });
+  });
+
+  describe("時刻は完了を押してから反映する", () => {
+    it("does not call onChange while the time picker is being spun, only after 完了", async () => {
+      const onChange = jest.fn();
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={onChange} />
+      );
+
+      await fireEvent.press(getByTestId("event-create-end-time-button"));
+      await fireEvent.changeText(getByTestId("event-create-end-time-picker"), "2026-09-01T11:00:00.000Z");
+
+      expect(onChange).not.toHaveBeenCalled();
+
+      await fireEvent.press(getByTestId("event-create-picker-done"));
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith({ end: new Date("2026-09-01T11:00:00.000Z") });
+    });
+
+    it("commits only the last spun time on 完了", async () => {
+      const onChange = jest.fn();
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={onChange} />
+      );
+
+      await fireEvent.press(getByTestId("event-create-end-time-button"));
+      await fireEvent.changeText(getByTestId("event-create-end-time-picker"), "2026-09-01T11:00:00.000Z");
+      await fireEvent.changeText(getByTestId("event-create-end-time-picker"), "2026-09-01T12:30:00.000Z");
+      await fireEvent.press(getByTestId("event-create-picker-done"));
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith({ end: new Date("2026-09-01T12:30:00.000Z") });
+    });
+
+    it("does not call onChange on 完了 when the time was not spun", async () => {
+      const onChange = jest.fn();
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={onChange} />
+      );
+
+      await fireEvent.press(getByTestId("event-create-end-time-button"));
+      await fireEvent.press(getByTestId("event-create-picker-done"));
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("discards a spun-but-not-confirmed time when another box is tapped instead of 完了", async () => {
+      const onChange = jest.fn();
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={onChange} />
+      );
+
+      await fireEvent.press(getByTestId("event-create-end-time-button"));
+      await fireEvent.changeText(getByTestId("event-create-end-time-picker"), "2026-09-01T11:00:00.000Z");
+      await fireEvent.press(getByTestId("event-create-start-button"));
+      await fireEvent.press(getByTestId("event-create-picker-done"));
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("still applies a picked date immediately (the date calendar has no 完了 requirement)", async () => {
+      const onChange = jest.fn();
+      const { getByTestId } = await render(
+        <EventFormFields testIDPrefix="event-create" value={BASE_VALUE} onChange={onChange} />
+      );
+
+      await fireEvent.press(getByTestId("event-create-end-button"));
+      await fireEvent.changeText(getByTestId("event-create-end-picker"), "2026-09-02T10:00:00.000Z");
+
+      expect(onChange).toHaveBeenCalledWith({ end: new Date("2026-09-02T10:00:00.000Z") });
     });
   });
 });

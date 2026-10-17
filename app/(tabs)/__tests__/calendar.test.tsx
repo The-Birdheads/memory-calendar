@@ -18,7 +18,7 @@ import {
 } from "../../../src/features/calendars/hooks";
 import { computeDateKeyRange } from "../../../src/features/events/dateRange";
 import {
-  useCreateDefaultEventReminders,
+  useCreateEventReminders,
   useCreateEvent,
   useEventsInRangeForCalendars,
 } from "../../../src/features/events/hooks";
@@ -85,7 +85,7 @@ jest.mock("../../../src/features/calendars/hooks", () => ({
 jest.mock("../../../src/features/events/hooks", () => ({
   useEventsInRangeForCalendars: jest.fn(),
   useCreateEvent: jest.fn(),
-  useCreateDefaultEventReminders: jest.fn(),
+  useCreateEventReminders: jest.fn(),
 }));
 
 jest.mock("../../../src/features/todos/hooks", () => ({
@@ -199,8 +199,8 @@ function mockCommonHooks() {
     isSubmitting: false,
     error: null,
   });
-  (useCreateDefaultEventReminders as jest.Mock).mockReturnValue({
-    createDefaultEventReminders: jest.fn().mockResolvedValue(true),
+  (useCreateEventReminders as jest.Mock).mockReturnValue({
+    createEventReminders: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
     error: null,
   });
@@ -1248,9 +1248,9 @@ describe("CalendarScreen", () => {
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
     const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
     (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
-    const createDefaultEventRemindersMock = jest.fn().mockResolvedValue(true);
-    (useCreateDefaultEventReminders as jest.Mock).mockReturnValue({
-      createDefaultEventReminders: createDefaultEventRemindersMock,
+    const createEventRemindersMock = jest.fn().mockResolvedValue(true);
+    (useCreateEventReminders as jest.Mock).mockReturnValue({
+      createEventReminders: createEventRemindersMock,
       isSubmitting: false,
       error: null,
     });
@@ -1259,11 +1259,122 @@ describe("CalendarScreen", () => {
 
     await fireEvent.press(getByTestId("calendar-add-event-fab"));
     await fireEvent.changeText(getByTestId("event-create-title-input"), "誕生日会");
+    // "now" is fixed at 2026-08-18T12:00:00.000Z (see beforeEach) - pick a future day so the
+    // 当日/1日前 reminders aren't already in the past.
+    await fireEvent.press(getByTestId("event-create-start-button"));
+    await fireEvent.changeText(getByTestId("event-create-start-picker"), "2026-09-01T00:00:00.000Z");
+    await fireEvent.press(getByTestId("event-create-picker-done"));
     await fireEvent.press(getByTestId("event-create-submit"));
 
     await waitFor(() =>
-      expect(createDefaultEventRemindersMock).toHaveBeenCalledWith("event-created-1", true)
+      expect(createEventRemindersMock).toHaveBeenCalledWith("event-created-1", [
+        { kind: "on_day" },
+        { kind: "day_before_1" },
+      ])
     );
+  });
+
+  describe("予定作成画面のリマインド", () => {
+    async function openCreateModal() {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+      (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+      const createEventRemindersMock = jest.fn().mockResolvedValue(true);
+      (useCreateEventReminders as jest.Mock).mockReturnValue({
+        createEventReminders: createEventRemindersMock,
+        isSubmitting: false,
+        error: null,
+      });
+      const utils = await render(<CalendarScreen />);
+      await fireEvent.press(utils.getByTestId("calendar-add-event-fab"));
+      await fireEvent.changeText(utils.getByTestId("event-create-title-input"), "打ち合わせ");
+      return { ...utils, createEventMock, createEventRemindersMock };
+    }
+
+    async function pickStartDate(getByTestId: (id: string) => unknown, iso: string) {
+      await fireEvent.press(getByTestId("event-create-start-button") as never);
+      await fireEvent.changeText(getByTestId("event-create-start-picker") as never, iso);
+      await fireEvent.press(getByTestId("event-create-picker-done") as never);
+    }
+
+    it("shows the reminder section with the all-day defaults (当日, 1日前) checked", async () => {
+      const { getByTestId, queryByTestId } = await openCreateModal();
+
+      expect(getByTestId("event-create-reminder-option-on_day-checked")).toBeTruthy();
+      expect(getByTestId("event-create-reminder-option-day_before_1-checked")).toBeTruthy();
+      expect(queryByTestId("event-create-reminder-option-day_before_2-checked")).toBeNull();
+    });
+
+    it("switches to the timed options with 前日9時 checked by default when 終日 is turned off", async () => {
+      const { getByTestId, queryByTestId } = await openCreateModal();
+
+      await fireEvent.press(getByTestId("event-create-allday-toggle"));
+
+      expect(getByTestId("event-create-reminder-option-day_before_1-checked")).toBeTruthy();
+      expect(queryByTestId("event-create-reminder-option-before_10m-checked")).toBeNull();
+      expect(queryByTestId("event-create-reminder-option-on_day")).toBeNull();
+    });
+
+    it("registers 前日9時 for a timed event on creation", async () => {
+      const { getByTestId, createEventRemindersMock } = await openCreateModal();
+
+      await fireEvent.press(getByTestId("event-create-allday-toggle"));
+      await pickStartDate(getByTestId, "2026-09-01T10:00:00.000Z");
+      await fireEvent.press(getByTestId("event-create-submit"));
+
+      await waitFor(() =>
+        expect(createEventRemindersMock).toHaveBeenCalledWith("event-created-1", [{ kind: "day_before_1" }])
+      );
+    });
+
+    it("registers the reminders as edited in the form (uncheck a default, add another, add a custom one)", async () => {
+      const { getByTestId, createEventRemindersMock } = await openCreateModal();
+
+      await fireEvent.press(getByTestId("event-create-allday-toggle"));
+      await pickStartDate(getByTestId, "2026-09-01T10:00:00.000Z");
+      await fireEvent.press(getByTestId("event-create-reminder-option-day_before_1"));
+      await fireEvent.press(getByTestId("event-create-reminder-option-before_1h"));
+      await fireEvent.press(getByTestId("event-create-reminder-option-custom"));
+      await fireEvent.press(getByTestId("event-create-reminder-custom-picker-confirm"));
+      await fireEvent.press(getByTestId("event-create-submit"));
+
+      await waitFor(() =>
+        expect(createEventRemindersMock).toHaveBeenCalledWith("event-created-1", [
+          { kind: "before_1h" },
+          { kind: "custom", custom: { value: 10, unit: "minute" } },
+        ])
+      );
+    });
+
+    it("does not register a reminder whose time has already passed, and says so", async () => {
+      const { getByTestId, createEventMock, createEventRemindersMock } = await openCreateModal();
+
+      // "now" is 2026-08-18T12:00:00.000Z; this event starts later today (JST 22:00),
+      // so its 前日9時 (8/17 JST 10:00) is long gone.
+      await fireEvent.press(getByTestId("event-create-allday-toggle"));
+      await pickStartDate(getByTestId, "2026-08-18T13:00:00.000Z");
+      expect(getByTestId("event-create-reminder-past-note")).toBeTruthy();
+
+      await fireEvent.press(getByTestId("event-create-submit"));
+
+      await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+      expect(createEventRemindersMock).not.toHaveBeenCalled();
+    });
+
+    it("registers only the not-yet-passed reminders when some have passed", async () => {
+      const { getByTestId, createEventRemindersMock } = await openCreateModal();
+
+      // 開始 2026-08-18T14:00Z: 前日9時 has passed, 1時間前 (13:00Z) has not
+      await fireEvent.press(getByTestId("event-create-allday-toggle"));
+      await pickStartDate(getByTestId, "2026-08-18T14:00:00.000Z");
+      await fireEvent.press(getByTestId("event-create-reminder-option-before_1h"));
+      await fireEvent.press(getByTestId("event-create-submit"));
+
+      await waitFor(() =>
+        expect(createEventRemindersMock).toHaveBeenCalledWith("event-created-1", [{ kind: "before_1h" }])
+      );
+    });
   });
 
   it("does not seed default reminders for an event created with a past date (regression: reminders fired immediately for backdated events)", async () => {
@@ -1271,9 +1382,9 @@ describe("CalendarScreen", () => {
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
     const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
     (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
-    const createDefaultEventRemindersMock = jest.fn().mockResolvedValue(true);
-    (useCreateDefaultEventReminders as jest.Mock).mockReturnValue({
-      createDefaultEventReminders: createDefaultEventRemindersMock,
+    const createEventRemindersMock = jest.fn().mockResolvedValue(true);
+    (useCreateEventReminders as jest.Mock).mockReturnValue({
+      createEventReminders: createEventRemindersMock,
       isSubmitting: false,
       error: null,
     });
@@ -1295,7 +1406,7 @@ describe("CalendarScreen", () => {
     await fireEvent.press(getByTestId("event-create-submit"));
 
     await waitFor(() => expect(createEventMock).toHaveBeenCalled());
-    expect(createDefaultEventRemindersMock).not.toHaveBeenCalled();
+    expect(createEventRemindersMock).not.toHaveBeenCalled();
   });
 
   it("does not offer to add a memory photo while the create form's date is still in the future (default)", async () => {
