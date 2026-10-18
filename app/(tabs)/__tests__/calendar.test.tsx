@@ -6,6 +6,7 @@ import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 import CalendarScreen from "../calendar";
 import { useSetEventAssignees } from "../../../src/features/assignees/hooks";
 import { useOnboarding } from "../../../src/features/onboarding/hooks";
+import { ONBOARDING_SLIDES } from "../../../src/features/onboarding/slides";
 import { useRemoveMyAvatar, useUploadMyAvatar, useAvatarUrls } from "../../../src/features/profile/avatarHooks";
 import { useAuthActions, useAuthSession } from "../../../src/features/auth/hooks";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../../../src/features/profile/hooks";
@@ -1407,8 +1408,8 @@ describe("CalendarScreen", () => {
       (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
       const hooks = mockOnboarding(true);
       const utils = await render(<CalendarScreen />);
-      // 最後の画面まで進む。
-      for (let i = 0; i < 4; i += 1) {
+      // 最後の画面まで進む(スライドの枚数だけ「次へ」)。
+      for (let i = 0; i < ONBOARDING_SLIDES.length; i += 1) {
         await fireEvent.press(utils.getByTestId("onboarding-next"));
       }
       await fireEvent.press(utils.getByTestId(testID));

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import { Icon } from "../../../shared/components/Icon";
@@ -17,6 +17,9 @@ export interface OnboardingModalProps {
 // スライドの枚数 + 最後の「始める」画面。
 const STEP_COUNT = ONBOARDING_SLIDES.length + 1;
 
+const CONTENT_HORIZONTAL_PADDING = 24;
+const MAX_IMAGE_HEIGHT_RATIO = 0.34;
+
 /**
  * 初回の案内(チュートリアル)。数枚のスライドでアプリの特徴を紹介し、最後に「共有カレンダーを
  * つくる / 最初の予定を作る / あとで」を選んでもらう。どのスライドでもスキップできる。
@@ -25,6 +28,7 @@ const STEP_COUNT = ONBOARDING_SLIDES.length + 1;
 export function OnboardingModal({ visible, onClose }: OnboardingModalProps) {
   const [step, setStep] = useState(0);
   const topInset = useModalTopInset();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
 
   useEffect(() => {
@@ -33,6 +37,14 @@ export function OnboardingModal({ visible, onClose }: OnboardingModalProps) {
 
   const isLast = step === STEP_COUNT - 1;
   const slide = isLast ? null : ONBOARDING_SLIDES[step];
+
+  // 画像は、横幅いっぱいを上限に、縦が画面の3割強を超えないように大きさを決める(小さい端末でも、
+  // 文章とボタンが収まるように)。
+  const maxImageWidth = windowWidth - CONTENT_HORIZONTAL_PADDING * 2;
+  const imageHeight = slide
+    ? Math.min(maxImageWidth / slide.imageAspectRatio, windowHeight * MAX_IMAGE_HEIGHT_RATIO)
+    : 0;
+  const imageWidth = slide ? imageHeight * slide.imageAspectRatio : 0;
 
   return (
     <Modal testID="onboarding-modal" visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => onClose("dismiss")}>
@@ -52,17 +64,34 @@ export function OnboardingModal({ visible, onClose }: OnboardingModalProps) {
           )}
         </View>
 
-        <View style={styles.content}>
-          <View style={styles.iconCircle}>
-            <Icon name={slide ? slide.icon : "plus"} size={44} color="#2f6fed" />
-          </View>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {slide ? (
+            <>
+              <View style={[styles.imageFrame, { width: imageWidth, height: imageHeight }]}>
+                <Image
+                  testID="onboarding-image"
+                  source={slide.image}
+                  style={{ width: imageWidth, height: imageHeight }}
+                  resizeMode="cover"
+                  accessibilityLabel={slide.caption}
+                />
+              </View>
+              <Text testID="onboarding-caption" style={styles.caption}>
+                {slide.caption}
+              </Text>
+            </>
+          ) : (
+            <View style={styles.iconCircle}>
+              <Icon name="plus" size={44} color="#2f6fed" />
+            </View>
+          )}
           <Text testID="onboarding-title" style={styles.title}>
             {slide ? slide.title : "さっそく始めましょう"}
           </Text>
           <Text testID="onboarding-body" style={styles.body}>
             {slide ? slide.body : "まずは、共有カレンダーをつくるか、最初の予定を作ってみましょう。"}
           </Text>
-        </View>
+        </ScrollView>
 
         <View style={styles.dots}>
           {Array.from({ length: STEP_COUNT }, (_, index) => (
@@ -125,7 +154,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    paddingHorizontal: 24,
+    paddingHorizontal: CONTENT_HORIZONTAL_PADDING,
   },
   topRow: {
     height: 32,
@@ -138,10 +167,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 20,
+    gap: 14,
+    paddingVertical: 8,
+  },
+  imageFrame: {
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e0e3e8",
+    backgroundColor: "#f7f8fa",
+  },
+  caption: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#666",
+    textAlign: "center",
   },
   iconCircle: {
     width: 96,
@@ -152,14 +195,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
     color: "#111",
     textAlign: "center",
   },
   body: {
-    fontSize: 16,
-    lineHeight: 25,
+    fontSize: 15,
+    lineHeight: 23,
     color: "#444",
     textAlign: "center",
   },

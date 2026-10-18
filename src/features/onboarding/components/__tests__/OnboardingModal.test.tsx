@@ -32,6 +32,34 @@ describe("OnboardingModal", () => {
     expect(getByTestId("onboarding-body").props.children).toBe(ONBOARDING_SLIDES[0].body);
   });
 
+  it("shows a cropped screenshot of the real app screen on each slide, with a one-line caption saying what it shows", async () => {
+    const { utils } = setup();
+    const { getByTestId } = await utils;
+
+    for (const slide of ONBOARDING_SLIDES) {
+      expect(getByTestId("onboarding-image").props.source).toBe(slide.image);
+      expect(getByTestId("onboarding-caption").props.children).toBe(slide.caption);
+      await fireEvent.press(getByTestId("onboarding-next"));
+    }
+  });
+
+  it("sizes the screenshot to its own aspect ratio, never wider than the content", async () => {
+    const { utils } = setup();
+    const { getByTestId } = await utils;
+
+    const style = StyleSheet.flatten(getByTestId("onboarding-image").props.style);
+    expect(style.width / style.height).toBeCloseTo(ONBOARDING_SLIDES[0].imageAspectRatio, 2);
+  });
+
+  it("has no screenshot on the final 始める step", async () => {
+    const { utils } = setup();
+    const { getByTestId, queryByTestId } = await utils;
+
+    await goToLastStep(getByTestId);
+
+    expect(queryByTestId("onboarding-image")).toBeNull();
+  });
+
   it("goes forward one slide at a time with 次へ, and back with 戻る", async () => {
     const { utils } = setup();
     const { getByTestId, queryByTestId } = await utils;
