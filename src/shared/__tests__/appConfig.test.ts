@@ -29,8 +29,8 @@ describe("app.json (App Store release config)", () => {
     expect(expo.slug).toBe("memory-calendar");
   });
 
-  it("is version 1.0.0 for the initial release", () => {
-    expect(expo.version).toBe("1.0.0");
+  it("is version 1.0.1", () => {
+    expect(expo.version).toBe("1.0.1");
   });
 
   describe("広告(AdMob)", () => {
