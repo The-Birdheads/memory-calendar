@@ -11,6 +11,9 @@ import {
   View,
 } from "react-native";
 
+import { AssigneePicker } from "../../assignees/components/AssigneePicker";
+import { useSetEventAssignees } from "../../assignees/hooks";
+import { useCalendarMembers } from "../../calendars/hooks";
 import type { Calendar } from "../../calendars/types";
 import { CalendarLabel } from "../../calendars/components/CalendarLabel";
 import { useAttachPhoto } from "../../memories/hooks";
@@ -86,6 +89,7 @@ export function EventCreateModal({
   const makeReminderDrafts = (isAllDay: boolean): ReminderDraftItem[] =>
     defaultReminderKinds(isAllDay).map((kind) => ({ id: nextReminderDraftId(), kind }));
   const [reminderDrafts, setReminderDrafts] = useState<ReminderDraftItem[]>(() => makeReminderDrafts(true));
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [hasTodos, setHasTodos] = useState(false);
   const [todoItems, setTodoItems] = useState<string[]>([]);
@@ -108,6 +112,7 @@ export function EventCreateModal({
     });
     setNewEventCalendarId(defaultCalendarId);
     setReminderDrafts(makeReminderDrafts(true));
+    setAssigneeIds([]);
     setSelectedTagIds([]);
     setHasTodos(false);
     setTodoItems([]);
@@ -119,6 +124,8 @@ export function EventCreateModal({
   const { attachTagsToEvent } = useAttachTagsToEvent();
   const { createEvent, isSubmitting: isCreatingEvent, error: createEventError } = useCreateEvent();
   const { createEventReminders } = useCreateEventReminders();
+  const { setEventAssignees } = useSetEventAssignees();
+  const { members } = useCalendarMembers(newEventCalendarId);
   const { createTodo } = useCreateTodo();
   const { attachPhoto } = useAttachPhoto();
 
@@ -181,9 +188,15 @@ export function EventCreateModal({
 
   const handleSelectEventCalendar = (calendarId: string) => {
     setNewEventCalendarId(calendarId);
+    // 対象者も同じ理由で、選び直してもらう(別のカレンダーのメンバーではないため)。
+    setAssigneeIds([]);
     // The previously selected tags belong to the OLD calendar and won't
     // exist in the new one's tag tree, so clear them.
     setSelectedTagIds([]);
+  };
+
+  const handleToggleAssignee = (userId: string) => {
+    setAssigneeIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
   };
 
   const handleToggleTagSelection = (tagId: string) => {
@@ -236,6 +249,9 @@ export function EventCreateModal({
       }
       if (selectedTagIds.length > 0) {
         await attachTagsToEvent(createdEvent.id, selectedTagIds);
+      }
+      if (newEventCalendarKind !== "personal" && assigneeIds.length > 0) {
+        await setEventAssignees(createdEvent.id, assigneeIds);
       }
       // 過去日で登録した予定(記録目的の後追い入力)にその場で選んだ思い出の
       // 写真があれば、作成直後に紐付ける。
@@ -417,6 +433,13 @@ export function EventCreateModal({
                       testIDPrefix="event-create"
                       value={newEventForm}
                       onChange={handleFormChange}
+                    />
+                    <AssigneePicker
+                      testIDPrefix="event-create-assignee"
+                      members={members}
+                      selectedIds={assigneeIds}
+                      currentUserId={null}
+                      onToggle={handleToggleAssignee}
                     />
                     {memoryPhotoSection}
                   </View>

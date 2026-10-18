@@ -4,7 +4,9 @@ import { Linking } from "react-native";
 
 import EventDetailScreen from "../[id]";
 import { useAuthSession } from "../../../src/features/auth/hooks";
+import { useEventAssignees, useSetEventAssignees } from "../../../src/features/assignees/hooks";
 import { useCalendarMembers, useMyCalendars } from "../../../src/features/calendars/hooks";
+import { useAvatarUrls } from "../../../src/features/profile/avatarHooks";
 import { useComments, useDeleteComment, usePostComment } from "../../../src/features/communication/hooks";
 import {
   useAddEventReminder,
@@ -46,6 +48,15 @@ jest.mock("react-native-safe-area-context", () => require("react-native-safe-are
 
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
+}));
+
+jest.mock("../../../src/features/assignees/hooks", () => ({
+  useEventAssignees: jest.fn(),
+  useSetEventAssignees: jest.fn(),
+}));
+
+jest.mock("../../../src/features/profile/avatarHooks", () => ({
+  useAvatarUrls: jest.fn(),
 }));
 
 jest.mock("../../../src/features/calendars/hooks", () => ({
@@ -138,7 +149,10 @@ function mockCommonHooks(
     tags?: unknown[];
     tagTree?: unknown[];
     todos?: unknown[];
-    members?: { userId: string; role: string; displayName?: string | null }[];
+    members?: { userId: string; role: string; displayName?: string | null; avatarPath?: string | null }[];
+    assigneeIds?: string[];
+    refetchAssignees?: jest.Mock;
+    setEventAssignees?: jest.Mock;
     photos?: unknown[];
     reminders?: unknown[];
     refetchComments?: jest.Mock;
@@ -165,6 +179,18 @@ function mockCommonHooks(
     isLoading: false,
     error: null,
     refetch: jest.fn(),
+  });
+  (useAvatarUrls as jest.Mock).mockReturnValue({});
+  (useEventAssignees as jest.Mock).mockReturnValue({
+    assigneeIds: overrides.assigneeIds ?? [],
+    isLoading: false,
+    error: null,
+    refetch: overrides.refetchAssignees ?? jest.fn(),
+  });
+  (useSetEventAssignees as jest.Mock).mockReturnValue({
+    setEventAssignees: overrides.setEventAssignees ?? jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
   });
   const refetchEvent = overrides.refetchEvent ?? jest.fn();
   (useEvent as jest.Mock).mockReturnValue({
@@ -1276,6 +1302,95 @@ describe("EventDetailScreen", () => {
     expect(getByTestId("event-tags-edit-button")).toBeTruthy();
     expect(getByTestId("event-todo-add")).toBeTruthy();
     expect(getByTestId("event-photo-add")).toBeTruthy();
+  });
+
+  describe("対象者", () => {
+    const MEMBERS = [
+      { userId: "user-1", role: "owner", displayName: "たろう", avatarPath: null },
+      { userId: "user-2", role: "editor", displayName: "はなこ", avatarPath: null },
+    ];
+
+    it("shows the assignees' icons and names on a shared calendar's event", async () => {
+      mockCommonHooks({ members: MEMBERS, assigneeIds: ["user-2"] });
+
+      const { getByTestId } = await render(<EventDetailScreen />);
+
+      expect(within(getByTestId("event-detail-assignees")).getByText("はなこ")).toBeTruthy();
+      expect(getByTestId("event-detail-assignees-icons-user-2")).toBeTruthy();
+    });
+
+    it("shows no assignee row when nobody is assigned", async () => {
+      mockCommonHooks({ members: MEMBERS, assigneeIds: [] });
+
+      const { queryByTestId } = await render(<EventDetailScreen />);
+
+      expect(queryByTestId("event-detail-assignees")).toBeNull();
+    });
+
+    it("offers the calendar's members as candidates in the edit form, with the current assignees pre-selected", async () => {
+      mockCommonHooks({ members: MEMBERS, assigneeIds: ["user-2"] });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+      await fireEvent.press(getByTestId("event-edit-button"));
+
+      expect(getByTestId("event-edit-assignee-member-user-1")).toBeTruthy();
+      expect(getByTestId("event-edit-assignee-member-user-2-checked")).toBeTruthy();
+      expect(queryByTestId("event-edit-assignee-member-user-1-checked")).toBeNull();
+    });
+
+    it("saves the changed assignees together with the edit, then refreshes them", async () => {
+      const setEventAssignees = jest.fn().mockResolvedValue(true);
+      const refetchAssignees = jest.fn();
+      mockCommonHooks({ members: MEMBERS, assigneeIds: ["user-2"], setEventAssignees, refetchAssignees });
+
+      const { getByTestId } = await render(<EventDetailScreen />);
+      await fireEvent.press(getByTestId("event-edit-button"));
+      await fireEvent.press(getByTestId("event-edit-assignee-member-user-1"));
+      await fireEvent.press(getByTestId("event-edit-assignee-member-user-2"));
+      await fireEvent.press(getByTestId("event-edit-submit"));
+
+      await waitFor(() => expect(setEventAssignees).toHaveBeenCalledWith("event-1", ["user-1"]));
+      await waitFor(() => expect(refetchAssignees).toHaveBeenCalled());
+    });
+
+    it("does not touch the assignees when they were left as they were", async () => {
+      const setEventAssignees = jest.fn().mockResolvedValue(true);
+      mockCommonHooks({ members: MEMBERS, assigneeIds: ["user-2"], setEventAssignees });
+
+      const { getByTestId } = await render(<EventDetailScreen />);
+      await fireEvent.press(getByTestId("event-edit-button"));
+      await fireEvent.press(getByTestId("event-edit-submit"));
+
+      await waitFor(() => expect(getByTestId("event-edit-button")).toBeTruthy());
+      expect(setEventAssignees).not.toHaveBeenCalled();
+    });
+
+    it("does not save the assignees when the event update itself fails", async () => {
+      const setEventAssignees = jest.fn().mockResolvedValue(true);
+      mockCommonHooks({ members: MEMBERS, assigneeIds: [], setEventAssignees });
+      (useUpdateEvent as jest.Mock).mockReturnValue({
+        updateEvent: jest.fn().mockResolvedValue(false),
+        isSubmitting: false,
+        error: null,
+      });
+
+      const { getByTestId } = await render(<EventDetailScreen />);
+      await fireEvent.press(getByTestId("event-edit-button"));
+      await fireEvent.press(getByTestId("event-edit-assignee-member-user-1"));
+      await fireEvent.press(getByTestId("event-edit-submit"));
+
+      expect(setEventAssignees).not.toHaveBeenCalled();
+    });
+
+    it("has no assignee picker or row on a personal calendar's event", async () => {
+      mockCommonHooks({ calendarKind: "personal", members: [MEMBERS[0]] });
+
+      const { getByTestId, queryByTestId } = await render(<EventDetailScreen />);
+      await fireEvent.press(getByTestId("event-edit-button"));
+
+      expect(queryByTestId("event-edit-assignee-section")).toBeNull();
+      expect(queryByTestId("event-detail-assignees")).toBeNull();
+    });
   });
 
   it("opens the edit modal pre-filled with the current event values and submits the update", async () => {

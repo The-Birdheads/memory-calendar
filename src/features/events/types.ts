@@ -18,6 +18,14 @@ export interface Event {
   updatedAt: string;
 }
 
+/** 予定の対象者(共有カレンダーの予定に、任意で設定できる)。表示用に名前とアイコン画像のパスを持つ。 */
+export interface EventAssignee {
+  userId: string;
+  displayName: string | null;
+  /** アイコン画像の保存先パス。未登録なら null(その場合は表示名の頭文字を出す)。 */
+  avatarPath: string | null;
+}
+
 /** An event plus the color of its "primary" attached tag (大分類 > 中分類 > 小分類, or null if untagged). */
 export interface EventWithTagColor extends Event {
   tagColor: string | null;
@@ -30,6 +38,8 @@ export interface EventWithTagColor extends Event {
   hasTags: boolean;
   /** 未完了のToDoの件数。 */
   incompleteTodoCount: number;
+  /** 対象者(設定していなければ空)。 */
+  assignees: EventAssignee[];
 }
 
 export interface CreateEventInput {

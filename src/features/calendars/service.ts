@@ -55,7 +55,7 @@ interface CalendarMembershipRow {
   user_id: string;
   role: CalendarMembership["role"];
   joined_at: string;
-  profiles?: { display_name: string | null } | null;
+  profiles?: { display_name: string | null; avatar_path: string | null } | null;
 }
 
 function mapCalendarMembershipRow(row: CalendarMembershipRow): CalendarMembership {
@@ -65,6 +65,7 @@ function mapCalendarMembershipRow(row: CalendarMembershipRow): CalendarMembershi
     role: row.role,
     joinedAt: row.joined_at,
     displayName: row.profiles?.display_name ?? null,
+    avatarPath: row.profiles?.avatar_path ?? null,
   };
 }
 
@@ -248,7 +249,7 @@ export async function listMembers(
 ): Promise<Result<CalendarMember[], CalendarError>> {
   const { data, error } = await client
     .from("calendar_members")
-    .select("*, profiles(display_name)")
+    .select("*, profiles(display_name, avatar_path)")
     .eq("calendar_id", calendarId);
 
   if (error || !data) {
@@ -271,7 +272,7 @@ export async function listMembersForCalendars(
 
   const { data, error } = await client
     .from("calendar_members")
-    .select("*, profiles(display_name)")
+    .select("*, profiles(display_name, avatar_path)")
     .in("calendar_id", calendarIds);
 
   if (error || !data) {

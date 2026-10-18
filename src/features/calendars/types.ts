@@ -20,6 +20,8 @@ export interface CalendarMember {
   role: CalendarRole;
   joinedAt: string;
   displayName: string | null;
+  /** アイコン画像の保存先パス(未登録なら null で、表示名の頭文字を使う)。 */
+  avatarPath: string | null;
 }
 
 export interface CreateCalendarInput {

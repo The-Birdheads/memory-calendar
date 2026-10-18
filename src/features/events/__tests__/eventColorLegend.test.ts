@@ -26,6 +26,7 @@ function makeEvent(id: string, overrides: Partial<EventWithTagColor> = {}): Even
     commentCount: 0,
     hasTags: false,
     incompleteTodoCount: 0,
+    assignees: [],
     ...overrides,
   };
 }

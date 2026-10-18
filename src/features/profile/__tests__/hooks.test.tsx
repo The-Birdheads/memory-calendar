@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
 import { revokeAppleAuthorizationIfNeeded } from "../../auth/service";
-import { deleteOwnAccount, getMyProfile, updateDisplayName } from "../service";
+import { deleteOwnAccount, getMyProfile, removeOwnAvatarFiles, updateDisplayName } from "../service";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
@@ -17,6 +17,7 @@ jest.mock("../service", () => ({
   getMyProfile: jest.fn(),
   updateDisplayName: jest.fn(),
   deleteOwnAccount: jest.fn(),
+  removeOwnAvatarFiles: jest.fn(),
 }));
 
 describe("useMyProfile", () => {
@@ -26,7 +27,7 @@ describe("useMyProfile", () => {
 
   it("loads the caller's profile on mount", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    const profile = { id: "user-1", displayName: "たろう", avatarUrl: null };
+    const profile = { id: "user-1", displayName: "たろう", avatarPath: null };
     (getMyProfile as jest.Mock).mockResolvedValue({ ok: true, value: profile });
 
     const { result } = await renderHook(() => useMyProfile("user-1"));
@@ -55,7 +56,7 @@ describe("useMyProfile", () => {
     (getSupabaseClient as jest.Mock).mockReturnValue(client);
     (getMyProfile as jest.Mock).mockResolvedValue({
       ok: true,
-      value: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
+      value: { id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 0 },
     });
 
     await renderHook(() => useMyProfile("user-1"));
@@ -84,7 +85,7 @@ describe("useUpdateDisplayName", () => {
 
   it("returns the updated profile and clears the error on success", async () => {
     (getSupabaseClient as jest.Mock).mockReturnValue({});
-    const profile = { id: "user-1", displayName: "新しい名前", avatarUrl: null };
+    const profile = { id: "user-1", displayName: "新しい名前", avatarPath: null };
     (updateDisplayName as jest.Mock).mockResolvedValue({ ok: true, value: profile });
 
     const { result } = await renderHook(() => useUpdateDisplayName());
@@ -123,6 +124,28 @@ describe("useDeleteAccount", () => {
 
   beforeEach(() => {
     (revokeAppleAuthorizationIfNeeded as jest.Mock).mockResolvedValue("not-apple");
+    (removeOwnAvatarFiles as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  it("removes the user's icon image files before deleting the account", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (deleteOwnAccount as jest.Mock).mockResolvedValue({ ok: true, value: undefined });
+
+    await runDelete();
+
+    expect(removeOwnAvatarFiles).toHaveBeenCalledWith({});
+    const removeOrder = (removeOwnAvatarFiles as jest.Mock).mock.invocationCallOrder[0];
+    const deleteOrder = (deleteOwnAccount as jest.Mock).mock.invocationCallOrder[0];
+    expect(removeOrder).toBeLessThan(deleteOrder);
+  });
+
+  it("does not remove the icon image when the user cancels Apple's confirmation", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    (revokeAppleAuthorizationIfNeeded as jest.Mock).mockResolvedValue("cancelled");
+
+    await runDelete();
+
+    expect(removeOwnAvatarFiles).not.toHaveBeenCalled();
   });
 
   async function runDelete() {

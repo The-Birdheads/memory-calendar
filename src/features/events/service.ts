@@ -404,7 +404,12 @@ export async function createEventReminders(
 // todosはis_doneだけ取り、未完了件数をJS側で数える(件数だけの絞り込みは
 // PostgRESTの埋め込みフィルタ構文では他の埋め込みと共存しづらいため)。
 const EVENT_LIST_SELECT =
-  "*, event_tags(tags(color, level)), event_photos(count), event_comments(count), todos(is_done)";
+  "*, event_tags(tags(color, level)), event_photos(count), event_comments(count), todos(is_done), event_assignees(user_id, profiles(display_name, avatar_path))";
+
+interface AssigneeJoinRow {
+  user_id: string;
+  profiles: { display_name: string | null; avatar_path: string | null } | null;
+}
 
 interface TodoJoinRow {
   is_done: boolean;
@@ -415,6 +420,7 @@ interface EventListRow extends EventRow {
   event_photos: CountJoinRow[];
   event_comments: CountJoinRow[];
   todos: TodoJoinRow[];
+  event_assignees?: AssigneeJoinRow[];
 }
 
 function mapEventRowsWithTagColor(data: EventListRow[]): EventWithTagColor[] {
@@ -425,6 +431,11 @@ function mapEventRowsWithTagColor(data: EventListRow[]): EventWithTagColor[] {
     commentCount: extractCount(row.event_comments),
     hasTags: (row.event_tags ?? []).length > 0,
     incompleteTodoCount: (row.todos ?? []).filter((todo) => !todo.is_done).length,
+    assignees: (row.event_assignees ?? []).map((assignee) => ({
+      userId: assignee.user_id,
+      displayName: assignee.profiles?.display_name ?? null,
+      avatarPath: assignee.profiles?.avatar_path ?? null,
+    })),
   }));
 }
 

@@ -30,6 +30,7 @@ import { buildMultiDayBanners, excludeBannerEvents, fillBannerGaps } from "../..
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
 import type { Event, EventWithTagColor } from "../../src/features/events/types";
 import { SettingsHubModal } from "../../src/features/calendars/components/SettingsHubModal";
+import { AssigneeAvatars } from "../../src/features/assignees/components/AssigneeAvatars";
 import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
 import { BulkTagAssignPanel } from "../../src/features/tags/components/BulkTagAssignPanel";
 import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
@@ -555,10 +556,21 @@ export default function CalendarScreen() {
   // タイトル行の右側に、写真/コメント同様の軽い気づきバッジとしてタグの有無・
   // 未達成ToDoの件数も表示する(タグは名前や色までは出さず、有無だけのマーク)。
   const renderEventCounts = (
-    event: Pick<Event, "id"> & Pick<EventWithTagColor, "photoCount" | "commentCount" | "hasTags" | "incompleteTodoCount">,
+    event: Pick<Event, "id"> &
+      Pick<EventWithTagColor, "photoCount" | "commentCount" | "hasTags" | "incompleteTodoCount"> &
+      Partial<Pick<EventWithTagColor, "assignees">>,
     testIDPrefix: string
   ) => {
-    if (!(event.photoCount > 0 || event.commentCount > 0 || event.hasTags || event.incompleteTodoCount > 0)) {
+    const assignees = event.assignees ?? [];
+    if (
+      !(
+        event.photoCount > 0 ||
+        event.commentCount > 0 ||
+        event.hasTags ||
+        event.incompleteTodoCount > 0 ||
+        assignees.length > 0
+      )
+    ) {
       return null;
     }
     return (
@@ -586,6 +598,7 @@ export default function CalendarScreen() {
             <Text style={styles.eventCountText}>{event.incompleteTodoCount}</Text>
           </View>
         ) : null}
+        <AssigneeAvatars testID={`${testIDPrefix}-assignees-${event.id}`} assignees={assignees} size={18} />
       </View>
     );
   };

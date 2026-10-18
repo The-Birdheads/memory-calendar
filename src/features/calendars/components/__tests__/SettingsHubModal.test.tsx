@@ -143,7 +143,7 @@ function mockHooks(
   });
   (useAuthActions as jest.Mock).mockReturnValue({ signOut: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useMyProfile as jest.Mock).mockReturnValue({
-    profile: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
+    profile: { id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 0 },
     isLoading: false,
     error: null,
     refetch: jest.fn(),
@@ -197,7 +197,7 @@ describe("SettingsHubModal", () => {
     it("notifies the caller via onChange when the week-start day is switched from personal settings (regression: the calendar screen's own useMyProfile never learned about the change)", async () => {
       mockHooks();
       (useUpdateWeekStartsOn as jest.Mock).mockReturnValue({
-        updateWeekStartsOn: jest.fn().mockResolvedValue({ id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 }),
+        updateWeekStartsOn: jest.fn().mockResolvedValue({ id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 1 }),
         isSubmitting: false,
         error: null,
       });

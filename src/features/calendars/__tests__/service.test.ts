@@ -256,7 +256,7 @@ describe("joinByInvite", () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T00:00:00.000Z", displayName: null },
+      value: { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T00:00:00.000Z", displayName: null, avatarPath: null },
     });
     expect(client.rpc).toHaveBeenCalledWith("join_by_invite", { p_code: "abc-123" });
   });
@@ -426,14 +426,14 @@ describe("listMembers", () => {
         user_id: "user-1",
         role: "owner",
         joined_at: "2026-08-17T00:00:00.000Z",
-        profiles: { display_name: "たろう" },
+        profiles: { display_name: "たろう", avatar_path: "user-1/1.jpg" },
       },
       {
         calendar_id: "cal-1",
         user_id: "user-2",
         role: "viewer",
         joined_at: "2026-08-17T01:00:00.000Z",
-        profiles: { display_name: null },
+        profiles: { display_name: null, avatar_path: null },
       },
     ];
     const eq = jest.fn().mockResolvedValue({ data: rows, error: null });
@@ -447,12 +447,12 @@ describe("listMembers", () => {
     expect(result).toEqual({
       ok: true,
       value: [
-        { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう" },
-        { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T01:00:00.000Z", displayName: null },
+        { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう", avatarPath: "user-1/1.jpg" },
+        { calendarId: "cal-1", userId: "user-2", role: "viewer", joinedAt: "2026-08-17T01:00:00.000Z", displayName: null, avatarPath: null },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("calendar_members");
-    expect(select).toHaveBeenCalledWith("*, profiles(display_name)");
+    expect(select).toHaveBeenCalledWith("*, profiles(display_name, avatar_path)");
     expect(eq).toHaveBeenCalledWith("calendar_id", "cal-1");
   });
 
@@ -475,8 +475,8 @@ describe("listMembers", () => {
 describe("listMembersForCalendars", () => {
   it("returns the members across every given calendar", async () => {
     const rows = [
-      { calendar_id: "cal-1", user_id: "user-1", role: "owner", joined_at: "2026-08-17T00:00:00.000Z", profiles: { display_name: "たろう" } },
-      { calendar_id: "cal-2", user_id: "user-2", role: "owner", joined_at: "2026-08-17T01:00:00.000Z", profiles: { display_name: "はなこ" } },
+      { calendar_id: "cal-1", user_id: "user-1", role: "owner", joined_at: "2026-08-17T00:00:00.000Z", profiles: { display_name: "たろう", avatar_path: "user-1/1.jpg" } },
+      { calendar_id: "cal-2", user_id: "user-2", role: "owner", joined_at: "2026-08-17T01:00:00.000Z", profiles: { display_name: "はなこ", avatar_path: null } },
     ];
     const in_ = jest.fn().mockResolvedValue({ data: rows, error: null });
     const select = jest.fn().mockReturnValue({ in: in_ });
@@ -489,12 +489,12 @@ describe("listMembersForCalendars", () => {
     expect(result).toEqual({
       ok: true,
       value: [
-        { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう" },
-        { calendarId: "cal-2", userId: "user-2", role: "owner", joinedAt: "2026-08-17T01:00:00.000Z", displayName: "はなこ" },
+        { calendarId: "cal-1", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう", avatarPath: "user-1/1.jpg" },
+        { calendarId: "cal-2", userId: "user-2", role: "owner", joinedAt: "2026-08-17T01:00:00.000Z", displayName: "はなこ", avatarPath: null },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("calendar_members");
-    expect(select).toHaveBeenCalledWith("*, profiles(display_name)");
+    expect(select).toHaveBeenCalledWith("*, profiles(display_name, avatar_path)");
     expect(in_).toHaveBeenCalledWith("calendar_id", ["cal-1", "cal-2"]);
   });
 

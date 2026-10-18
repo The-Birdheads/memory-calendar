@@ -16,6 +16,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
+import { AssigneeAvatars } from "../../assignees/components/AssigneeAvatars";
+import { AssigneePicker } from "../../assignees/components/AssigneePicker";
+import { useEventAssignees, useSetEventAssignees } from "../../assignees/hooks";
 import { useAuthSession } from "../../auth/hooks";
 import { CalendarLabel } from "../../calendars/components/CalendarLabel";
 import { useCalendarMembers, useMyCalendars } from "../../calendars/hooks";
@@ -167,6 +170,9 @@ export function EventDetailContent({
   };
 
   const { members } = useCalendarMembers(calendarId);
+  const { assigneeIds, refetch: refetchAssignees } = useEventAssignees(eventId);
+  const { setEventAssignees } = useSetEventAssignees();
+  const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>([]);
   const { reminders, refetch: refetchReminders } = useEventReminders(eventId);
   const { addEventReminder } = useAddEventReminder();
   const { removeEventReminder } = useRemoveEventReminder();
@@ -328,8 +334,19 @@ export function EventDetailContent({
     if (success) await refetchReminders();
   };
 
+  // 対象者の表示用(名前・アイコンは、カレンダーのメンバー情報から引く)。
+  const assignees = assigneeIds.flatMap((userId) => {
+    const member = members.find((m) => m.userId === userId);
+    return member ? [{ userId, displayName: member.displayName, avatarPath: member.avatarPath }] : [];
+  });
+
+  const handleToggleEditAssignee = (userId: string) => {
+    setEditAssigneeIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
+  };
+
   const handleOpenEditModal = () => {
     if (!event) return;
+    setEditAssigneeIds(assigneeIds);
     setEditForm({
       title: event.title,
       isAllDay: event.isAllDay,
@@ -353,6 +370,13 @@ export function EventDetailContent({
       memo: editForm.memo || null,
     });
     if (success) {
+      // 対象者は、変更があったときだけ保存する(共有カレンダーの予定のみ)。
+      const assigneesChanged =
+        editAssigneeIds.length !== assigneeIds.length || editAssigneeIds.some((id) => !assigneeIds.includes(id));
+      if (!isPersonalCalendar && assigneesChanged) {
+        await setEventAssignees(eventId, editAssigneeIds);
+        await refetchAssignees();
+      }
       setIsEditModalVisible(false);
       await refetchEvent();
     }
@@ -710,6 +734,14 @@ export function EventDetailContent({
             </Text>
           </View>
         ) : null}
+        {!isPersonalCalendar && assignees.length > 0 ? (
+          <View testID="event-detail-assignees" style={styles.detailRow}>
+            <AssigneeAvatars testID="event-detail-assignees-icons" assignees={assignees} size={22} maxVisible={5} />
+            <Text style={styles.detailText}>
+              {assignees.map((assignee) => assignee.displayName ?? "メンバー").join("、")}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
 
@@ -801,6 +833,16 @@ export function EventDetailContent({
               value={editForm}
               onChange={(patch) => setEditForm((prev) => ({ ...prev, ...patch }))}
             />
+
+            {!isPersonalCalendar ? (
+              <AssigneePicker
+                testIDPrefix="event-edit-assignee"
+                members={members}
+                selectedIds={editAssigneeIds}
+                currentUserId={session?.user.id ?? null}
+                onToggle={handleToggleEditAssignee}
+              />
+            ) : null}
 
             <View style={styles.modalActions}>
               <TouchableOpacity

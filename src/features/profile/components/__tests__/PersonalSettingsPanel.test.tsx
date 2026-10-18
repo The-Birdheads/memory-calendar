@@ -4,6 +4,8 @@ import { router } from "expo-router";
 import { PersonalSettingsPanel } from "../PersonalSettingsPanel";
 import { useAuthActions } from "../../../auth/hooks";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../../hooks";
+import { useAvatarUrls, useRemoveMyAvatar, useUploadMyAvatar } from "../../avatarHooks";
+import { pickAvatarFromLibrary } from "../../avatarPicker";
 
 jest.mock("expo-router", () => ({
   router: { replace: jest.fn(), push: jest.fn() },
@@ -20,7 +22,21 @@ jest.mock("../../hooks", () => ({
   useDeleteAccount: jest.fn(),
 }));
 
+jest.mock("../../avatarHooks", () => ({
+  useAvatarUrls: jest.fn(),
+  useUploadMyAvatar: jest.fn(),
+  useRemoveMyAvatar: jest.fn(),
+}));
+
+jest.mock("../../avatarPicker", () => ({
+  pickAvatarFromLibrary: jest.fn(),
+}));
+
 function mockHooks(overrides: {
+  avatarPath?: string | null;
+  avatarUrls?: Record<string, string>;
+  uploadAvatar?: jest.Mock;
+  removeAvatar?: jest.Mock;
   displayName?: string | null;
   weekStartsOn?: 0 | 1;
   refetchProfile?: jest.Mock;
@@ -36,21 +52,32 @@ function mockHooks(overrides: {
     profile: {
       id: "user-1",
       displayName: overrides.displayName ?? "たろう",
-      avatarUrl: null,
+      avatarPath: overrides.avatarPath ?? null,
       weekStartsOn: overrides.weekStartsOn ?? 0,
     },
     isLoading: false,
     error: null,
     refetch: overrides.refetchProfile ?? jest.fn(),
   });
+  (useAvatarUrls as jest.Mock).mockReturnValue(overrides.avatarUrls ?? {});
+  (useUploadMyAvatar as jest.Mock).mockReturnValue({
+    uploadAvatar: overrides.uploadAvatar ?? jest.fn().mockResolvedValue({ id: "user-1" }),
+    isSubmitting: false,
+    error: null,
+  });
+  (useRemoveMyAvatar as jest.Mock).mockReturnValue({
+    removeAvatar: overrides.removeAvatar ?? jest.fn().mockResolvedValue({ id: "user-1" }),
+    isSubmitting: false,
+    error: null,
+  });
   (useUpdateDisplayName as jest.Mock).mockReturnValue({
-    updateDisplayName: overrides.updateDisplayName ?? jest.fn().mockResolvedValue({ id: "user-1", displayName: "新しい名前", avatarUrl: null }),
+    updateDisplayName: overrides.updateDisplayName ?? jest.fn().mockResolvedValue({ id: "user-1", displayName: "新しい名前", avatarPath: null }),
     isSubmitting: false,
     error: overrides.updateError ?? null,
   });
   (useUpdateWeekStartsOn as jest.Mock).mockReturnValue({
     updateWeekStartsOn:
-      overrides.updateWeekStartsOn ?? jest.fn().mockResolvedValue({ id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 }),
+      overrides.updateWeekStartsOn ?? jest.fn().mockResolvedValue({ id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 1 }),
     isSubmitting: false,
     error: overrides.weekStartsOnError ?? null,
   });
@@ -97,7 +124,7 @@ describe("PersonalSettingsPanel", () => {
     const updateDisplayNameMock = jest.fn().mockResolvedValue({
       id: "user-1",
       displayName: "新しい名前",
-      avatarUrl: null,
+      avatarPath: null,
     });
     mockHooks({ updateDisplayName: updateDisplayNameMock });
     const onChange = jest.fn();
@@ -153,7 +180,7 @@ describe("PersonalSettingsPanel", () => {
   it("switches to 月曜始まり when tapped, refetches the profile, and notifies the caller via onChange (regression: other screens' own useMyProfile instances - e.g. the calendar screen's - didn't pick up the change until closing and reopening)", async () => {
     const updateWeekStartsOnMock = jest
       .fn()
-      .mockResolvedValue({ id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 1 });
+      .mockResolvedValue({ id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 1 });
     const refetchProfileMock = jest.fn();
     const onChange = jest.fn();
     mockHooks({ weekStartsOn: 0, updateWeekStartsOn: updateWeekStartsOnMock, refetchProfile: refetchProfileMock });
@@ -272,5 +299,75 @@ describe("PersonalSettingsPanel", () => {
     expect(signOutMock).not.toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
     expect(getByText("アカウントの削除に失敗しました。時間をおいて再度お試しください")).toBeTruthy();
+  });
+
+  describe("アイコン", () => {
+    it("shows the initial of the user name as the default icon, with no remove button", async () => {
+      mockHooks({ displayName: "たろう" });
+
+      const { getByText, queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+      expect(getByText("た")).toBeTruthy();
+      expect(queryByTestId("personal-settings-avatar-remove")).toBeNull();
+    });
+
+    it("follows the user name: a different name gives a different initial", async () => {
+      mockHooks({ displayName: "Hanako" });
+
+      const { getByText } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+      expect(getByText("H")).toBeTruthy();
+    });
+
+    it("shows the registered image instead of the initial", async () => {
+      mockHooks({ avatarPath: "user-1/1.jpg", avatarUrls: { "user-1/1.jpg": "https://signed/me" } });
+
+      const { getByTestId, queryByText } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+      expect(getByTestId("personal-settings-avatar-image").props.source).toEqual({ uri: "https://signed/me" });
+      expect(queryByText("た")).toBeNull();
+    });
+
+    it("uploads the picked image, replacing the previous one, then refreshes", async () => {
+      const photo = { fileName: "avatar.jpg", contentType: "image/jpeg", data: "x" };
+      (pickAvatarFromLibrary as jest.Mock).mockResolvedValue(photo);
+      const uploadAvatar = jest.fn().mockResolvedValue({ id: "user-1", avatarPath: "user-1/2.jpg" });
+      const refetchProfile = jest.fn();
+      const onChange = jest.fn();
+      mockHooks({ avatarPath: "user-1/1.jpg", uploadAvatar, refetchProfile });
+
+      const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" onChange={onChange} />);
+      await fireEvent.press(getByTestId("personal-settings-avatar-pick"));
+
+      await waitFor(() => expect(uploadAvatar).toHaveBeenCalledWith("user-1", photo, "user-1/1.jpg"));
+      await waitFor(() => expect(refetchProfile).toHaveBeenCalled());
+      expect(onChange).toHaveBeenCalled();
+    });
+
+    it("does nothing when the image picker is cancelled", async () => {
+      (pickAvatarFromLibrary as jest.Mock).mockResolvedValue(null);
+      const uploadAvatar = jest.fn();
+      mockHooks({ uploadAvatar });
+
+      const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+      await fireEvent.press(getByTestId("personal-settings-avatar-pick"));
+
+      await waitFor(() => expect(pickAvatarFromLibrary).toHaveBeenCalled());
+      expect(uploadAvatar).not.toHaveBeenCalled();
+    });
+
+    it("goes back to the initial icon when the remove button is pressed", async () => {
+      const removeAvatar = jest.fn().mockResolvedValue({ id: "user-1", avatarPath: null });
+      const refetchProfile = jest.fn();
+      const onChange = jest.fn();
+      mockHooks({ avatarPath: "user-1/1.jpg", removeAvatar, refetchProfile });
+
+      const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" onChange={onChange} />);
+      await fireEvent.press(getByTestId("personal-settings-avatar-remove"));
+
+      await waitFor(() => expect(removeAvatar).toHaveBeenCalledWith("user-1", "user-1/1.jpg"));
+      await waitFor(() => expect(refetchProfile).toHaveBeenCalled());
+      expect(onChange).toHaveBeenCalled();
+    });
   });
 });

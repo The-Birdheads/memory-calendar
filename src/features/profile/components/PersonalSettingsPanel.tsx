@@ -3,8 +3,11 @@ import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 
 import { router } from "expo-router";
 
 import { Icon } from "../../../shared/components/Icon";
+import { UserAvatar } from "../../../shared/components/UserAvatar";
 import { useAuthActions } from "../../auth/hooks";
 import { DeleteAccountConfirmModal } from "./DeleteAccountConfirmModal";
+import { useAvatarUrls, useRemoveMyAvatar, useUploadMyAvatar } from "../avatarHooks";
+import { pickAvatarFromLibrary } from "../avatarPicker";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../hooks";
 import { getProfileErrorMessageJa } from "../service";
 
@@ -19,6 +22,10 @@ export function PersonalSettingsPanel({ userId, onChange }: PersonalSettingsPane
   const { profile, isLoading, refetch: refetchProfile } = useMyProfile(userId);
   const { updateDisplayName, error: updateError } = useUpdateDisplayName();
   const { updateWeekStartsOn, error: weekStartsOnError } = useUpdateWeekStartsOn();
+  const { uploadAvatar, isSubmitting: isUploadingAvatar, error: avatarUploadError } = useUploadMyAvatar();
+  const { removeAvatar, isSubmitting: isRemovingAvatar, error: avatarRemoveError } = useRemoveMyAvatar();
+  const avatarPath = profile?.avatarPath ?? null;
+  const avatarUrls = useAvatarUrls(avatarPath ? [avatarPath] : []);
   const { signOut, isSubmitting: isSigningOut } = useAuthActions();
   const { deleteAccount, isSubmitting: isDeletingAccount, error: deleteError } = useDeleteAccount();
   const [isEditingName, setIsEditingName] = useState(false);
@@ -38,6 +45,24 @@ export function PersonalSettingsPanel({ userId, onChange }: PersonalSettingsPane
     const updated = await updateDisplayName(userId, nameDraft);
     if (updated) {
       setIsEditingName(false);
+      onChange?.();
+    }
+  };
+
+  const handlePickAvatar = async () => {
+    const photo = await pickAvatarFromLibrary();
+    if (!photo) return;
+    const updated = await uploadAvatar(userId, photo, avatarPath);
+    if (updated) {
+      refetchProfile();
+      onChange?.();
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    const updated = await removeAvatar(userId, avatarPath);
+    if (updated) {
+      refetchProfile();
       onChange?.();
     }
   };
@@ -73,7 +98,43 @@ export function PersonalSettingsPanel({ userId, onChange }: PersonalSettingsPane
   return (
     <>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.sectionLabel}>ユーザー名</Text>
+        <Text style={styles.sectionLabel}>アイコン</Text>
+        <View style={styles.avatarRow}>
+          <UserAvatar
+            testID="personal-settings-avatar"
+            userId={userId}
+            displayName={profile?.displayName ?? null}
+            avatarUrl={avatarPath ? (avatarUrls[avatarPath] ?? null) : null}
+            size={56}
+          />
+          <View style={styles.avatarActions}>
+            <TouchableOpacity
+              testID="personal-settings-avatar-pick"
+              onPress={handlePickAvatar}
+              disabled={isUploadingAvatar || isRemovingAvatar}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.avatarActionText}>画像を選ぶ</Text>
+            </TouchableOpacity>
+            {avatarPath ? (
+              <TouchableOpacity
+                testID="personal-settings-avatar-remove"
+                onPress={handleRemoveAvatar}
+                disabled={isUploadingAvatar || isRemovingAvatar}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.avatarRemoveText}>頭文字に戻す</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+        {avatarUploadError || avatarRemoveError ? (
+          <Text style={styles.errorText}>
+            {getProfileErrorMessageJa((avatarUploadError ?? avatarRemoveError) as NonNullable<typeof avatarUploadError>)}
+          </Text>
+        ) : null}
+
+        <Text style={[styles.sectionLabel, styles.avatarFollowingLabel]}>ユーザー名</Text>
         {isEditingName ? (
           <View style={styles.nameRow}>
             <TextInput
@@ -172,6 +233,24 @@ export function PersonalSettingsPanel({ userId, onChange }: PersonalSettingsPane
 const styles = StyleSheet.create({
   container: {
     gap: 10,
+  },
+  avatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  avatarActions: {
+    gap: 10,
+  },
+  avatarActionText: {
+    color: "#2f6fed",
+    fontWeight: "600",
+  },
+  avatarRemoveText: {
+    color: "#666",
+  },
+  avatarFollowingLabel: {
+    marginTop: 8,
   },
   sectionLabel: {
     color: "#666",

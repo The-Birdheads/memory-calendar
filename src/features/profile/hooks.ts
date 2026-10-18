@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import { revokeAppleAuthorizationIfNeeded } from "../auth/service";
-import { deleteOwnAccount, getMyProfile, updateDisplayName, updateWeekStartsOn } from "./service";
+import { deleteOwnAccount, getMyProfile, removeOwnAvatarFiles, updateDisplayName, updateWeekStartsOn } from "./service";
 import type { Profile, ProfileError } from "./types";
 
 export interface UseMyProfileResult {
@@ -119,6 +119,8 @@ export function useDeleteAccount(): UseDeleteAccountResult {
       setIsSubmitting(false);
       return false;
     }
+
+    await removeOwnAvatarFiles(client);
 
     const result = await deleteOwnAccount(client);
     setIsSubmitting(false);

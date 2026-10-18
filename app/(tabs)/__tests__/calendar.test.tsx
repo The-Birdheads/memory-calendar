@@ -3,6 +3,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Linking, StyleSheet } from "react-native";
 
 import CalendarScreen from "../calendar";
+import { useSetEventAssignees } from "../../../src/features/assignees/hooks";
+import { useRemoveMyAvatar, useUploadMyAvatar, useAvatarUrls } from "../../../src/features/profile/avatarHooks";
 import { useAuthActions, useAuthSession } from "../../../src/features/auth/hooks";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../../../src/features/profile/hooks";
 import {
@@ -61,6 +63,16 @@ jest.mock("expo-router", () => {
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
   useAuthActions: jest.fn(),
+}));
+
+jest.mock("../../../src/features/assignees/hooks", () => ({
+  useSetEventAssignees: jest.fn(),
+}));
+
+jest.mock("../../../src/features/profile/avatarHooks", () => ({
+  useAvatarUrls: jest.fn(),
+  useUploadMyAvatar: jest.fn(),
+  useRemoveMyAvatar: jest.fn(),
 }));
 
 jest.mock("../../../src/features/profile/hooks", () => ({
@@ -158,10 +170,18 @@ const OTHER_DAY_EVENT = {
 };
 
 function mockCommonHooks() {
+  (useSetEventAssignees as jest.Mock).mockReturnValue({
+    setEventAssignees: jest.fn().mockResolvedValue(true),
+    isSubmitting: false,
+    error: null,
+  });
+  (useAvatarUrls as jest.Mock).mockReturnValue({});
+  (useUploadMyAvatar as jest.Mock).mockReturnValue({ uploadAvatar: jest.fn(), isSubmitting: false, error: null });
+  (useRemoveMyAvatar as jest.Mock).mockReturnValue({ removeAvatar: jest.fn(), isSubmitting: false, error: null });
   (useAuthSession as jest.Mock).mockReturnValue({ session: { user: { id: "user-1" } } });
   (useAuthActions as jest.Mock).mockReturnValue({ signOut: jest.fn().mockResolvedValue(true), isSubmitting: false, error: null });
   (useMyProfile as jest.Mock).mockReturnValue({
-    profile: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
+    profile: { id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 0 },
     isLoading: false,
     error: null,
     refetch: jest.fn(),
@@ -1274,6 +1294,105 @@ describe("CalendarScreen", () => {
     );
   });
 
+  describe("予定作成画面の対象者", () => {
+    const MEMBERS = [
+      { calendarId: "cal-2", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう", avatarPath: null },
+      { calendarId: "cal-2", userId: "user-2", role: "editor", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "はなこ", avatarPath: null },
+    ];
+
+    async function openCreateModalFor(calendarId: string) {
+      mockCommonHooks();
+      (useMyCalendars as jest.Mock).mockReturnValue({
+        calendars: [
+          { id: "cal-1", name: "Myカレンダー", kind: "personal", color: "#2f6fed", createdBy: "user-1", createdAt: "2026-08-17T00:00:00.000Z" },
+          { id: "cal-2", name: "我が家", kind: "group", color: "#43a047", createdBy: "user-1", createdAt: "2026-08-17T01:00:00.000Z" },
+        ],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      (useCalendarMembers as jest.Mock).mockImplementation((id: string) => ({
+        members: id === "cal-2" ? MEMBERS : [],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      }));
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      const createEventMock = jest.fn().mockResolvedValue({ id: "event-created-1" });
+      (useCreateEvent as jest.Mock).mockReturnValue({ createEvent: createEventMock, isSubmitting: false, error: null });
+      const setEventAssigneesMock = jest.fn().mockResolvedValue(true);
+      (useSetEventAssignees as jest.Mock).mockReturnValue({
+        setEventAssignees: setEventAssigneesMock,
+        isSubmitting: false,
+        error: null,
+      });
+
+      const utils = await render(<CalendarScreen />);
+      await fireEvent.press(utils.getByTestId("calendar-add-event-fab"));
+      await fireEvent.press(utils.getByTestId(`event-create-calendar-${calendarId}`));
+      await fireEvent.changeText(utils.getByTestId("event-create-title-input"), "お出かけ");
+      return { ...utils, createEventMock, setEventAssigneesMock };
+    }
+
+    it("offers the shared calendar's members as optional assignees, in the shared frame", async () => {
+      const { getByTestId } = await openCreateModalFor("cal-2");
+
+      const picker = within(getByTestId("event-create-shared-frame"));
+      expect(picker.getByTestId("event-create-assignee-section")).toBeTruthy();
+      expect(picker.getByTestId("event-create-assignee-member-user-1")).toBeTruthy();
+      expect(picker.getByTestId("event-create-assignee-member-user-2")).toBeTruthy();
+    });
+
+    it("does not offer assignees for a personal calendar", async () => {
+      const { queryByTestId } = await openCreateModalFor("cal-1");
+
+      expect(queryByTestId("event-create-assignee-section")).toBeNull();
+    });
+
+    it("saves the chosen assignees on the new event when it is created", async () => {
+      const { getByTestId, setEventAssigneesMock } = await openCreateModalFor("cal-2");
+
+      await fireEvent.press(getByTestId("event-create-assignee-member-user-2"));
+      expect(getByTestId("event-create-assignee-member-user-2-checked")).toBeTruthy();
+      await fireEvent.press(getByTestId("event-create-submit"));
+
+      await waitFor(() => expect(setEventAssigneesMock).toHaveBeenCalledWith("event-created-1", ["user-2"]));
+    });
+
+    it("lets a chosen assignee be un-chosen again", async () => {
+      const { getByTestId, queryByTestId, setEventAssigneesMock, createEventMock } = await openCreateModalFor("cal-2");
+
+      await fireEvent.press(getByTestId("event-create-assignee-member-user-2"));
+      await fireEvent.press(getByTestId("event-create-assignee-member-user-2"));
+      expect(queryByTestId("event-create-assignee-member-user-2-checked")).toBeNull();
+      await fireEvent.press(getByTestId("event-create-submit"));
+
+      await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+      expect(setEventAssigneesMock).not.toHaveBeenCalled();
+    });
+
+    it("sets no assignees by default (it is optional)", async () => {
+      const { getByTestId, createEventMock, setEventAssigneesMock } = await openCreateModalFor("cal-2");
+
+      await fireEvent.press(getByTestId("event-create-submit"));
+
+      await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+      expect(setEventAssigneesMock).not.toHaveBeenCalled();
+    });
+
+    it("forgets the chosen assignees when the calendar is switched (they may not belong to the other one)", async () => {
+      const { getByTestId, setEventAssigneesMock, createEventMock } = await openCreateModalFor("cal-2");
+
+      await fireEvent.press(getByTestId("event-create-assignee-member-user-2"));
+      await fireEvent.press(getByTestId("event-create-calendar-cal-1"));
+      await fireEvent.press(getByTestId("event-create-calendar-cal-2"));
+      await fireEvent.press(getByTestId("event-create-submit"));
+
+      await waitFor(() => expect(createEventMock).toHaveBeenCalled());
+      expect(setEventAssigneesMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe("予定作成画面のリマインド", () => {
     async function openCreateModal() {
       mockCommonHooks();
@@ -1668,7 +1787,7 @@ describe("CalendarScreen", () => {
     (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
     const refetchProfile = jest.fn();
     (useMyProfile as jest.Mock).mockReturnValue({
-      profile: { id: "user-1", displayName: "たろう", avatarUrl: null, weekStartsOn: 0 },
+      profile: { id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 0 },
       isLoading: false,
       error: null,
       refetch: refetchProfile,
@@ -2645,6 +2764,63 @@ describe("CalendarScreen", () => {
 
       expect(queryByTestId("calendar-event-counts-event-1")).toBeNull();
       expect(queryByTestId("calendar-event-tag-mark-event-1")).toBeNull();
+    });
+  });
+
+  describe("予定一覧での対象者のアイコン(日別モーダル・月の一覧表示)", () => {
+    const ASSIGNEES = [
+      { userId: "user-2", displayName: "はなこ", avatarPath: null },
+      { userId: "user-3", displayName: "じろう", avatarPath: null },
+    ];
+
+    it("shows the assignees' icons on the event in the day-events modal", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [{ ...TODAY_EVENT, assignees: ASSIGNEES }],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, getByText } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+      expect(getByTestId("calendar-event-assignees-event-1")).toBeTruthy();
+      expect(getByTestId("calendar-event-assignees-event-1-user-2")).toBeTruthy();
+      expect(getByTestId("calendar-event-assignees-event-1-user-3")).toBeTruthy();
+      // 画像が無い人は頭文字
+      expect(getByText("は")).toBeTruthy();
+    });
+
+    it("shows the assignees' icons in the month list view too", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [{ ...TODAY_EVENT, assignees: ASSIGNEES }],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+      expect(getByTestId("calendar-list-event-assignees-event-1-user-2")).toBeTruthy();
+    });
+
+    it("shows no assignee icons for an event without assignees", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: [{ ...TODAY_EVENT, assignees: [] }, { ...OTHER_DAY_EVENT }],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+      const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-grid-cell-2026-08-18"));
+
+      expect(queryByTestId("calendar-event-assignees-event-1")).toBeNull();
+      expect(queryByTestId("calendar-event-counts-event-1")).toBeNull();
     });
   });
 

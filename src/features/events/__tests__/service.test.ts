@@ -788,12 +788,13 @@ describe("listEventsInRange", () => {
           commentCount: 0,
           hasTags: false,
           incompleteTodoCount: 0,
+          assignees: [],
         },
       ],
     });
     expect(client.from).toHaveBeenCalledWith("events");
     expect(select).toHaveBeenCalledWith(
-      "*, event_tags(tags(color, level)), event_photos(count), event_comments(count), todos(is_done)"
+      "*, event_tags(tags(color, level)), event_photos(count), event_comments(count), todos(is_done), event_assignees(user_id, profiles(display_name, avatar_path))"
     );
     expect(eq).toHaveBeenCalledWith("calendar_id", "cal-1");
     expect(lte).toHaveBeenCalledWith("start_at", "2026-09-30T23:59:59.999Z");
@@ -900,6 +901,54 @@ describe("listEventsInRange", () => {
     expect(result.ok && result.value[0].incompleteTodoCount).toBe(2);
     expect(result.ok && result.value[1].hasTags).toBe(false);
     expect(result.ok && result.value[1].incompleteTodoCount).toBe(0);
+  });
+
+  it("maps the embedded assignees (name and icon path) onto each event, in the order returned", async () => {
+    const baseRow = {
+      calendar_id: "cal-1",
+      series_id: null,
+      title: "会議",
+      location: null,
+      memo: null,
+      category_color: "#2f6fed",
+      start_at: "2026-09-01T10:00:00.000Z",
+      end_at: "2026-09-01T11:00:00.000Z",
+      is_all_day: false,
+      reminder_at: null,
+      created_by: "user-1",
+      updated_by: "user-1",
+      created_at: "2026-08-17T00:00:00.000Z",
+      updated_at: "2026-08-17T00:00:00.000Z",
+      event_tags: [],
+      todos: [],
+    };
+    const rows = [
+      {
+        ...baseRow,
+        id: "event-1",
+        event_assignees: [
+          { user_id: "user-1", profiles: { display_name: "たろう", avatar_path: "user-1/1.jpg" } },
+          { user_id: "user-2", profiles: { display_name: null, avatar_path: null } },
+        ],
+      },
+      { ...baseRow, id: "event-2", event_assignees: [{ user_id: "user-3", profiles: null }] },
+      { ...baseRow, id: "event-3" },
+    ];
+    const order = jest.fn().mockResolvedValue({ data: rows, error: null });
+    const chain = { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), lte: jest.fn().mockReturnThis(), gte: jest.fn().mockReturnThis(), order };
+    const client = { from: jest.fn().mockReturnValue(chain) } as unknown as SupabaseClient;
+
+    const result = await listEventsInRange(client, "cal-1", {
+      start: "2026-09-01T00:00:00.000Z",
+      end: "2026-09-30T23:59:59.999Z",
+    });
+
+    expect(result.ok && result.value[0].assignees).toEqual([
+      { userId: "user-1", displayName: "たろう", avatarPath: "user-1/1.jpg" },
+      { userId: "user-2", displayName: null, avatarPath: null },
+    ]);
+    expect(result.ok && result.value[1].assignees).toEqual([{ userId: "user-3", displayName: null, avatarPath: null }]);
+    expect(result.ok && result.value[2].assignees).toEqual([]);
   });
 
   it("uses the 大分類 tag's color as tagColor when the event has multiple attached tags", async () => {
