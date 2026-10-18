@@ -11,6 +11,7 @@ import {
 } from "../notificationSettings";
 import type { MealSlot } from "../types";
 import { Icon } from "../../../shared/components/Icon";
+import { useModalTopInset } from "../../../shared/hooks/useModalTopInset";
 import { ToggleSwitch } from "../../../shared/components/ToggleSwitch";
 import { DATE_PICKER_LOCALE } from "../../../shared/utils/pickerLocale";
 
@@ -61,9 +62,17 @@ export function MealNotificationSettingsModal({ visible, settings, onChange, onC
     onChange({ ...settings, slots: { ...settings.slots, [slot]: { ...settings.slots[slot], enabled } } });
   };
 
+  // 時刻ピッカーを開くとシートが縦に長くなるので、ステータスバーに重ならないようにする。
+  const topInset = useModalTopInset();
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <TouchableOpacity testID="meal-notify-backdrop" style={styles.overlay} activeOpacity={1} onPress={handleClose}>
+      <TouchableOpacity
+        testID="meal-notify-backdrop"
+        style={[styles.overlay, { paddingTop: topInset }]}
+        activeOpacity={1}
+        onPress={handleClose}
+      >
         <TouchableWithoutFeedback onPress={() => {}}>
           <View style={styles.sheet}>
             <Text style={styles.title}>献立の通知</Text>

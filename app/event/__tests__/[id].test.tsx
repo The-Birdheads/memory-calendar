@@ -1,6 +1,6 @@
 import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Linking } from "react-native";
+import { Linking, StyleSheet } from "react-native";
 
 import EventDetailScreen from "../[id]";
 import { useAuthSession } from "../../../src/features/auth/hooks";
@@ -1302,6 +1302,21 @@ describe("EventDetailScreen", () => {
     expect(getByTestId("event-tags-edit-button")).toBeTruthy();
     expect(getByTestId("event-todo-add")).toBeTruthy();
     expect(getByTestId("event-photo-add")).toBeTruthy();
+  });
+
+  it("keeps the edit sheet below the status bar by padding the top of its overlay with the safe-area inset", async () => {
+    mockCommonHooks();
+    const safeArea = require("react-native-safe-area-context");
+    const insetsHook = safeArea.useSafeAreaInsets as jest.Mock;
+    const originalImplementation = insetsHook.getMockImplementation();
+    insetsHook.mockImplementation(() => ({ top: 59, bottom: 34, left: 0, right: 0 }));
+
+    const { getByTestId } = await render(<EventDetailScreen />);
+    await fireEvent.press(getByTestId("event-edit-button"));
+
+    const overlayStyle = StyleSheet.flatten(getByTestId("event-edit-overlay").props.style);
+    expect(overlayStyle.paddingTop).toBeGreaterThanOrEqual(59);
+    insetsHook.mockImplementation(originalImplementation);
   });
 
   describe("対象者", () => {

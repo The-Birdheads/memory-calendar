@@ -20,6 +20,7 @@ import { CalendarLabel } from "../../calendars/components/CalendarLabel";
 import { CalendarSwitchChip } from "../../calendars/components/CalendarSwitchChip";
 import type { Calendar } from "../../calendars/types";
 import { Icon } from "../../../shared/components/Icon";
+import { useModalTopInset } from "../../../shared/hooks/useModalTopInset";
 import { RevealableTextField } from "../../../shared/components/RevealableTextField";
 import { formatDateOnly } from "../../../shared/utils/formatDateTime";
 import { DATE_PICKER_LOCALE } from "../../../shared/utils/pickerLocale";
@@ -170,9 +171,16 @@ function MealFormModalContent({
     setIsDeleteConfirmVisible(false);
   };
 
+  // 中身が長い(URL/メモ欄など)とカードが上端まで伸びるので、ステータスバーに重ならないようにする。
+  const topInset = useModalTopInset();
+
   return (
     <>
-      <KeyboardAvoidingView style={styles.keyboardAvoidingOverlay} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        testID="meal-form-overlay"
+        style={[styles.keyboardAvoidingOverlay, { paddingTop: topInset }]}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <TouchableOpacity
           testID="meal-form-backdrop"
           style={styles.modalBackdropTouchable}

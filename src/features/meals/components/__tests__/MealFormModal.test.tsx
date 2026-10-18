@@ -1,4 +1,6 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
+import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import { MealFormModal } from "../MealFormModal";
 
@@ -624,5 +626,21 @@ describe("MealFormModal", () => {
 
       await waitFor(() => expect(getByText("しょうゆ多め")).toBeTruthy());
     });
+  });
+
+  it("keeps the card below the status bar (clock/camera/Wi-Fi) by padding the top of its overlay with the safe-area inset", async () => {
+    const { getByTestId } = await render(
+      <SafeAreaInsetsContext.Provider value={{ top: 59, bottom: 34, left: 0, right: 0 }}>
+        <MealFormModal
+          target={{ mode: "create", initialValues: CREATE_INITIAL_VALUES }}
+          calendars={CALENDARS}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+        />
+      </SafeAreaInsetsContext.Provider>
+    );
+
+    const overlayStyle = StyleSheet.flatten(getByTestId("meal-form-overlay").props.style);
+    expect(overlayStyle.paddingTop).toBeGreaterThanOrEqual(59);
   });
 });

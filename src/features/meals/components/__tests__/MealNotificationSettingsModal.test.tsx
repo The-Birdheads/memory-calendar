@@ -1,4 +1,6 @@
 import { fireEvent, render } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
+import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import { MealNotificationSettingsModal } from "../MealNotificationSettingsModal";
 import { DEFAULT_MEAL_NOTIFICATION_SETTINGS, type MealNotificationSettings } from "../../notificationSettings";
@@ -176,5 +178,16 @@ describe("MealNotificationSettingsModal", () => {
     const { getByText } = await utils;
 
     expect(getByText("設定した時刻に、その日に予定した献立をお知らせします。")).toBeTruthy();
+  });
+
+  it("keeps the sheet below the status bar (clock/camera/Wi-Fi) by padding the top of its overlay with the safe-area inset", async () => {
+    const { getByTestId } = await render(
+      <SafeAreaInsetsContext.Provider value={{ top: 59, bottom: 34, left: 0, right: 0 }}>
+        <MealNotificationSettingsModal visible settings={ON} onChange={jest.fn()} onClose={jest.fn()} />
+      </SafeAreaInsetsContext.Provider>
+    );
+
+    const overlayStyle = StyleSheet.flatten(getByTestId("meal-notify-backdrop").props.style);
+    expect(overlayStyle.paddingTop).toBeGreaterThanOrEqual(59);
   });
 });

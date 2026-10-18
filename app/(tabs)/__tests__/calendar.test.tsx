@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Linking, StyleSheet } from "react-native";
+import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import CalendarScreen from "../calendar";
 import { useSetEventAssignees } from "../../../src/features/assignees/hooks";
@@ -1292,6 +1293,21 @@ describe("CalendarScreen", () => {
         { kind: "day_before_1" },
       ])
     );
+  });
+
+  it("keeps the create-event sheet below the status bar (clock/camera/Wi-Fi) by padding the top of the overlay with the safe-area inset", async () => {
+    mockCommonHooks();
+    (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+    const { getByTestId } = await render(
+      <SafeAreaInsetsContext.Provider value={{ top: 59, bottom: 34, left: 0, right: 0 }}>
+        <CalendarScreen />
+      </SafeAreaInsetsContext.Provider>
+    );
+    await fireEvent.press(getByTestId("calendar-add-event-fab"));
+
+    const overlayStyle = StyleSheet.flatten(getByTestId("event-create-overlay").props.style);
+    expect(overlayStyle.paddingTop).toBeGreaterThanOrEqual(59);
   });
 
   describe("月グリッドの1日の枠に入るだけ予定を表示する", () => {

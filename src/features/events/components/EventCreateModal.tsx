@@ -25,6 +25,7 @@ import { getDescendantIds } from "../../tags/tagTree";
 import type { TagTreeNode } from "../../tags/types";
 import { useCreateTodo } from "../../../features/todos/hooks";
 import { Icon } from "../../../shared/components/Icon";
+import { useModalTopInset } from "../../../shared/hooks/useModalTopInset";
 import { PersonalOnlyBadge } from "../../../shared/components/PersonalOnlyBadge";
 import { toJstDateKey, todayJstDateKey } from "../../../shared/utils/formatDateTime";
 import { EventFormFields, type EventFormValue } from "./EventFormFields";
@@ -75,6 +76,8 @@ export function EventCreateModal({
   tagTree,
   initialDateKey,
 }: EventCreateModalProps) {
+  // 内容が長いときにモーダルがステータスバー(時計・カメラ・電波)に重ならないよう、上端に余白を取る。
+  const topInset = useModalTopInset();
   const [newEventCalendarId, setNewEventCalendarId] = useState(defaultCalendarId);
   const newEventCalendarKind = calendars.find((calendar) => calendar.id === newEventCalendarId)?.kind;
   const [newEventForm, setNewEventForm] = useState<EventFormValue>(() => ({
@@ -365,7 +368,11 @@ export function EventCreateModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        testID="event-create-overlay"
+        style={[styles.modalOverlay, { paddingTop: topInset }]}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <TouchableOpacity
           testID="event-create-backdrop"
           style={styles.modalBackdropTouchable}

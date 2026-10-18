@@ -817,7 +817,11 @@ export function EventDetailContent({
     ) : null}
 
     <Modal visible={isEditModalVisible} transparent animationType="slide" onRequestClose={() => setIsEditModalVisible(false)}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        testID="event-edit-overlay"
+        style={[styles.modalOverlay, { paddingTop: insets.top + 8 }]}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <TouchableOpacity
           testID="event-edit-backdrop"
           style={styles.modalBackdropTouchable}
