@@ -32,4 +32,28 @@ describe("app.json (App Store release config)", () => {
   it("is version 1.0.0 for the initial release", () => {
     expect(expo.version).toBe("1.0.0");
   });
+
+  describe("広告(AdMob)", () => {
+    type PluginEntry = string | [string, Record<string, unknown>];
+    const plugins = appJson.expo.plugins as PluginEntry[];
+    const optionsOf = (name: string) => {
+      const entry = plugins.find((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === name);
+      return Array.isArray(entry) ? entry[1] : undefined;
+    };
+
+    it("registers the Google Mobile Ads plugin with an iOS app id (the SDK crashes at launch without one)", () => {
+      expect(optionsOf("react-native-google-mobile-ads")?.iosAppId).toMatch(/^ca-app-pub-\d+~\d+$/);
+    });
+
+    it("lists Google's SKAdNetwork id so ad attribution works", () => {
+      expect(optionsOf("react-native-google-mobile-ads")?.skAdNetworkItems).toContain("cstr6suwn9.skadnetwork");
+    });
+
+    it("explains the tracking permission request in Japanese (App Tracking Transparency)", () => {
+      const description = optionsOf("expo-tracking-transparency")?.userTrackingPermission;
+
+      expect(typeof description).toBe("string");
+      expect((description as string).length).toBeGreaterThan(10);
+    });
+  });
 });

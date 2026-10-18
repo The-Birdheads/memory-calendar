@@ -22,6 +22,11 @@ import { FilterButton, FilterSection } from "../../src/shared/components/FilterB
 import { Icon } from "../../src/shared/components/Icon";
 import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
 import { todayJstDateKey } from "../../src/shared/utils/formatDateTime";
+import { AdBanner } from "../../src/features/ads/AdBanner";
+import { useBannerPlacement } from "../../src/features/ads/useBannerPlacement";
+
+// 記録の一覧で、広告を入れる間隔(月のまとまり何個ごとか)。
+const LOG_AD_INTERVAL = 1;
 
 type MealsMode = "plan" | "log";
 
@@ -398,6 +403,8 @@ function LogPanel() {
       .reverse();
     return groupMealsByMonth(pastRecordsDescending);
   }, [mealRecords, today, periodStart, periodEnd]);
+  // 記録の一覧の広告: 1か月ごとに入れる。スクロールしない最初の画面には出さない。
+  const logBanners = useBannerPlacement(monthGroups.length, LOG_AD_INTERVAL);
 
   return (
     <View style={styles.panel}>
@@ -460,8 +467,19 @@ function LogPanel() {
           data={monthGroups}
           keyExtractor={(group) => group.yearMonth}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item: group }) => (
-            <View testID={`meals-log-month-group-${group.yearMonth}`}>
+          onLayout={logBanners.onViewportLayout}
+          // 広告は、月のまとまりの間(N か月目の直後)に入れる。
+          ItemSeparatorComponent={({ leadingItem }) => {
+            const index = monthGroups.indexOf(leadingItem);
+            return logBanners.afterIndexes.has(index) ? (
+              <AdBanner testID={`meals-log-ad-${index}`} variant="banner" spacing={8} />
+            ) : null;
+          }}
+          renderItem={({ item: group, index: groupIndex }) => (
+            <View
+              testID={`meals-log-month-group-${group.yearMonth}`}
+              onLayout={logBanners.onItemLayout(groupIndex)}
+            >
               <Text style={styles.monthHeader}>{group.label}</Text>
               {groupMealsByDate(group.records).map((dateGroup) => (
                 <View key={dateGroup.mealDate} testID={`meals-log-date-group-${dateGroup.mealDate}`}>

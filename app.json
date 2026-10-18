@@ -55,6 +55,21 @@
             "buildReactNativeFromSource": true
           }
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "iosAppId": "ca-app-pub-1540759813512306~8556014888",
+          "skAdNetworkItems": [
+            "cstr6suwn9.skadnetwork"
+          ]
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "広告を表示するために、この端末の広告識別子を使います。許可しなくてもアプリは使えます(広告があなたの興味に合わせたものではなくなります)。"
+        }
       ]
     ],
     "extra": {

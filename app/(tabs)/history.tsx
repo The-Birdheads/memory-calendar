@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { FlatList, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Tabs, useFocusEffect } from "expo-router";
 
@@ -12,6 +12,9 @@ import { usePastEventsByTag } from "../../src/features/history/hooks";
 import { groupMemoriesByYearMonth } from "../../src/features/memories/groupByYearMonth";
 import { useEventIdsWithPhotos, useMemoriesTimeline } from "../../src/features/memories/hooks";
 import { selectOnThisDayEntries } from "../../src/features/memories/onThisDay";
+import { AdBanner } from "../../src/features/ads/AdBanner";
+import { photoAdAfterCardIndexes } from "../../src/features/ads/photoGridAds";
+import { useBannerPlacement } from "../../src/features/ads/useBannerPlacement";
 import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
 import { BulkTagAssignPanel } from "../../src/features/tags/components/BulkTagAssignPanel";
 import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
@@ -33,6 +36,9 @@ import { KeywordFilterField } from "../../src/shared/components/KeywordFilterFie
 import { isDateKeyInRange } from "../../src/shared/utils/dateRangeFilter";
 import { matchesKeyword } from "../../src/shared/utils/keywordFilter";
 import { jstNow, todayJstDateKey, toJstDateKey } from "../../src/shared/utils/formatDateTime";
+
+// 年表で、広告を入れる間隔(月のまとまり何個ごとか)。
+const TIMELINE_AD_INTERVAL = 2;
 
 /** "2年前"/"1年前" - どちらもJST日付キー("YYYY-MM-DD")なので年の部分の文字列比較だけで済む。 */
 function yearsAgoLabel(entryJstDateKey: string, todayKey: string): string {
@@ -205,6 +211,8 @@ function TimelinePanel() {
   const eventIds = useMemo(() => events.map((event) => event.id), [events]);
   const { eventIdsWithPhotos } = useEventIdsWithPhotos(eventIds);
   const timelineGroups = useMemo(() => groupEventsByYearMonth(events), [events]);
+  // 年表の広告: 2か月ごとに入れる。スクロールしない最初の画面には出さない。
+  const timelineBanners = useBannerPlacement(timelineGroups.length, TIMELINE_AD_INTERVAL);
   const calendarColorById = useMemo(
     () => Object.fromEntries(calendars.map((calendar) => [calendar.id, calendar.color])),
     [calendars]
@@ -372,8 +380,19 @@ function TimelinePanel() {
           data={timelineGroups}
           keyExtractor={(group) => group.yearMonth}
           contentContainerStyle={styles.timelineContent}
-          renderItem={({ item: group }) => (
-            <View testID={`history-month-group-${group.yearMonth}`}>
+          onLayout={timelineBanners.onViewportLayout}
+          // 広告は、月のまとまりの間(N か月目の直後)に入れる。
+          ItemSeparatorComponent={({ leadingItem }) => {
+            const index = timelineGroups.indexOf(leadingItem);
+            return timelineBanners.afterIndexes.has(index) ? (
+              <AdBanner testID={`history-timeline-ad-${index}`} variant="banner" spacing={8} />
+            ) : null;
+          }}
+          renderItem={({ item: group, index: groupIndex }) => (
+            <View
+              testID={`history-month-group-${group.yearMonth}`}
+              onLayout={timelineBanners.onItemLayout(groupIndex)}
+            >
               <Text style={styles.monthHeader}>{group.label}</Text>
               {group.events.map((event, index) => {
                 const tags = sortTagsHierarchically(tagsByEventId[event.id] ?? [], allTagsFlat);
@@ -571,6 +590,11 @@ function PhotoGridPanel() {
   }, [memoriesEntries, isUntaggedSelected, selectedTagIds, tagsByEventId]);
 
   const monthGroups = useMemo(() => groupMemoriesByYearMonth(entries), [entries]);
+  // 画像の一覧の広告: 10行ごと(月をまたいで数える)に、大きめの広告を写真の間に入れる。
+  const photoAdPositions = useMemo(
+    () => photoAdAfterCardIndexes(monthGroups.map((group) => ({ key: group.yearMonth, cardCount: group.entries.length }))),
+    [monthGroups]
+  );
   // 「n年前の今日」サプライズ演出 - 特定の年月に絞り込んでいる間は(その月の
   // 中に今日と同じ月日がある年もあるので)紛らわしくなるため出さない。
   const today = todayJstDateKey();
@@ -745,9 +769,9 @@ function PhotoGridPanel() {
                 {group.label} <Text style={styles.photoMonthCount}>{group.entries.length}件</Text>
               </Text>
               <View style={styles.photoGrid}>
-                {group.entries.map((entry) => (
+                {group.entries.map((entry, entryIndex) => (
+                  <Fragment key={entry.id}>
                   <TouchableOpacity
-                    key={entry.id}
                     testID={`memory-item-${entry.id}`}
                     style={styles.photoCard}
                     onPress={() => setSelectedEventId(entry.id)}
@@ -768,6 +792,12 @@ function PhotoGridPanel() {
                       <Text style={styles.photoCardDate}>{formatDayHeaderLabel(toJstDateKey(entry.startAt))}</Text>
                     </View>
                   </TouchableOpacity>
+                  {photoAdPositions.get(group.yearMonth)?.has(entryIndex) ? (
+                    <View style={styles.photoGridAd}>
+                      <AdBanner testID={`memories-ad-after-${entry.id}`} variant="rectangle" />
+                    </View>
+                  ) : null}
+                  </Fragment>
                 ))}
               </View>
             </View>
@@ -1012,6 +1042,11 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 12,
     paddingBottom: 20,
+  },
+  // 写真の並びの途中に入れる広告。幅いっぱいで、自分の行を使う。
+  photoGridAd: {
+    width: "100%",
+    alignItems: "center",
   },
   photoCard: {
     width: "47%",

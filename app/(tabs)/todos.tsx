@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { Tabs, useFocusEffect } from "expo-router";
 
+import { AdBanner } from "../../src/features/ads/AdBanner";
+import { useBannerPlacement } from "../../src/features/ads/useBannerPlacement";
 import { useMyCalendars } from "../../src/features/calendars/hooks";
 import { CalendarSwitchChip } from "../../src/features/calendars/components/CalendarSwitchChip";
 import { EventDetailModal } from "../../src/features/events/components/EventDetailModal";
@@ -285,6 +287,9 @@ const URGENCY_BADGE_LABEL: Record<"overdue" | "today" | "tomorrow", string> = {
   today: "今日",
   tomorrow: "明日",
 };
+
+// 今後のToDoの一覧で、広告を入れる間隔(予定のまとまり何個ごとか)。
+const FUTURE_TODO_AD_INTERVAL = 3;
 
 const URGENCY_BADGE_STYLE = {
   overdue: "badgeOverdue",
@@ -692,6 +697,8 @@ export default function TodosScreen() {
       ),
     [groups, today]
   );
+  // 今後のToDoの一覧の広告: 3つ(予定のまとまり)ごとに入れる。スクロールしない最初の画面には出さない。
+  const futureBanners = useBannerPlacement(futureGroups.length, FUTURE_TODO_AD_INTERVAL);
   const incompleteTodoCount = useMemo(() => todos.filter((todo) => !todo.isDone).length, [todos]);
   // "期限超過" gets its own panel, so "期限が近い" now covers only today/tomorrow.
   const dueSoonGroupCount = useMemo(
@@ -821,9 +828,11 @@ export default function TodosScreen() {
         }}
       />
       <ScrollView
+        testID="todos-scroll-view"
         ref={scrollViewRef}
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
+        onLayout={futureBanners.onViewportLayout}
       >
       <View style={styles.summaryRow} testID="todos-summary">
         <TouchableOpacity
@@ -925,7 +934,15 @@ export default function TodosScreen() {
                 data={futureGroups}
                 scrollEnabled={false}
                 keyExtractor={(group) => group.eventId}
-                renderItem={({ item: group }) => (
+                // 広告は、まとまりの間(N個目の直後)に入れる。
+                ItemSeparatorComponent={({ leadingItem }) => {
+                  const index = futureGroups.indexOf(leadingItem);
+                  return futureBanners.afterIndexes.has(index) ? (
+                    <AdBanner testID={`todos-ad-after-${index}`} variant="banner" spacing={8} />
+                  ) : null;
+                }}
+                renderItem={({ item: group, index }) => (
+                  <View testID={`todos-section-slot-${group.eventId}`} onLayout={futureBanners.onItemLayout(index)}>
                   <EventSection
                     group={group}
                     today={today}
@@ -941,6 +958,7 @@ export default function TodosScreen() {
                     calendarColorById={calendarColorById}
                     sectionRef={(node) => sectionRefs.current.set(group.eventId, node)}
                   />
+                  </View>
                 )}
               />
             )}

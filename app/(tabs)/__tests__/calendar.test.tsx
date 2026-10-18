@@ -5,6 +5,7 @@ import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import CalendarScreen from "../calendar";
 import { useSetEventAssignees } from "../../../src/features/assignees/hooks";
+import { AdsProvider, useAds } from "../../../src/features/ads/AdsProvider";
 import { useOnboarding } from "../../../src/features/onboarding/hooks";
 import { ONBOARDING_SLIDES } from "../../../src/features/onboarding/slides";
 import { useRemoveMyAvatar, useUploadMyAvatar, useAvatarUrls } from "../../../src/features/profile/avatarHooks";
@@ -66,6 +67,10 @@ jest.mock("expo-router", () => {
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
   useAuthActions: jest.fn(),
+}));
+
+jest.mock("expo-tracking-transparency", () => ({
+  requestTrackingPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: "granted" }),
 }));
 
 jest.mock("../../../src/features/onboarding/hooks", () => ({
@@ -1392,6 +1397,146 @@ describe("CalendarScreen", () => {
       expect(utils.getByTestId("calendar-grid-dot-day-event-2")).toBeTruthy();
       expect(utils.queryByTestId("calendar-grid-dot-day-event-3")).toBeNull();
       expect(utils.getByTestId("calendar-grid-cell-overflow-2026-08-18").props.children).toEqual(["+", 2]);
+    });
+  });
+
+  describe("広告", () => {
+    function AdsStarter() {
+      const { start } = useAds();
+      start();
+      return null;
+    }
+
+    async function renderWithAds(events: unknown[] = []) {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events, isLoading: false, error: null, refetch: jest.fn() });
+      const utils = await render(
+        <AdsProvider>
+          <AdsStarter />
+          <CalendarScreen />
+        </AdsProvider>
+      );
+      await act(async () => {});
+      return utils;
+    }
+
+    // 日付(2026-08-D)ごとに1件ずつ、count 日分の予定。
+    function makeDailyEvents(count: number) {
+      return Array.from({ length: count }, (_, index) => {
+        const day = String(index + 1).padStart(2, "0");
+        return {
+          id: `daily-${index + 1}`,
+          calendarId: "cal-1",
+          title: `予定${index + 1}`,
+          categoryColor: "#2f6fed",
+          startAt: `2026-08-${day}T01:00:00.000Z`,
+          endAt: `2026-08-${day}T02:00:00.000Z`,
+        };
+      });
+    }
+
+    async function measureMonthList(utils: Awaited<ReturnType<typeof renderWithAds>>, itemHeight: number, viewportHeight: number, count: number) {
+      const list = utils.getByTestId("calendar-month-list");
+      await fireEvent(list, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: viewportHeight } } });
+      for (let index = 0; index < count; index += 1) {
+        const day = String(index + 1).padStart(2, "0");
+        const group = utils.queryByTestId(`calendar-month-list-date-group-2026-08-${day}`);
+        if (group) {
+          await fireEvent(group, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: itemHeight } } });
+        }
+      }
+    }
+
+    it("shows a banner at the bottom of the calendar tab (behind the + button) once ads are ready", async () => {
+      const { getByTestId } = await renderWithAds();
+
+      expect(getByTestId("calendar-bottom-ad")).toBeTruthy();
+    });
+
+    it("shows no ads at all while ads are not ready", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+      const { queryByTestId } = await render(<CalendarScreen />);
+
+      expect(queryByTestId("calendar-bottom-ad")).toBeNull();
+    });
+
+    it("asks the ads provider to start after a short delay, once the tutorial is not showing", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      const { requestTrackingPermissionsAsync } = require("expo-tracking-transparency");
+      (requestTrackingPermissionsAsync as jest.Mock).mockClear();
+
+      await render(
+        <AdsProvider>
+          <CalendarScreen />
+        </AdsProvider>
+      );
+      expect(requestTrackingPermissionsAsync).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(2500);
+      });
+
+      expect(requestTrackingPermissionsAsync).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not start the ads (and its tracking prompt) while the tutorial is showing", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      (useOnboarding as jest.Mock).mockReturnValue({ isVisible: true, show: jest.fn(), complete: jest.fn() });
+      const { requestTrackingPermissionsAsync } = require("expo-tracking-transparency");
+      (requestTrackingPermissionsAsync as jest.Mock).mockClear();
+
+      await render(
+        <AdsProvider>
+          <CalendarScreen />
+        </AdsProvider>
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      expect(requestTrackingPermissionsAsync).not.toHaveBeenCalled();
+    });
+
+    it("shows a large ad below the events in the day list", async () => {
+      const utils = await renderWithAds([TODAY_EVENT]);
+
+      await fireEvent.press(utils.getByTestId("calendar-grid-cell-2026-08-18"));
+
+      expect(utils.getByTestId("calendar-day-ad")).toBeTruthy();
+      expect(utils.getByTestId("calendar-day-ad-view").props.size).toBe("MEDIUM_RECTANGLE");
+    });
+
+    it("shows a large ad in the free space of a day with no events", async () => {
+      const utils = await renderWithAds([]);
+
+      await fireEvent.press(utils.getByTestId("calendar-grid-cell-2026-08-18"));
+
+      expect(utils.getByText("予定はありません")).toBeTruthy();
+      expect(utils.getByTestId("calendar-day-ad-empty")).toBeTruthy();
+    });
+
+    it("puts a banner after every 10 date groups in the list view, but not on the first screen", async () => {
+      const utils = await renderWithAds(makeDailyEvents(25));
+      await fireEvent.press(utils.getByTestId("calendar-view-mode-list"));
+
+      // 1日分100・画面600: 最初の画面は6日分。10日ごとの1つ目(10日目の後)は、最初の画面より下。
+      await measureMonthList(utils, 100, 600, 25);
+
+      expect(utils.getByTestId("calendar-list-banner-after-9")).toBeTruthy();
+      expect(utils.queryByTestId("calendar-list-banner-after-4")).toBeNull();
+    });
+
+    it("puts no banner in the list view when everything fits on the first screen", async () => {
+      const utils = await renderWithAds(makeDailyEvents(12));
+      await fireEvent.press(utils.getByTestId("calendar-view-mode-list"));
+
+      await measureMonthList(utils, 100, 5000, 12);
+
+      expect(utils.queryByTestId("calendar-list-banner-after-9")).toBeNull();
     });
   });
 

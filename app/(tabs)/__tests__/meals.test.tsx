@@ -1,7 +1,8 @@
-import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router } from "expo-router";
 
 import MealsScreen from "../meals";
+import { AdsProvider, useAds } from "../../../src/features/ads/AdsProvider";
 import { useAuthSession } from "../../../src/features/auth/hooks";
 import { useCalendarMembersByCalendars, useMyCalendars } from "../../../src/features/calendars/hooks";
 import { useMealNotificationSettings } from "../../../src/features/meals/notificationHooks";
@@ -55,6 +56,10 @@ jest.mock("../../../src/features/meals/hooks", () => ({
 
 jest.mock("../../../src/features/meals/notificationHooks", () => ({
   useMealNotificationSettings: jest.fn(),
+}));
+
+jest.mock("expo-tracking-transparency", () => ({
+  requestTrackingPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: "granted" }),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => {
@@ -626,6 +631,77 @@ describe("MealsScreen", () => {
 
       await fireEvent.press(getByTestId("meals-mode-plan"));
       expect(queryByTestId("meal-item-meal-y")).toBeNull();
+    });
+  });
+
+  describe("広告(記録の一覧)", () => {
+    function AdsStarter() {
+      const { start } = useAds();
+      start();
+      return null;
+    }
+
+    // 過去の月(2026-07から遡る) n か月分、各月に1件の記録。
+    function makeMonthlyRecords(count: number) {
+      return Array.from({ length: count }, (_, index) => ({
+        id: `log-meal-${index + 1}`,
+        calendarId: "cal-1",
+        mealDate: `2026-${String(7 - index).padStart(2, "0")}-10`,
+        slot: "dinner",
+        title: `料理${index + 1}`,
+        rating: null,
+        url: null,
+        memo: null,
+        createdBy: "user-1",
+      })).filter((record) => Number(record.mealDate.slice(5, 7)) >= 1);
+    }
+
+    function monthKey(index: number): string {
+      return `2026-${String(7 - index).padStart(2, "0")}`;
+    }
+
+    async function renderLog(count: number) {
+      mockCommonHooks(makeMonthlyRecords(count) as unknown as typeof RECORDS);
+      const utils = await render(
+        <AdsProvider>
+          <AdsStarter />
+          <MealsScreen />
+        </AdsProvider>
+      );
+      await act(async () => {});
+      await fireEvent.press(utils.getByTestId("meals-mode-log"));
+      return utils;
+    }
+
+    async function measure(utils: Awaited<ReturnType<typeof renderLog>>, groupHeight: number, viewportHeight: number, count: number) {
+      for (let index = 0; index < count; index += 1) {
+        const group = utils.queryByTestId(`meals-log-month-group-${monthKey(index)}`);
+        if (group) {
+          await fireEvent(group, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: groupHeight } } });
+        }
+      }
+      await fireEvent(utils.getByTestId("meals-log-list"), "layout", {
+        nativeEvent: { layout: { x: 0, y: 0, width: 360, height: viewportHeight } },
+      });
+    }
+
+    it("puts a banner after every month of the log, but not on the first screen", async () => {
+      const utils = await renderLog(6);
+
+      // 1か月分=300・画面=500: 1か月目の直後(300)は最初の画面の中なので出ない。2か月目の直後(600)から出る
+      await measure(utils, 300, 500, 6);
+
+      expect(utils.queryByTestId("meals-log-ad-0")).toBeNull();
+      expect(utils.getByTestId("meals-log-ad-1")).toBeTruthy();
+      expect(utils.getByTestId("meals-log-ad-2")).toBeTruthy();
+    });
+
+    it("puts no banner when the whole log fits on the first screen", async () => {
+      const utils = await renderLog(2);
+
+      await measure(utils, 100, 5000, 2);
+
+      expect(utils.queryByTestId("meals-log-ad-0")).toBeNull();
     });
   });
 });

@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 
+import { AdsProvider } from "../src/features/ads/AdsProvider";
 import { AppErrorBoundary } from "../src/shared/components/AppErrorBoundary";
 import { installGlobalErrorHandler } from "../src/shared/errors/globalHandler";
 import { useRegisterPushToken } from "../src/features/notifications/hooks";
@@ -16,9 +17,11 @@ export default function RootLayout() {
   useRegisterPushToken();
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(tabs)" options={{ headerBackTitle: "" }} />
-    </Stack>
+    <AdsProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" options={{ headerBackTitle: "" }} />
+      </Stack>
+    </AdsProvider>
   );
 }

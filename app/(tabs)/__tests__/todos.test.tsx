@@ -1,6 +1,7 @@
-import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor, within } from "@testing-library/react-native";
 
 import TodosScreen from "../todos";
+import { AdsProvider, useAds } from "../../../src/features/ads/AdsProvider";
 import { useMyCalendars } from "../../../src/features/calendars/hooks";
 import { useEventsInRange } from "../../../src/features/events/hooks";
 import { useEventTagsByEvents, useTagTree } from "../../../src/features/tags/hooks";
@@ -25,6 +26,10 @@ jest.mock("@react-native-community/datetimepicker", () => {
     });
   };
 });
+
+jest.mock("expo-tracking-transparency", () => ({
+  requestTrackingPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: "granted" }),
+}));
 
 jest.mock("expo-router", () => {
   const React = require("react");
@@ -1334,5 +1339,74 @@ describe("TodosScreen", () => {
     await waitFor(() => expect(refetchOrphaned).toHaveBeenCalled());
     await waitFor(() => expect(refetch).toHaveBeenCalled());
     expect(queryByTestId("reattach-todo-close")).toBeNull();
+  });
+
+  describe("広告", () => {
+    function AdsStarter() {
+      const { start } = useAds();
+      start();
+      return null;
+    }
+
+    // 予定ごとに1件ずつのToDo(今後の予定が count 個 = 予定のまとまり count 個)。
+    function makeFutureTodos(count: number) {
+      return Array.from({ length: count }, (_, index) => ({
+        id: `ad-todo-${index + 1}`,
+        eventId: `ad-event-${index + 1}`,
+        eventCalendarId: "cal-1",
+        title: `ToDo${index + 1}`,
+        isDone: false,
+        completedAt: null,
+        reminderAt: null,
+        eventTitle: `予定${index + 1}`,
+        eventStartAt: `2026-09-${String(index + 1).padStart(2, "0")}T01:00:00.000Z`,
+        eventEndAt: `2026-09-${String(index + 1).padStart(2, "0")}T02:00:00.000Z`,
+        eventIsAllDay: false,
+      }));
+    }
+
+    async function renderWithAds(count: number) {
+      mockCommonHooks(makeFutureTodos(count));
+      const utils = await render(
+        <AdsProvider>
+          <AdsStarter />
+          <TodosScreen />
+        </AdsProvider>
+      );
+      await act(async () => {});
+      return utils;
+    }
+
+    async function measure(utils: Awaited<ReturnType<typeof renderWithAds>>, sectionHeight: number, viewportHeight: number, count: number) {
+      for (let index = 0; index < count; index += 1) {
+        const slot = utils.queryByTestId(`todos-section-slot-ad-event-${index + 1}`);
+        if (slot) {
+          await fireEvent(slot, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: sectionHeight } } });
+        }
+      }
+      await fireEvent(utils.getByTestId("todos-scroll-view"), "layout", {
+        nativeEvent: { layout: { x: 0, y: 0, width: 360, height: viewportHeight } },
+      });
+    }
+
+    it("puts a banner after every 3 sections of the upcoming list, but not on the first screen", async () => {
+      const utils = await renderWithAds(10);
+
+      // 1つの予定のまとまり=150・画面=500: 3つ目の直後(下端450)は、最初の画面の中なので出ない
+      await measure(utils, 150, 500, 10);
+
+      expect(utils.queryByTestId("todos-ad-after-2")).toBeNull();
+      // 6つ目の直後は、最初の画面より下
+      expect(utils.getByTestId("todos-ad-after-5")).toBeTruthy();
+    });
+
+    it("puts no banner when everything fits on the first screen", async () => {
+      const utils = await renderWithAds(6);
+
+      await measure(utils, 100, 5000, 6);
+
+      expect(utils.queryByTestId("todos-ad-after-2")).toBeNull();
+      expect(utils.queryByTestId("todos-ad-after-5")).toBeNull();
+    });
   });
 });

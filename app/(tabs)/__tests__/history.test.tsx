@@ -1,6 +1,7 @@
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import HistoryScreen from "../history";
+import { AdsProvider, useAds } from "../../../src/features/ads/AdsProvider";
 import { useMyCalendars } from "../../../src/features/calendars/hooks";
 import { usePastEventsByTag } from "../../../src/features/history/hooks";
 import { useEventIdsWithPhotos, useMemoriesTimeline } from "../../../src/features/memories/hooks";
@@ -10,6 +11,10 @@ import {
   useRemoveAllTagsFromEvents,
   useTagTree,
 } from "../../../src/features/tags/hooks";
+
+jest.mock("expo-tracking-transparency", () => ({
+  requestTrackingPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: "granted" }),
+}));
 
 jest.mock("@react-native-community/datetimepicker", () => {
   const React = require("react");
@@ -1214,6 +1219,108 @@ describe("HistoryScreen", () => {
       );
 
       jest.useRealTimers();
+    });
+  });
+
+  describe("広告", () => {
+    function AdsStarter() {
+      const { start } = useAds();
+      start();
+      return null;
+    }
+
+    async function renderWithAds() {
+      const utils = await render(
+        <AdsProvider>
+          <AdsStarter />
+          <HistoryScreen />
+        </AdsProvider>
+      );
+      await act(async () => {});
+      return utils;
+    }
+
+    // 月(2026-M)ごとに1件ずつの過去の予定。
+    function makeMonthlyEvents(count: number) {
+      return Array.from({ length: count }, (_, index) => ({
+        id: `month-event-${index + 1}`,
+        calendarId: "cal-1",
+        title: `予定${index + 1}`,
+        startAt: `2026-${String(12 - index).padStart(2, "0")}-10T10:00:00.000Z`,
+        endAt: `2026-${String(12 - index).padStart(2, "0")}-10T11:00:00.000Z`,
+      }));
+    }
+
+    function monthKey(index: number): string {
+      return `2026-${String(12 - index).padStart(2, "0")}`;
+    }
+
+    async function measureTimeline(utils: Awaited<ReturnType<typeof renderWithAds>>, groupHeight: number, viewportHeight: number, count: number) {
+      for (let index = 0; index < count; index += 1) {
+        const group = utils.queryByTestId(`history-month-group-${monthKey(index)}`);
+        if (group) {
+          await fireEvent(group, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: groupHeight } } });
+        }
+      }
+      await fireEvent(utils.getByTestId("history-timeline"), "layout", {
+        nativeEvent: { layout: { x: 0, y: 0, width: 360, height: viewportHeight } },
+      });
+    }
+
+    it("puts a banner after every 2 months of the timeline, but not on the first screen", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({ events: makeMonthlyEvents(8), isLoading: false, error: null, refetch: jest.fn() });
+      const utils = await renderWithAds();
+
+      // 1か月分=200・画面=500: 2か月目の直後(下端400)は最初の画面の中なので出ない。4か月目の直後(800)は出る
+      await measureTimeline(utils, 200, 500, 8);
+
+      expect(utils.queryByTestId("history-timeline-ad-1")).toBeNull();
+      expect(utils.getByTestId("history-timeline-ad-3")).toBeTruthy();
+    });
+
+    it("puts no banner in the timeline when it all fits on the first screen", async () => {
+      mockCommonHooks();
+      (usePastEventsByTag as jest.Mock).mockReturnValue({ events: makeMonthlyEvents(4), isLoading: false, error: null, refetch: jest.fn() });
+      const utils = await renderWithAds();
+
+      await measureTimeline(utils, 100, 5000, 4);
+
+      expect(utils.queryByTestId("history-timeline-ad-1")).toBeNull();
+      expect(utils.queryByTestId("history-timeline-ad-3")).toBeNull();
+    });
+
+    // 同じ月に n 枚の写真つきの予定(1行に2枚並ぶ)。
+    function makePhotoEntries(count: number) {
+      return Array.from({ length: count }, (_, index) => ({
+        id: `photo-event-${index + 1}`,
+        calendarId: "cal-1",
+        title: `思い出${index + 1}`,
+        startAt: `2026-08-${String((index % 28) + 1).padStart(2, "0")}T10:00:00.000Z`,
+        endAt: `2026-08-${String((index % 28) + 1).padStart(2, "0")}T11:00:00.000Z`,
+        thumbnailStoragePath: `photo-event-${index + 1}/a.jpg`,
+        thumbnailUrl: `https://example.com/signed/${index + 1}.jpg`,
+      }));
+    }
+
+    it("puts a large ad in the photo grid after every 10 rows (20 photos)", async () => {
+      mockCommonHooks();
+      (useMemoriesTimeline as jest.Mock).mockReturnValue({ entries: makePhotoEntries(24), isLoading: false, error: null, refetch: jest.fn() });
+      const utils = await renderWithAds();
+      await fireEvent.press(utils.getByTestId("history-mode-photos"));
+
+      // 並びは新しい順。20枚目の写真の直後に広告が入る。
+      expect(utils.getAllByTestId(/^memories-ad-after-photo-event-\d+$/)).toHaveLength(1);
+      expect(utils.getByTestId(/^memories-ad-after-photo-event-\d+-view$/).props.size).toBe("MEDIUM_RECTANGLE");
+    });
+
+    it("puts no ad in the photo grid when there are fewer than 10 rows", async () => {
+      mockCommonHooks();
+      (useMemoriesTimeline as jest.Mock).mockReturnValue({ entries: makePhotoEntries(10), isLoading: false, error: null, refetch: jest.fn() });
+      const utils = await renderWithAds();
+      await fireEvent.press(utils.getByTestId("history-mode-photos"));
+
+      expect(utils.queryAllByTestId(/^memories-ad-after-photo-event-\d+$/)).toHaveLength(0);
     });
   });
 });

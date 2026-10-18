@@ -23,7 +23,8 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://posqpbpfnmnnacqzkoxy.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvc3FwYnBmbm1ubmFjcXprb3h5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTU5MTksImV4cCI6MjEwMjUzMTkxOX0.jyL19zND4MZg8g9aqAGqkfFy0yO-DFzgPaiPzG0eADM"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvc3FwYnBmbm1ubmFjcXprb3h5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTU5MTksImV4cCI6MjEwMjUzMTkxOX0.jyL19zND4MZg8g9aqAGqkfFy0yO-DFzgPaiPzG0eADM",
+        "EXPO_PUBLIC_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-1540759813512306/3969727606"
       }
     }
   },

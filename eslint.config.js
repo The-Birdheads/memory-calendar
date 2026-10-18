@@ -20,6 +20,11 @@ module.exports = defineConfig([
   },
   expoConfig,
   {
+    // jest の代用品(モック)ファイルは、テスト実行時にだけ読み込まれ、jest のグローバルを使う。
+    files: ["jest/**/*.js"],
+    languageOptions: { globals: { jest: "readonly" } },
+  },
+  {
     // react-hooks プラグインは eslint-config-expo が全ファイルに対して登録している。
     rules: {
       // このリポジトリのデータ取得フックは「マウント時 + 依存変化時に refetch する」

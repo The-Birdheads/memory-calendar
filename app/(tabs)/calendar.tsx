@@ -30,6 +30,10 @@ import { buildMultiDayBanners, excludeBannerEvents, fillBannerGaps } from "../..
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
 import type { Event, EventWithTagColor } from "../../src/features/events/types";
 import { SettingsHubModal } from "../../src/features/calendars/components/SettingsHubModal";
+import { AdBanner } from "../../src/features/ads/AdBanner";
+import { useAds } from "../../src/features/ads/AdsProvider";
+import { useBannerPlacement } from "../../src/features/ads/useBannerPlacement";
+import { withBannerSlots } from "../../src/features/ads/bannerPlacement";
 import { useOnboarding } from "../../src/features/onboarding/hooks";
 import { OnboardingModal, type OnboardingAction } from "../../src/features/onboarding/components/OnboardingModal";
 import { AssigneeAvatars } from "../../src/features/assignees/components/AssigneeAvatars";
@@ -71,6 +75,12 @@ const GRID_HORIZONTAL_PADDING = 8;
 // モーダルを閉じる動き(アニメーション)が終わるまでの待ち時間。次のモーダルを開くのは、これが
 // 過ぎてから。
 const MODAL_TRANSITION_MS = 450;
+
+// 画面を開いてから、広告の準備を始めるまでの待ち時間。
+const ADS_START_DELAY_MS = 2000;
+
+// 一覧表示で、広告を入れる間隔(日付のまとまり何個ごとか)。
+const MONTH_LIST_AD_INTERVAL = 10;
 function runAfterModalTransition(action: () => void): void {
   setTimeout(action, MODAL_TRANSITION_MS);
 }
@@ -288,6 +298,13 @@ export default function CalendarScreen() {
   const monthEventGroups = useMemo(
     () => buildMonthEventGroups(events, focusedDate.getUTCFullYear(), focusedDate.getUTCMonth() + 1),
     [events, focusedDate]
+  );
+
+  // 一覧表示の広告: 10日(日付のまとまり)ごとに入れる。スクロールしない最初の画面には出さない。
+  const monthListBanners = useBannerPlacement(monthEventGroups.length, MONTH_LIST_AD_INTERVAL);
+  const monthListSlots = useMemo(
+    () => withBannerSlots(monthEventGroups, monthListBanners.afterIndexes),
+    [monthEventGroups, monthListBanners.afterIndexes]
   );
 
   // resolveEventColor/buildEventColorLegend が「タグなし予定の色」を引く
@@ -535,6 +552,16 @@ export default function CalendarScreen() {
       runAfterModalTransition(openCreateModal);
     }
   };
+  // 広告の準備(トラッキング許可の確認と広告SDKの初期化)は、初回の案内を見ている最中を避けて、
+  // 案内が出ていない状態で少し待ってから始める。
+  const ads = useAds();
+  const startAds = ads.start;
+  useEffect(() => {
+    if (onboarding.isVisible) return;
+    const timer = setTimeout(startAds, ADS_START_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [onboarding.isVisible, startAds]);
+
   // 個人設定の「使い方を見る」: 設定のモーダルを閉じてから、案内を開く。
   const handleShowTutorial = () => {
     setSettingsModalRequest(null);
@@ -1101,12 +1128,23 @@ export default function CalendarScreen() {
           ) : (
             <FlatList
               testID="calendar-month-list"
-              data={monthEventGroups}
-              keyExtractor={(group) => group.dateKey}
+              data={monthListSlots}
+              // 最初の広告の枠(10日分の直後)まで最初に描画しておく(高さの測定にも使える)。
+              initialNumToRender={MONTH_LIST_AD_INTERVAL + 2}
+              keyExtractor={(slot) => (slot.kind === "banner" ? slot.key : slot.item.dateKey)}
+              onLayout={monthListBanners.onViewportLayout}
               contentContainerStyle={styles.monthListContent}
               ItemSeparatorComponent={MonthListDateSeparator}
-              renderItem={({ item: group }) => (
-                <View testID={`calendar-month-list-date-group-${group.dateKey}`}>
+              renderItem={({ item: slot }) => {
+                if (slot.kind === "banner") {
+                  return <AdBanner testID={`calendar-list-${slot.key}`} variant="banner" spacing={8} />;
+                }
+                const group = slot.item;
+                return (
+                <View
+                  testID={`calendar-month-list-date-group-${group.dateKey}`}
+                  onLayout={monthListBanners.onItemLayout(slot.index)}
+                >
                   <Text style={styles.monthListDateHeader}>{group.label}</Text>
                   {group.events.map((event, index) => {
                     const tags = sortTagsHierarchically(tagsByEventId[event.id] ?? [], allTagsFlat);
@@ -1162,7 +1200,8 @@ export default function CalendarScreen() {
                     );
                   })}
                 </View>
-              )}
+                );
+              }}
             />
           )}
 
@@ -1278,10 +1317,16 @@ export default function CalendarScreen() {
             </View>
 
             {eventsForSelectedDate.length === 0 ? (
-              <Text style={styles.dayModalEmptyText}>予定はありません</Text>
+              <>
+                <Text style={styles.dayModalEmptyText}>予定はありません</Text>
+                {/* 予定が無い日は、空いた場所に大きめの広告を出す。 */}
+                <AdBanner testID="calendar-day-ad-empty" variant="rectangle" spacing={12} />
+              </>
             ) : (
               <FlatList
                 style={styles.dayModalEventList}
+                // 予定の一覧の最後(余白があれば、予定のすぐ下)に大きめの広告を出す。
+                ListFooterComponent={<AdBanner testID="calendar-day-ad" variant="rectangle" spacing={12} />}
                 data={eventsForSelectedDate}
                 keyExtractor={(item) => item.id}
                 ItemSeparatorComponent={DayModalEventSeparator}
@@ -1325,7 +1370,10 @@ export default function CalendarScreen() {
       <View
         testID="calendar-below-grid"
         onLayout={(event) => setBelowGridHeight(event.nativeEvent.layout.height)}
-      />
+      >
+        {/* 画面の下部のバナー広告(右下の＋ボタンは、この上に重なる)。 */}
+        <AdBanner testID="calendar-bottom-ad" variant="banner" spacing={4} />
+      </View>
 
       {/* タグの一括付与中は、右下の選択完了ボタン(BulkSelectionActionBar)と重なるので隠す。 */}
       {bulk.isActive ? null : (
