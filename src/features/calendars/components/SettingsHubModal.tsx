@@ -47,6 +47,8 @@ export interface SettingsHubModalProps {
    */
   initialSection?: "hub" | "personal" | "calendar";
   initialCalendarMode?: "list" | "create";
+  /** 個人設定の「使い方を見る」を押したとき(初回の案内をもう一度見せる)。 */
+  onShowTutorial?: () => void;
 }
 
 function titleFor(screen: Screen, calendars: Calendar[]): string {
@@ -96,6 +98,7 @@ export function SettingsHubModal({
   onChange,
   initialSection = "hub",
   initialCalendarMode,
+  onShowTutorial,
 }: SettingsHubModalProps) {
   const [stack, setStack] = useState<Screen[]>(() => initialStack(initialSection, initialCalendarMode));
   const current = stack[stack.length - 1];
@@ -152,7 +155,7 @@ export function SettingsHubModal({
           ) : null}
 
           {current.name === "personal" && currentUserId ? (
-            <PersonalSettingsPanel userId={currentUserId} onChange={onChange} />
+            <PersonalSettingsPanel userId={currentUserId} onChange={onChange} onShowTutorial={onShowTutorial} />
           ) : null}
 
           {current.name === "calendar-list" ? (

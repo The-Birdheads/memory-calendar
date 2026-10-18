@@ -1,10 +1,11 @@
-import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Linking, StyleSheet } from "react-native";
 import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import CalendarScreen from "../calendar";
 import { useSetEventAssignees } from "../../../src/features/assignees/hooks";
+import { useOnboarding } from "../../../src/features/onboarding/hooks";
 import { useRemoveMyAvatar, useUploadMyAvatar, useAvatarUrls } from "../../../src/features/profile/avatarHooks";
 import { useAuthActions, useAuthSession } from "../../../src/features/auth/hooks";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName, useUpdateWeekStartsOn } from "../../../src/features/profile/hooks";
@@ -64,6 +65,10 @@ jest.mock("expo-router", () => {
 jest.mock("../../../src/features/auth/hooks", () => ({
   useAuthSession: jest.fn(),
   useAuthActions: jest.fn(),
+}));
+
+jest.mock("../../../src/features/onboarding/hooks", () => ({
+  useOnboarding: jest.fn(),
 }));
 
 jest.mock("../../../src/features/assignees/hooks", () => ({
@@ -171,6 +176,7 @@ const OTHER_DAY_EVENT = {
 };
 
 function mockCommonHooks() {
+  (useOnboarding as jest.Mock).mockReturnValue({ isVisible: false, show: jest.fn(), complete: jest.fn() });
   (useSetEventAssignees as jest.Mock).mockReturnValue({
     setEventAssignees: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
@@ -1385,6 +1391,114 @@ describe("CalendarScreen", () => {
       expect(utils.getByTestId("calendar-grid-dot-day-event-2")).toBeTruthy();
       expect(utils.queryByTestId("calendar-grid-dot-day-event-3")).toBeNull();
       expect(utils.getByTestId("calendar-grid-cell-overflow-2026-08-18").props.children).toEqual(["+", 2]);
+    });
+  });
+
+  describe("初回の案内(チュートリアル)", () => {
+    function mockOnboarding(isVisible: boolean) {
+      const complete = jest.fn();
+      const show = jest.fn();
+      (useOnboarding as jest.Mock).mockReturnValue({ isVisible, show, complete });
+      return { complete, show };
+    }
+
+    async function finishTutorialWith(testID: string) {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      const hooks = mockOnboarding(true);
+      const utils = await render(<CalendarScreen />);
+      // 最後の画面まで進む。
+      for (let i = 0; i < 4; i += 1) {
+        await fireEvent.press(utils.getByTestId("onboarding-next"));
+      }
+      await fireEvent.press(utils.getByTestId(testID));
+      return { ...utils, ...hooks };
+    }
+
+    it("shows the tutorial over the calendar when the hook says it is the first time", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      mockOnboarding(true);
+
+      const { getByTestId } = await render(<CalendarScreen />);
+
+      expect(getByTestId("onboarding-title")).toBeTruthy();
+    });
+
+    it("does not show the tutorial when it was already completed", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+      const { queryByTestId } = await render(<CalendarScreen />);
+
+      expect(queryByTestId("onboarding-title")).toBeNull();
+    });
+
+    it("remembers it was completed when skipped", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      const { complete } = mockOnboarding(true);
+
+      const { getByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("onboarding-skip"));
+
+      expect(complete).toHaveBeenCalled();
+    });
+
+    it("opens the shared-calendar create form after the tutorial closes, when 共有カレンダーをつくる is chosen", async () => {
+      const { complete, queryByTestId, getByTestId } = await finishTutorialWith("onboarding-create-calendar");
+
+      expect(complete).toHaveBeenCalled();
+      // 案内のモーダルが閉じきってから開く(iOS で、2つのモーダルが同時に切り替わらないように)。
+      expect(queryByTestId("calendar-settings-create-description")).toBeNull();
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+
+      expect(getByTestId("calendar-settings-create-description")).toBeTruthy();
+    });
+
+    it("opens the create-event sheet after the tutorial closes, when 最初の予定を作る is chosen", async () => {
+      const { complete, queryByTestId, getByTestId } = await finishTutorialWith("onboarding-create-event");
+
+      expect(complete).toHaveBeenCalled();
+      expect(queryByTestId("event-create-submit")).toBeNull();
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+
+      expect(getByTestId("event-create-submit")).toBeTruthy();
+    });
+
+    it("opens nothing else when あとで is chosen", async () => {
+      const { complete, queryByTestId } = await finishTutorialWith("onboarding-later");
+
+      expect(complete).toHaveBeenCalled();
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+
+      expect(queryByTestId("calendar-settings-create-description")).toBeNull();
+      expect(queryByTestId("event-create-submit")).toBeNull();
+    });
+
+    it("replays the tutorial from the personal settings: the settings close first, then the tutorial opens", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      const { show } = mockOnboarding(false);
+
+      const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-settings-icon"));
+      await fireEvent.press(getByTestId("settings-hub-open-personal"));
+      await fireEvent.press(getByTestId("personal-settings-tutorial"));
+
+      expect(queryByTestId("personal-settings-tutorial")).toBeNull();
+      expect(show).not.toHaveBeenCalled();
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+
+      expect(show).toHaveBeenCalled();
     });
   });
 

@@ -30,6 +30,8 @@ import { buildMultiDayBanners, excludeBannerEvents, fillBannerGaps } from "../..
 import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe";
 import type { Event, EventWithTagColor } from "../../src/features/events/types";
 import { SettingsHubModal } from "../../src/features/calendars/components/SettingsHubModal";
+import { useOnboarding } from "../../src/features/onboarding/hooks";
+import { OnboardingModal, type OnboardingAction } from "../../src/features/onboarding/components/OnboardingModal";
 import { AssigneeAvatars } from "../../src/features/assignees/components/AssigneeAvatars";
 import { splitCellEvents } from "../../src/features/events/monthCellCapacity";
 import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
@@ -65,6 +67,13 @@ function getWeekdayHeaderCells(weekStartsOn: WeekStartsOn): { label: string; day
 // gridContainerの左右paddingと同じ値(月グリッドの実際の表示幅を計算する
 // のに使う - styles.gridContainerとこの定数の値は必ず揃える)。
 const GRID_HORIZONTAL_PADDING = 8;
+
+// モーダルを閉じる動き(アニメーション)が終わるまでの待ち時間。次のモーダルを開くのは、これが
+// 過ぎてから。
+const MODAL_TRANSITION_MS = 450;
+function runAfterModalTransition(action: () => void): void {
+  setTimeout(action, MODAL_TRANSITION_MS);
+}
 
 // 複数日予定のバー表示(TimeTree風)まわりの寸法。BANNER_AREA_TOPは
 // gridCellの`paddingTop:4` + 日付バッジの高さ24 + `gap:2` の合計 - バーが
@@ -512,6 +521,24 @@ export default function CalendarScreen() {
 
   const openCreateModal = () => {
     setIsCreateModalVisible(true);
+  };
+
+  // 初回の案内(チュートリアル)。見終えたら覚えておき、最後の画面で選んだ「共有カレンダーを
+  // つくる」「最初の予定を作る」は、案内のモーダルが閉じきってから開く(iOS は、モーダルを
+  // 閉じる動きの最中に別のモーダルを開くと、開けないことがある)。
+  const onboarding = useOnboarding(session?.user.id);
+  const handleOnboardingClose = (action: OnboardingAction) => {
+    onboarding.complete();
+    if (action === "create-calendar") {
+      runAfterModalTransition(() => setSettingsModalRequest({ initialSection: "calendar", initialCalendarMode: "create" }));
+    } else if (action === "create-event") {
+      runAfterModalTransition(openCreateModal);
+    }
+  };
+  // 個人設定の「使い方を見る」: 設定のモーダルを閉じてから、案内を開く。
+  const handleShowTutorial = () => {
+    setSettingsModalRequest(null);
+    runAfterModalTransition(onboarding.show);
   };
 
   // 予定一覧(日別モーダル・月の一覧表示)の各行で、タイトルの下に場所/メモ/URLを
@@ -981,8 +1008,11 @@ export default function CalendarScreen() {
           }}
           initialSection={settingsModalRequest.initialSection}
           initialCalendarMode={settingsModalRequest.initialCalendarMode}
+          onShowTutorial={handleShowTutorial}
         />
       ) : null}
+
+      <OnboardingModal visible={onboarding.isVisible} onClose={handleOnboardingClose} />
 
       {viewMode === "grid" ? (
         <View

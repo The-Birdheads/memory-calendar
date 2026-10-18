@@ -16,9 +16,11 @@ export interface PersonalSettingsPanelProps {
   /** 表示名/週の開始曜日を保存した後に呼ばれる - 他画面(カレンダー画面の
    * useMyProfileなど)が持つ別インスタンスの状態を確実に最新化するため。 */
   onChange?: () => void;
+  /** 「使い方を見る」を押したとき(初回の案内をもう一度見せる)。渡さなければボタンは出さない。 */
+  onShowTutorial?: () => void;
 }
 
-export function PersonalSettingsPanel({ userId, onChange }: PersonalSettingsPanelProps) {
+export function PersonalSettingsPanel({ userId, onChange, onShowTutorial }: PersonalSettingsPanelProps) {
   const { profile, isLoading, refetch: refetchProfile } = useMyProfile(userId);
   const { updateDisplayName, error: updateError } = useUpdateDisplayName();
   const { updateWeekStartsOn, error: weekStartsOnError } = useUpdateWeekStartsOn();
@@ -201,6 +203,12 @@ export function PersonalSettingsPanel({ userId, onChange }: PersonalSettingsPane
         </View>
         {weekStartsOnError ? <Text style={styles.errorText}>{getProfileErrorMessageJa(weekStartsOnError)}</Text> : null}
 
+        {onShowTutorial ? (
+          <TouchableOpacity testID="personal-settings-tutorial" style={styles.tutorialButton} onPress={onShowTutorial}>
+            <Text style={styles.tutorialButtonText}>使い方を見る</Text>
+          </TouchableOpacity>
+        ) : null}
+
         <TouchableOpacity
           testID="personal-settings-logout"
           style={styles.logoutButton}
@@ -233,6 +241,16 @@ export function PersonalSettingsPanel({ userId, onChange }: PersonalSettingsPane
 const styles = StyleSheet.create({
   container: {
     gap: 10,
+  },
+  tutorialButton: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+  },
+  tutorialButtonText: {
+    color: "#2f6fed",
+    fontSize: 15,
+    fontWeight: "600",
   },
   avatarRow: {
     flexDirection: "row",

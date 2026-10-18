@@ -370,4 +370,24 @@ describe("PersonalSettingsPanel", () => {
       expect(onChange).toHaveBeenCalled();
     });
   });
+
+  describe("使い方", () => {
+    it("has a 使い方を見る button that replays the tutorial", async () => {
+      mockHooks();
+      const onShowTutorial = jest.fn();
+
+      const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" onShowTutorial={onShowTutorial} />);
+      await fireEvent.press(getByTestId("personal-settings-tutorial"));
+
+      expect(onShowTutorial).toHaveBeenCalled();
+    });
+
+    it("hides the 使い方を見る button when there is no way to show the tutorial", async () => {
+      mockHooks();
+
+      const { queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+      expect(queryByTestId("personal-settings-tutorial")).toBeNull();
+    });
+  });
 });
