@@ -2386,6 +2386,29 @@ describe("CalendarScreen", () => {
         expect(getByText("✓")).toBeTruthy();
       });
 
+      it("hides the + (add event) button while bulk tag assignment is active, and shows it again after cancelling", async () => {
+        mockCommonHooks();
+        (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+          events: [TODAY_EVENT],
+          isLoading: false,
+          error: null,
+          refetch: jest.fn(),
+        });
+
+        const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+        await fireEvent.press(getByTestId("calendar-view-mode-list"));
+
+        expect(getByTestId("calendar-add-event-fab")).toBeTruthy();
+
+        await fireEvent.press(getByTestId("calendar-bulk-tag-button"));
+
+        expect(queryByTestId("calendar-add-event-fab")).toBeNull();
+
+        await fireEvent.press(getByTestId("calendar-bulk-tag-button"));
+
+        expect(getByTestId("calendar-add-event-fab")).toBeTruthy();
+      });
+
       it("assigns the selected tags to the selected events on confirm, then refetches and leaves bulk mode", async () => {
         mockCommonHooks();
         const refetchEvents = jest.fn();

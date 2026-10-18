@@ -1266,9 +1266,12 @@ export default function CalendarScreen() {
         onLayout={(event) => setBelowGridHeight(event.nativeEvent.layout.height)}
       />
 
-      <TouchableOpacity testID="calendar-add-event-fab" style={styles.fab} onPress={openCreateModal}>
-        <Icon name="plus" size={22} color="#fff" />
-      </TouchableOpacity>
+      {/* タグの一括付与中は、右下の選択完了ボタン(BulkSelectionActionBar)と重なるので隠す。 */}
+      {bulk.isActive ? null : (
+        <TouchableOpacity testID="calendar-add-event-fab" style={styles.fab} onPress={openCreateModal}>
+          <Icon name="plus" size={22} color="#fff" />
+        </TouchableOpacity>
+      )}
 
       <EventCreateModal
         visible={isCreateModalVisible}
