@@ -7,6 +7,17 @@ function jstDayStart(date: Date): number {
   return Math.floor((date.getTime() + JST_OFFSET_MS) / DAY_MS) * DAY_MS - JST_OFFSET_MS;
 }
 
+/** 日時の、日本時間(JST)での時・分。 */
+export function jstHourMinute(date: Date): { hour: number; minute: number } {
+  const minutesIntoDay = Math.round((date.getTime() - jstDayStart(date)) / 60_000);
+  return { hour: Math.floor(minutesIntoDay / 60), minute: minutesIntoDay % 60 };
+}
+
+/** 日時の「日付(JST)」はそのままに、時刻(JST)だけを差し替える。 */
+export function withJstTime(date: Date, hour: number, minute: number): Date {
+  return new Date(jstDayStart(date) + (hour * 60 + minute) * 60_000);
+}
+
 /**
  * 開始日時が変更されたあとの終了日時を返す。開始が終了より後ろになった場合だけ
  * 終了を補正し、そうでなければ終了はそのまま返す。

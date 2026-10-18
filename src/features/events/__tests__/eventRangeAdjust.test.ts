@@ -1,4 +1,4 @@
-import { adjustEndForNewStart } from "../eventRangeAdjust";
+import { adjustEndForNewStart, jstHourMinute, withJstTime } from "../eventRangeAdjust";
 
 const d = (iso: string) => new Date(iso);
 
@@ -55,5 +55,32 @@ describe("adjustEndForNewStart", () => {
       const end = d("2026-09-03T01:00:00.000Z");
       expect(adjustEndForNewStart(d("2026-09-03T05:00:00.000Z"), end, true)).toEqual(end);
     });
+  });
+});
+
+describe("jstHourMinute", () => {
+  it("reads the hour and minute as JST wall-clock time", () => {
+    expect(jstHourMinute(new Date("2026-09-01T09:05:00.000Z"))).toEqual({ hour: 18, minute: 5 });
+  });
+
+  it("rolls over midnight in JST (15:30Z is already 00:30 the next day)", () => {
+    expect(jstHourMinute(new Date("2026-09-01T15:30:00.000Z"))).toEqual({ hour: 0, minute: 30 });
+  });
+});
+
+describe("withJstTime", () => {
+  it("replaces the time of day but keeps the JST calendar day", () => {
+    // 2026-09-01 18:00 JST -> 2026-09-01 07:45 JST
+    expect(withJstTime(new Date("2026-09-01T09:00:00.000Z"), 7, 45)).toEqual(new Date("2026-08-31T22:45:00.000Z"));
+  });
+
+  it("keeps the JST day even when the instant is on the previous UTC day", () => {
+    // 2026-09-02 00:30 JST (= 09-01 15:30Z) -> 2026-09-02 23:10 JST
+    expect(withJstTime(new Date("2026-09-01T15:30:00.000Z"), 23, 10)).toEqual(new Date("2026-09-02T14:10:00.000Z"));
+  });
+
+  it("round-trips with jstHourMinute", () => {
+    const result = withJstTime(new Date("2026-09-01T09:00:00.000Z"), 21, 7);
+    expect(jstHourMinute(result)).toEqual({ hour: 21, minute: 7 });
   });
 });

@@ -2,10 +2,14 @@ import { useState } from "react";
 import { Keyboard, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
+import { Icon } from "../../../shared/components/Icon";
 import { RevealableTextField } from "../../../shared/components/RevealableTextField";
-import { formatDateOnly, formatTime } from "../../../shared/utils/formatDateTime";
+import { formatDateOnly } from "../../../shared/utils/formatDateTime";
 import { DATE_PICKER_LOCALE } from "../../../shared/utils/pickerLocale";
-import { adjustEndForNewStart } from "../eventRangeAdjust";
+import { adjustEndForNewStart, jstHourMinute, withJstTime } from "../eventRangeAdjust";
+import { applyTimeDigit, applyTimeValue, type TimeField } from "../timeDigits";
+import { TimeFieldBox } from "./TimeFieldBox";
+import { TimeKeypad } from "./TimeKeypad";
 
 export interface EventFormValue {
   title: string;
@@ -25,32 +29,116 @@ export interface EventFormFieldsProps {
 
 type PickerTarget = { which: "start" | "end"; part: "date" | "time" };
 
+type TimeDraft = { hour: number; minute: number };
+type Which = "start" | "end";
+
 export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFieldsProps) {
   const [activePicker, setActivePicker] = useState<PickerTarget | null>(null);
-  // 時刻ピッカー(スピナー)は回している途中の値を一旦ここに持ち、「完了」を
-  // 押したときに初めてフォームへ反映する(回している間に終了時刻の自動補正が
-  // 走って値が動き回らないように)。日付(カレンダー)はタップ=選択確定なので即時反映。
-  const [timeDraft, setTimeDraft] = useState<Date | null>(null);
+  // 時刻はテンキーで入力している途中の値(時・分だけ)を開始・終了それぞれ一旦ここに持ち、
+  // 「完了」を押したときに開始・終了をまとめてフォームへ反映する(入力している間に終了時刻の
+  // 自動補正が走って値が動き回らないように)。「キャンセル」で全て破棄する。日付(カレンダー)は
+  // タップ=選択確定なので即時反映。日付が後から変わっても時刻だけを当てられるよう、日付は持たない。
+  const [timeDrafts, setTimeDrafts] = useState<Partial<Record<Which, TimeDraft>>>({});
+  // 時刻を入力中の欄(時/分)と、二桁目待ちの十の位。
+  const [timeEntry, setTimeEntry] = useState<{ field: TimeField; buffer: string }>({ field: "hour", buffer: "" });
 
   // キーボードとピッカーは同時に出さない: ピッカーを開くときはキーボードを閉じ、
-  // 文字入力欄にフォーカスが当たったときはピッカーを閉じる。
+  // 文字入力欄にフォーカスが当たったときはピッカー(と入力途中の時刻)を閉じる。
   const openPicker = (target: PickerTarget) => {
     Keyboard.dismiss();
-    setTimeDraft(null);
     setActivePicker(target);
   };
   const closePicker = () => {
-    setTimeDraft(null);
+    setTimeDrafts({});
     setActivePicker(null);
   };
-  const confirmPicker = () => {
-    if (activePicker?.part === "time" && timeDraft) {
-      handlePicked(activePicker.which, timeDraft);
+
+  const currentTime = (which: Which): TimeDraft => timeDrafts[which] ?? jstHourMinute(value[which]);
+
+  // 時刻欄をタップすると、その欄(時/分)を編集状態にして、アプリ独自のテンキーを出す。
+  const selectTimeField = (which: Which, field: TimeField) => {
+    Keyboard.dismiss();
+    setActivePicker({ which, part: "time" });
+    setTimeEntry({ field, buffer: "" });
+  };
+
+  // 入力途中の時刻(開始・終了)をまとめてフォームへ反映する。開始を入力した場合は、
+  // 開始が終了より後ろになったとき終了を自動で補正する(終了も入力した場合は、
+  // 入力どおりの終了が開始より前のときだけ補正する)。
+  const commitTimeDrafts = () => {
+    const { start: startDraft, end: endDraft } = timeDrafts;
+    if (!startDraft && !endDraft) return;
+
+    const patch: Partial<EventFormValue> = {};
+    let newStart = value.start;
+    let newEnd = value.end;
+    if (startDraft) {
+      newStart = withJstTime(value.start, startDraft.hour, startDraft.minute);
+      patch.start = newStart;
     }
+    if (endDraft) {
+      newEnd = withJstTime(value.end, endDraft.hour, endDraft.minute);
+    }
+    if (startDraft) {
+      newEnd = adjustEndForNewStart(newStart, newEnd, value.isAllDay);
+    }
+    if (newEnd !== value.end) {
+      patch.end = newEnd;
+    }
+    onChange(patch);
+  };
+
+  const confirmPicker = () => {
+    commitTimeDrafts();
     closePicker();
   };
 
-  const handlePicked = (which: "start" | "end", selected: Date) => {
+  const setDraft = (which: Which, next: TimeDraft) => setTimeDrafts((prev) => ({ ...prev, [which]: next }));
+
+  // 開始の分を入力し終えたら、続けて終了の時を入力できるよう終了の時へ移る。
+  const moveOnAfterMinute = (which: Which) => {
+    if (which === "start") {
+      setActivePicker({ which: "end", part: "time" });
+      setTimeEntry({ field: "hour", buffer: "" });
+    } else {
+      setTimeEntry({ field: "minute", buffer: "" });
+    }
+  };
+
+  // 時/分の欄に値が入った後の進み方: 入力途中(二桁目待ち)ならそのまま、時が終わったら分へ、
+  // 分が終わったら(開始なら終了の時へ、終了ならそのまま)。
+  const advanceAfter = (which: Which, result: { done: boolean; buffer: string }) => {
+    if (!result.done) {
+      setTimeEntry({ field: timeEntry.field, buffer: result.buffer });
+    } else if (timeEntry.field === "hour") {
+      setTimeEntry({ field: "minute", buffer: "" });
+    } else {
+      moveOnAfterMinute(which);
+    }
+  };
+
+  const setCurrentField = (which: Which, fieldValue: number) => {
+    const current = currentTime(which);
+    setDraft(which, timeEntry.field === "hour" ? { ...current, hour: fieldValue } : { ...current, minute: fieldValue });
+  };
+
+  const handleDigit = (which: Which, digit: number) => {
+    const result = applyTimeDigit(timeEntry.field, timeEntry.buffer, digit);
+    if (!result) return;
+    setCurrentField(which, result.value);
+    advanceAfter(which, result);
+  };
+
+  // 「00」「30」キー: 入力中の欄に二桁をそのまま入れる。その欄にあり得ない値(時の「30」)は、
+  // 何も変えず、欄も移動しない。
+  const handleQuickValue = (which: Which, quickValue: number) => {
+    const result = applyTimeValue(timeEntry.field, quickValue);
+    if (!result) return;
+    setCurrentField(which, result.value);
+    advanceAfter(which, result);
+  };
+
+  const handlePicked = (which: Which, selected: Date) => {
     if (which === "end") {
       onChange({ end: selected });
       return;
@@ -59,37 +147,37 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
     onChange(adjustedEnd === value.end ? { start: selected } : { start: selected, end: adjustedEnd });
   };
 
-  const renderRow = (which: "start" | "end", label: string) => {
+  const renderColumn = (which: "start" | "end", label: string) => {
     const date = value[which];
-    const isActive = (part: "date" | "time") => activePicker?.which === which && activePicker.part === part;
+    const isDateActive = activePicker?.which === which && activePicker.part === "date";
+    const isTimeActive = activePicker?.which === which && activePicker.part === "time";
+    const { hour, minute } = currentTime(which);
     return (
-      <View style={styles.dateRow}>
+      <View style={styles.dateColumn}>
         <Text style={[styles.dateFieldLabel, activePicker?.which === which && styles.dateFieldLabelActive]}>
           {label}
         </Text>
         <TouchableOpacity
           testID={`${testIDPrefix}-${which}-button`}
-          style={[styles.dateField, styles.dateFieldDate, isActive("date") && styles.dateFieldActive]}
+          style={[styles.dateField, isDateActive && styles.dateFieldActive]}
           onPress={() => openPicker({ which, part: "date" })}
         >
           <Text>{formatDateOnly(date.toISOString())}</Text>
         </TouchableOpacity>
         {value.isAllDay ? null : (
-          <TouchableOpacity
-            testID={`${testIDPrefix}-${which}-time-button`}
-            style={[styles.dateField, isActive("time") && styles.dateFieldActive]}
-            onPress={() => openPicker({ which, part: "time" })}
-          >
-            <Text>{formatTime(date.toISOString())}</Text>
-          </TouchableOpacity>
+          <TimeFieldBox
+            testIDPrefix={`${testIDPrefix}-${which}-time`}
+            hour={hour}
+            minute={minute}
+            activeField={isTimeActive ? timeEntry.field : null}
+            onSelectField={(field) => selectTimeField(which, field)}
+          />
         )}
       </View>
     );
   };
 
-  const pickerTestID = activePicker
-    ? `${testIDPrefix}-${activePicker.which}-${activePicker.part === "time" ? "time-" : ""}picker`
-    : undefined;
+  const pickerTestID = activePicker ? `${testIDPrefix}-${activePicker.which}-picker` : undefined;
 
   return (
     <>
@@ -117,18 +205,33 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
         </View>
       </TouchableOpacity>
 
-      {renderRow("start", "開始")}
-      {renderRow("end", "終了")}
+      <View style={styles.dateRow}>
+        {renderColumn("start", "開始")}
+        <Icon name="chevron-right" size={14} color="#999" />
+        {renderColumn("end", "終了")}
+      </View>
 
-      {activePicker ? (
+      {activePicker?.part === "time" ? (
+        <TimeKeypad
+          testIDPrefix={`${testIDPrefix}-keypad`}
+          doneTestID={`${testIDPrefix}-picker-done`}
+          onDigit={(digit) => handleDigit(activePicker.which, digit)}
+          onQuickValue={(quickValue) => handleQuickValue(activePicker.which, quickValue)}
+          cancelTestID={`${testIDPrefix}-picker-cancel`}
+          onDone={confirmPicker}
+          onCancel={closePicker}
+        />
+      ) : null}
+
+      {activePicker?.part === "date" ? (
         <View style={styles.pickerContainer}>
           {Platform.OS === "web" ? (
             <TextInput
               testID={pickerTestID}
               style={styles.input}
-              placeholder={value.isAllDay ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm"}
+              placeholder="YYYY-MM-DD"
               onChangeText={(text) => {
-                const parsed = new Date(value.isAllDay ? `${text}T00:00:00.000Z` : `${text}:00.000Z`);
+                const parsed = new Date(`${text}T00:00:00.000Z`);
                 if (!Number.isNaN(parsed.getTime())) {
                   handlePicked(activePicker.which, parsed);
                 }
@@ -137,15 +240,12 @@ export function EventFormFields({ testIDPrefix, value, onChange }: EventFormFiel
           ) : (
             <DateTimePicker
               testID={pickerTestID}
-              value={activePicker.part === "time" && timeDraft ? timeDraft : value[activePicker.which]}
-              mode={activePicker.part}
-              display={Platform.OS === "ios" ? (activePicker.part === "time" ? "spinner" : "inline") : "default"}
+              value={value[activePicker.which]}
+              mode="date"
+              display={Platform.OS === "ios" ? "inline" : "default"}
               locale={DATE_PICKER_LOCALE}
               onChange={(_event: unknown, selected?: Date) => {
-                if (!selected) return;
-                if (activePicker.part === "time") {
-                  setTimeDraft(selected);
-                } else {
+                if (selected) {
                   handlePicked(activePicker.which, selected);
                 }
               }}
@@ -242,6 +342,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  dateColumn: {
+    flex: 1,
+    gap: 6,
+  },
   dateField: {
     backgroundColor: "#fff",
     flexDirection: "row",
@@ -253,9 +357,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  dateFieldDate: {
-    flex: 1,
-  },
   dateFieldActive: {
     borderWidth: 2,
     borderColor: "#2f6fed",
@@ -264,7 +365,6 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   dateFieldLabel: {
-    width: 32,
     color: "#666",
   },
   dateFieldLabelActive: {
