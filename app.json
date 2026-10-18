@@ -47,7 +47,15 @@
           "photosPermission": "予定の思い出として写真を追加するために使用します。"
         }
       ],
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},

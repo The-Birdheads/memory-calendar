@@ -1,0 +1,170 @@
+diff --git a/node_modules/react-native/Libraries/Text/TextInput/Multiline/RCTUITextView.mm b/node_modules/react-native/Libraries/Text/TextInput/Multiline/RCTUITextView.mm
+index cbda377..4a172f4 100644
+--- a/node_modules/react-native/Libraries/Text/TextInput/Multiline/RCTUITextView.mm
++++ b/node_modules/react-native/Libraries/Text/TextInput/Multiline/RCTUITextView.mm
+@@ -13,6 +13,31 @@
+ #import <React/RCTBackedTextInputDelegateAdapter.h>
+ #import <React/RCTTextAttributes.h>
+ 
++// 日本語などのIME変換中の文字の下線は、UIKit に渡す defaultTextAttributes / typingAttributes に
++// 「影響のない NSShadow」「背景色(NSBackgroundColor)」「React内部の EventEmitter キー」が
++// 含まれていると描画されなくなる(New Architecture の既知の不具合: facebook/react-native#55257)。
++// どれも TextInput の見た目や動作には不要(背景はビュー自体が描く。EventEmitter は React 側が
++// 自前の defaultTextAttributes のコピーから読む)ので、UIKit に渡す前に取り除く。
++static NSDictionary<NSAttributedStringKey, id> *RCTTextInputAttributesForUIKit(
++    NSDictionary<NSAttributedStringKey, id> *attributes)
++{
++  if (attributes == nil) {
++    return nil;
++  }
++
++  NSMutableDictionary<NSAttributedStringKey, id> *filtered = [attributes mutableCopy];
++  [filtered removeObjectForKey:@"EventEmitter"];
++  [filtered removeObjectForKey:NSBackgroundColorAttributeName];
++
++  NSShadow *shadow = filtered[NSShadowAttributeName];
++  if ([shadow isKindOfClass:[NSShadow class]] && CGSizeEqualToSize(shadow.shadowOffset, CGSizeZero) &&
++      shadow.shadowBlurRadius == 0) {
++    [filtered removeObjectForKey:NSShadowAttributeName];
++  }
++
++  return filtered;
++}
++
+ @implementation RCTUITextView {
+   UILabel *_placeholderView;
+   UITextView *_detachedTextView;
+@@ -134,8 +159,13 @@ - (void)setDefaultTextAttributes:(NSDictionary<NSAttributedStringKey, id> *)defa
+     return;
+   }
+ 
++  NSDictionary<NSAttributedStringKey, id> *previousForUIKit = RCTTextInputAttributesForUIKit(_defaultTextAttributes);
+   _defaultTextAttributes = defaultTextAttributes;
+-  self.typingAttributes = defaultTextAttributes;
++  NSDictionary<NSAttributedStringKey, id> *attributesForUIKit = RCTTextInputAttributesForUIKit(defaultTextAttributes);
++  // UIKit から見て中身が変わっていなければ設定し直さない(変換中の下線が消えるため。RCTUITextField.mm 参照)。
++  if (![previousForUIKit isEqualToDictionary:attributesForUIKit]) {
++    self.typingAttributes = attributesForUIKit;
++  }
+   [self _updatePlaceholder];
+ }
+ 
+diff --git a/node_modules/react-native/Libraries/Text/TextInput/Singleline/RCTUITextField.mm b/node_modules/react-native/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
+index 052c003..b63f50a 100644
+--- a/node_modules/react-native/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
++++ b/node_modules/react-native/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
+@@ -12,6 +12,31 @@
+ #import <React/RCTUtils.h>
+ #import <React/UIView+React.h>
+ 
++// 日本語などのIME変換中の文字の下線は、UIKit に渡す defaultTextAttributes / typingAttributes に
++// 「影響のない NSShadow」「背景色(NSBackgroundColor)」「React内部の EventEmitter キー」が
++// 含まれていると描画されなくなる(New Architecture の既知の不具合: facebook/react-native#55257)。
++// どれも TextInput の見た目や動作には不要(背景はビュー自体が描く。EventEmitter は React 側が
++// 自前の defaultTextAttributes のコピーから読む)ので、UIKit に渡す前に取り除く。
++static NSDictionary<NSAttributedStringKey, id> *RCTTextInputAttributesForUIKit(
++    NSDictionary<NSAttributedStringKey, id> *attributes)
++{
++  if (attributes == nil) {
++    return nil;
++  }
++
++  NSMutableDictionary<NSAttributedStringKey, id> *filtered = [attributes mutableCopy];
++  [filtered removeObjectForKey:@"EventEmitter"];
++  [filtered removeObjectForKey:NSBackgroundColorAttributeName];
++
++  NSShadow *shadow = filtered[NSShadowAttributeName];
++  if ([shadow isKindOfClass:[NSShadow class]] && CGSizeEqualToSize(shadow.shadowOffset, CGSizeZero) &&
++      shadow.shadowBlurRadius == 0) {
++    [filtered removeObjectForKey:NSShadowAttributeName];
++  }
++
++  return filtered;
++}
++
+ @implementation RCTUITextField {
+   RCTBackedTextFieldDelegateAdapter *_textInputDelegateAdapter;
+   NSDictionary<NSAttributedStringKey, id> *_defaultTextAttributes;
+@@ -92,8 +117,15 @@ - (void)setDefaultTextAttributes:(NSDictionary<NSAttributedStringKey, id> *)defa
+     return;
+   }
+ 
++  NSDictionary<NSAttributedStringKey, id> *previousForUIKit = RCTTextInputAttributesForUIKit(_defaultTextAttributes);
+   _defaultTextAttributes = defaultTextAttributes;
+-  [super setDefaultTextAttributes:defaultTextAttributes];
++  NSDictionary<NSAttributedStringKey, id> *attributesForUIKit = RCTTextInputAttributesForUIKit(defaultTextAttributes);
++  // 変換中(1文字入力するたびに updateEventEmitter: などから呼ばれる)に、UIKit から見て中身が
++  // 変わっていない属性を設定し直すと、変換中の文字の下線が消えてしまう。EventEmitter などを
++  // 取り除いた後の内容が同じなら、UIKit への設定はやり直さない。
++  if (![previousForUIKit isEqualToDictionary:attributesForUIKit]) {
++    [super setDefaultTextAttributes:attributesForUIKit];
++  }
+   [self _updatePlaceholder];
+ }
+ 
+diff --git a/node_modules/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm b/node_modules/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
+index 917dc6d..568bd47 100644
+--- a/node_modules/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
++++ b/node_modules/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
+@@ -495,7 +495,12 @@ - (void)textInputDidChange
+     return;
+   }
+ 
+-  [self _updateState];
++  // 変換中は状態(State)の更新を延期する。変換中の文字の属性(下線など)ごと状態に書き戻すと、
++  // 返ってきた状態が変換中の文字を上書きして下線が消えるため。変換が確定した時点の
++  // textInputDidChange で更新される。onChange は変換中も通常どおり送る。
++  if (_backedTextInputView.markedTextRange == nil) {
++    [self _updateState];
++  }
+ 
+   if (_eventEmitter) {
+     const auto &textInputEventEmitter = static_cast<const TextInputEventEmitter &>(*_eventEmitter);
+@@ -573,6 +578,10 @@ - (void)setTextAndSelection:(NSInteger)eventCount
+   if (_mostRecentEventCount != eventCount) {
+     return;
+   }
++  // 変換中は、JS からのテキスト・選択範囲の更新を受け付けない(変換中の文字が壊れるため)。
++  if (_backedTextInputView.markedTextRange != nil) {
++    return;
++  }
+   _comingFromJS = YES;
+   if (value && ![value isEqualToString:_backedTextInputView.attributedText.string]) {
+     NSAttributedString *attributedString =
+@@ -768,6 +777,11 @@ - (void)_restoreTextSelectionAndIgnoreCaretChange:(BOOL)ignore
+ 
+ - (void)_setAttributedString:(NSAttributedString *)attributedString
+ {
++  // 日本語などの変換中に attributedText を差し替えると、変換中の文字(下線)が壊れるので、変換が
++  // 終わるまで差し替えない(facebook/react-native#55257、PR #56082 と同じ方針)。
++  if (_backedTextInputView.markedTextRange != nil) {
++    return;
++  }
+   if ([self _textOf:attributedString equals:_backedTextInputView.attributedText]) {
+     return;
+   }
+@@ -801,13 +815,22 @@ - (void)_setAttributedString:(NSAttributedString *)attributedString
+ // https://github.com/react/react-native/blob/3102a58df38d96f3dacef0530e4dbb399037fcd2/packages/react-native/ReactAndroid/src/main/java/com/facebook/react/views/text/internal/span/SetSpanOperation.kt#L30
+ - (void)_updateTypingAttributes
+ {
++  // 変換中は、変換中の文字に付く属性(下線など)を typingAttributes に写さないよう、更新しない。
++  if (_backedTextInputView.markedTextRange != nil) {
++    return;
++  }
+   if (_backedTextInputView.attributedText.length > 0 && _backedTextInputView.selectedTextRange != nil) {
+     NSUInteger offsetStart = [_backedTextInputView offsetFromPosition:_backedTextInputView.beginningOfDocument
+                                                            toPosition:_backedTextInputView.selectedTextRange.start];
+ 
+     NSUInteger samplePoint = offsetStart == 0 ? 0 : offsetStart - 1;
+-    _backedTextInputView.typingAttributes = [_backedTextInputView.attributedText attributesAtIndex:samplePoint
+-                                                                                    effectiveRange:NULL];
++    NSDictionary<NSAttributedStringKey, id> *sampledAttributes =
++        [_backedTextInputView.attributedText attributesAtIndex:samplePoint effectiveRange:NULL];
++    // IME変換中の下線を描画させるため、UIKit に不要な属性を取り除いて渡す(RCTUITextField.mm 参照)。
++    NSMutableDictionary<NSAttributedStringKey, id> *typingAttributes = [sampledAttributes mutableCopy];
++    [typingAttributes removeObjectForKey:@"EventEmitter"];
++    [typingAttributes removeObjectForKey:NSBackgroundColorAttributeName];
++    _backedTextInputView.typingAttributes = typingAttributes;
+   }
+ }
+ 
