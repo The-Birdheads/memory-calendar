@@ -1294,6 +1294,84 @@ describe("CalendarScreen", () => {
     );
   });
 
+  describe("月グリッドの1日の枠に入るだけ予定を表示する", () => {
+    // 2026-08-18(火)に n 件の単日予定を作る。
+    function makeDayEvents(count: number) {
+      return Array.from({ length: count }, (_, index) => ({
+        id: `day-event-${index + 1}`,
+        calendarId: "cal-1",
+        title: `予定${index + 1}`,
+        categoryColor: "#2f6fed",
+        startAt: `2026-08-18T0${index % 9}:00:00.000Z`,
+        endAt: `2026-08-18T0${index % 9}:30:00.000Z`,
+      }));
+    }
+
+    async function renderWithEvents(count: number) {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({
+        events: makeDayEvents(count),
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      return render(<CalendarScreen />);
+    }
+
+    async function measureRows(utils: Awaited<ReturnType<typeof renderWithEvents>>, height: number) {
+      const rows = utils.getAllByTestId(/^calendar-grid-row-\d+$/);
+      for (const row of rows) {
+        await fireEvent(row, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } });
+      }
+    }
+
+    it("shows 3 events and a +N for the rest until the row height has been measured (the old fixed limit)", async () => {
+      const { queryByTestId, getByTestId } = await renderWithEvents(5);
+
+      expect(getByTestId("calendar-grid-dot-day-event-3")).toBeTruthy();
+      expect(queryByTestId("calendar-grid-dot-day-event-4")).toBeNull();
+      expect(getByTestId("calendar-grid-cell-overflow-2026-08-18").props.children).toEqual(["+", 2]);
+    });
+
+    it("shows a 4th event, with no +N, when the row is tall enough for 4 (the 4 events of a day all fit)", async () => {
+      const utils = await renderWithEvents(4);
+      await measureRows(utils, 93);
+
+      expect(utils.getByTestId("calendar-grid-dot-day-event-4")).toBeTruthy();
+      expect(utils.queryByTestId("calendar-grid-cell-overflow-2026-08-18")).toBeNull();
+    });
+
+    it("uses the last visible row for +N when the events don't all fit, showing as many as it can", async () => {
+      const utils = await renderWithEvents(7);
+      await measureRows(utils, 93);
+
+      // 4行入る高さ: 予定3件 + 最後の行に +4
+      expect(utils.getByTestId("calendar-grid-dot-day-event-3")).toBeTruthy();
+      expect(utils.queryByTestId("calendar-grid-dot-day-event-4")).toBeNull();
+      expect(utils.getByTestId("calendar-grid-cell-overflow-2026-08-18").props.children).toEqual(["+", 4]);
+    });
+
+    it("shows more events in a taller row (a month with fewer weeks)", async () => {
+      const utils = await renderWithEvents(7);
+      await measureRows(utils, 123);
+
+      // 6行入る高さ: 予定5件 + +2
+      expect(utils.getByTestId("calendar-grid-dot-day-event-5")).toBeTruthy();
+      expect(utils.queryByTestId("calendar-grid-dot-day-event-6")).toBeNull();
+      expect(utils.getByTestId("calendar-grid-cell-overflow-2026-08-18").props.children).toEqual(["+", 2]);
+    });
+
+    it("shows fewer events in a shorter row", async () => {
+      const utils = await renderWithEvents(4);
+      await measureRows(utils, 78);
+
+      // 3行入る高さ: 予定2件 + +2
+      expect(utils.getByTestId("calendar-grid-dot-day-event-2")).toBeTruthy();
+      expect(utils.queryByTestId("calendar-grid-dot-day-event-3")).toBeNull();
+      expect(utils.getByTestId("calendar-grid-cell-overflow-2026-08-18").props.children).toEqual(["+", 2]);
+    });
+  });
+
   describe("予定作成画面の対象者", () => {
     const MEMBERS = [
       { calendarId: "cal-2", userId: "user-1", role: "owner", joinedAt: "2026-08-17T00:00:00.000Z", displayName: "たろう", avatarPath: null },

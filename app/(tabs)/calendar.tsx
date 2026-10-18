@@ -31,6 +31,7 @@ import { resolveMonthSwipeDirection } from "../../src/features/events/monthSwipe
 import type { Event, EventWithTagColor } from "../../src/features/events/types";
 import { SettingsHubModal } from "../../src/features/calendars/components/SettingsHubModal";
 import { AssigneeAvatars } from "../../src/features/assignees/components/AssigneeAvatars";
+import { splitCellEvents } from "../../src/features/events/monthCellCapacity";
 import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
 import { BulkTagAssignPanel } from "../../src/features/tags/components/BulkTagAssignPanel";
 import { EventTagBadges } from "../../src/features/tags/components/EventTagBadges";
@@ -60,8 +61,6 @@ function getWeekdayHeaderCells(weekStartsOn: WeekStartsOn): { label: string; day
     (_, index, all) => all[(index + weekStartsOn) % 7]
   );
 }
-
-const MAX_DOTS_PER_CELL = 3;
 
 // gridContainerの左右paddingと同じ値(月グリッドの実際の表示幅を計算する
 // のに使う - styles.gridContainerとこの定数の値は必ず揃える)。
@@ -327,6 +326,9 @@ export default function CalendarScreen() {
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
   const [aboveGridHeight, setAboveGridHeight] = useState<number | null>(null);
   const [belowGridHeight, setBelowGridHeight] = useState<number | null>(null);
+  // 月グリッドの1行(1週間)の実際の高さ。1日の枠に予定を何行まで並べられるかの計算に使う
+  // (月の週数や画面の大きさで変わる)。測れるまでは従来の固定の上限(3件)で表示する。
+  const [gridRowHeight, setGridRowHeight] = useState<number | null>(null);
 
   const gridContainerHeight =
     containerHeight !== null && aboveGridHeight !== null && belowGridHeight !== null
@@ -735,13 +737,27 @@ export default function CalendarScreen() {
       const weekBanners = paneBannersByWeekIndex.get(weekIndex) ?? [];
       const weekGapFills = paneGapFillsByWeekIndex.get(weekIndex) ?? [];
       return (
-        <View key={weekIndex} testID={`${testIDPrefix}-row-${weekIndex}`} style={styles.gridRow}>
+        <View
+          key={weekIndex}
+          testID={`${testIDPrefix}-row-${weekIndex}`}
+          style={styles.gridRow}
+          onLayout={(event) => {
+            const height = event.nativeEvent.layout.height;
+            setGridRowHeight((previous) => (previous !== null && Math.abs(previous - height) < 0.5 ? previous : height));
+          }}
+        >
           {week.map((cell) => {
             const cellEvents = paneEventsByDate.get(cell.dateKey) ?? [];
             // その日に実際に重なっているバーの分だけ空ける(週全体では
             // なくセル単位 - バーが通らない日まで一律に空けてしまうと
             // 「関係ない日の予定が1行分下がって見える」不具合になる)。
             const laneCount = paneLaneCountByDateKey[cell.dateKey] ?? 0;
+            // 枠に入るだけ予定を表示し、入りきらないときだけ最後の行を「+N」にする。
+            const { visible: visibleCellEvents, hiddenCount: hiddenCellEventCount } = splitCellEvents(
+              cellEvents,
+              gridRowHeight,
+              laneCount
+            );
             const isToday = cell.dateKey === todayDateKey();
             const isSelected = cell.dateKey === selectedDateKey;
             const dayOfWeek = new Date(`${cell.dateKey}T00:00:00.000Z`).getUTCDay();
@@ -777,7 +793,7 @@ export default function CalendarScreen() {
                     laneCount > 0 && { marginTop: laneCount * (BANNER_ROW_HEIGHT + BANNER_ROW_GAP) },
                   ]}
                 >
-                  {cellEvents.slice(0, MAX_DOTS_PER_CELL).map((event) => {
+                  {visibleCellEvents.map((event) => {
                     const { backgroundColor, textColor } = resolveEventPillStyle(event, calendarColorById);
                     return (
                       <View
@@ -800,8 +816,10 @@ export default function CalendarScreen() {
                       </View>
                     );
                   })}
-                  {cellEvents.length > MAX_DOTS_PER_CELL ? (
-                    <Text style={styles.gridDotOverflow}>+{cellEvents.length - MAX_DOTS_PER_CELL}</Text>
+                  {hiddenCellEventCount > 0 ? (
+                    <Text testID={`${testIDPrefix}-cell-overflow-${cell.dateKey}`} style={styles.gridDotOverflow}>
+                      +{hiddenCellEventCount}
+                    </Text>
                   ) : null}
                 </View>
               </TouchableOpacity>
@@ -1616,6 +1634,8 @@ const styles = StyleSheet.create({
   },
   gridDotOverflow: {
     fontSize: 10,
+    // 予定1行(ピル)と同じ高さ。枠に入る行数の計算(monthCellCapacity.ts)がこれに依存する。
+    lineHeight: 14,
     color: "#888",
     textAlign: "center",
   },
