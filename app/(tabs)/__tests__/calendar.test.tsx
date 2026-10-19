@@ -1396,6 +1396,23 @@ describe("CalendarScreen", () => {
       expect(utils.getByTestId("calendar-grid-cell-overflow-2026-08-18").props.children).toEqual(["+", 2]);
     });
 
+    it("sizes the cells from this month's rows only, not from the prev/next month panes (regression: a 6-week next month made a 5-week month show only 3)", async () => {
+      const utils = await renderWithEvents(4);
+      await measureRows(utils, 93);
+      // 前月・翌月のパネルは、週の数が違うと行の高さも違う(例: 翌月が6週で行が低い)。
+      // それらが後から測れても、今月の枠に入る件数は変わらない。
+      const otherPaneRows = [
+        ...utils.getAllByTestId(/^calendar-grid-prev-row-\d+$/),
+        ...utils.getAllByTestId(/^calendar-grid-next-row-\d+$/),
+      ];
+      for (const row of otherPaneRows) {
+        await fireEvent(row, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: 70 } } });
+      }
+
+      expect(utils.getByTestId("calendar-grid-dot-day-event-4")).toBeTruthy();
+      expect(utils.queryByTestId("calendar-grid-cell-overflow-2026-08-18")).toBeNull();
+    });
+
     it("shows fewer events in a shorter row", async () => {
       const utils = await renderWithEvents(4);
       await measureRows(utils, 78);

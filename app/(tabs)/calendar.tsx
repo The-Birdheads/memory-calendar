@@ -812,6 +812,10 @@ export default function CalendarScreen() {
           testID={`${testIDPrefix}-row-${weekIndex}`}
           style={styles.gridRow}
           onLayout={(event) => {
+            // 枠の高さは今月のパネルの行だけで測る。前月・翌月のパネルは週の数が違うことがあり
+            // (例: 5週の月の隣が6週の月)、その行は高さが違うので、混ぜると今月の表示件数が
+            // 実際より少なくなる。
+            if (testIDPrefix !== "calendar-grid") return;
             const height = event.nativeEvent.layout.height;
             setGridRowHeight((previous) => (previous !== null && Math.abs(previous - height) < 0.5 ? previous : height));
           }}
