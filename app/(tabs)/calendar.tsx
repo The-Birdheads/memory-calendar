@@ -36,6 +36,8 @@ import { useBannerPlacement } from "../../src/features/ads/useBannerPlacement";
 import { withBannerSlots } from "../../src/features/ads/bannerPlacement";
 import { useOnboarding } from "../../src/features/onboarding/hooks";
 import { OnboardingModal, type OnboardingAction } from "../../src/features/onboarding/components/OnboardingModal";
+import { useReleaseNotes } from "../../src/features/releaseNotes/hooks";
+import { ReleaseNotesModal } from "../../src/features/releaseNotes/components/ReleaseNotesModal";
 import { AssigneeAvatars } from "../../src/features/assignees/components/AssigneeAvatars";
 import { splitCellEvents } from "../../src/features/events/monthCellCapacity";
 import { BulkSelectionActionBar } from "../../src/features/tags/components/BulkSelectionActionBar";
@@ -552,20 +554,34 @@ export default function CalendarScreen() {
       runAfterModalTransition(openCreateModal);
     }
   };
-  // 広告の準備(トラッキング許可の確認と広告SDKの初期化)は、初回の案内を見ている最中を避けて、
-  // 案内が出ていない状態で少し待ってから始める。
+  // 更新内容(リリースノート)。アプリを使ったことがある人に、まだ見ていないバージョンの分があれば、
+  // 初回の案内が出ていない状態で自動で開く。個人設定の「更新内容を見る」からも開ける。
+  const releaseNotes = useReleaseNotes({
+    userId: session?.user.id,
+    accountCreatedAt: session?.user.created_at,
+    isBlocked: onboarding.isVisible,
+  });
+  // 広告の準備(トラッキング許可の確認と広告SDKの初期化)は、初回の案内や更新内容を見ている最中を
+  // 避けて、それらが出ていない状態で少し待ってから始める。
   const ads = useAds();
   const startAds = ads.start;
+  const isIntroVisible = onboarding.isVisible || releaseNotes.isVisible;
   useEffect(() => {
-    if (onboarding.isVisible) return;
+    if (isIntroVisible) return;
     const timer = setTimeout(startAds, ADS_START_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [onboarding.isVisible, startAds]);
+  }, [isIntroVisible, startAds]);
 
   // 個人設定の「使い方を見る」: 設定のモーダルを閉じてから、案内を開く。
   const handleShowTutorial = () => {
     setSettingsModalRequest(null);
     runAfterModalTransition(onboarding.show);
+  };
+
+  // 個人設定の「更新内容を見る」: 設定のモーダルを閉じてから、更新内容を開く。
+  const handleShowReleaseNotes = () => {
+    setSettingsModalRequest(null);
+    runAfterModalTransition(releaseNotes.show);
   };
 
   // 予定一覧(日別モーダル・月の一覧表示)の各行で、タイトルの下に場所/メモ/URLを
@@ -1036,10 +1052,12 @@ export default function CalendarScreen() {
           initialSection={settingsModalRequest.initialSection}
           initialCalendarMode={settingsModalRequest.initialCalendarMode}
           onShowTutorial={handleShowTutorial}
+          onShowReleaseNotes={handleShowReleaseNotes}
         />
       ) : null}
 
       <OnboardingModal visible={onboarding.isVisible} onClose={handleOnboardingClose} />
+      <ReleaseNotesModal visible={releaseNotes.isVisible} onClose={releaseNotes.close} />
 
       {viewMode === "grid" ? (
         <View

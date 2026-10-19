@@ -330,11 +330,12 @@ const styles = StyleSheet.create({
   displayRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+    gap: 10,
   },
+  // 鉛筆は内容のすぐ右に置く(右端揃えにしない)。内容が長いときだけ縮めて、
+  // 鉛筆が枠の外へ押し出されないようにする。
   displayValue: {
-    flex: 1,
+    flexShrink: 1,
   },
   valueText: {
     fontSize: 16,

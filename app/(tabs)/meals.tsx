@@ -289,7 +289,7 @@ function PlanPanel() {
                 testID="meals-search-button"
                 style={styles.headerSearchButton}
                 onPress={() =>
-                  router.push({ pathname: "/meal-search", params: { calendarId: createTargetCalendarId } })
+                  router.push({ pathname: "/meal-search", params: { calendarIds: activeCalendarIds.join(",") } })
                 }
               >
                 <Icon name="search" size={22} color="#2f6fed" />
@@ -441,7 +441,7 @@ function LogPanel() {
                 testID="meals-search-button"
                 style={styles.headerSearchButton}
                 onPress={() =>
-                  router.push({ pathname: "/meal-search", params: { calendarId: createTargetCalendarId } })
+                  router.push({ pathname: "/meal-search", params: { calendarIds: activeCalendarIds.join(",") } })
                 }
               >
                 <Icon name="search" size={22} color="#2f6fed" />

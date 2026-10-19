@@ -22,6 +22,18 @@ export const MEAL_SLOT_ICONS: Record<MealSlot, IconName> = {
   snack: "meal-snack",
 };
 
+/**
+ * 時間帯のピルの色。パッと見でどの食事かわかるように、時間帯ごとに色相の違う
+ * 色をシステム側で決めている(朝=黄、昼=緑、夕=紫、間食=ピンク)。
+ * 文字・アイコンは背景より濃い同系色にして、読みやすさを保つ。
+ */
+export const MEAL_SLOT_COLORS: Record<MealSlot, { background: string; foreground: string }> = {
+  breakfast: { background: "#fdecc8", foreground: "#9a5b00" },
+  lunch: { background: "#d9f2dc", foreground: "#1f7a33" },
+  dinner: { background: "#e3defa", foreground: "#5538b5" },
+  snack: { background: "#fde0ea", foreground: "#b3305c" },
+};
+
 export interface MealRowProps {
   record: MealRecord;
   onPress: () => void;
@@ -48,11 +60,20 @@ export interface MealRowProps {
 /** 献立1件分の行 - 献立タブ(予定/記録パネル)と献立をさがす画面の検索結果、
  * どちらも同じ見た目・同じ「タップで編集」の挙動にするための共通部品。 */
 export function MealRow({ record, onPress, dateLabel, calendar, creatorLabel }: MealRowProps) {
+  const slotColor = MEAL_SLOT_COLORS[record.slot];
   return (
     <TouchableOpacity testID={`meal-item-${record.id}`} style={styles.mealRow} onPress={onPress}>
-      <View style={styles.mealRowSlotChip}>
-        <Icon testID={`meal-item-slot-icon-${record.id}`} name={MEAL_SLOT_ICONS[record.slot]} size={16} color="#666" />
-        <Text style={styles.mealRowSlotText}>{MEAL_SLOT_LABELS[record.slot]}</Text>
+      <View
+        testID={`meal-item-slot-chip-${record.id}`}
+        style={[styles.mealRowSlotChip, { backgroundColor: slotColor.background }]}
+      >
+        <Icon
+          testID={`meal-item-slot-icon-${record.id}`}
+          name={MEAL_SLOT_ICONS[record.slot]}
+          size={16}
+          color={slotColor.foreground}
+        />
+        <Text style={[styles.mealRowSlotText, { color: slotColor.foreground }]}>{MEAL_SLOT_LABELS[record.slot]}</Text>
       </View>
       <View style={styles.mealRowInfo}>
         <Text style={styles.mealRowTitle} numberOfLines={1}>
@@ -95,7 +116,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#f2f3f5",
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -103,7 +123,6 @@ const styles = StyleSheet.create({
   mealRowSlotText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#666",
   },
   mealRowInfo: {
     flex: 1,

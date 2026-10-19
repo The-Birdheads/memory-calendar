@@ -382,6 +382,26 @@ describe("PersonalSettingsPanel", () => {
       expect(onShowTutorial).toHaveBeenCalled();
     });
 
+    it("has a 更新内容を見る button that shows the release notes", async () => {
+      mockHooks();
+      const onShowReleaseNotes = jest.fn();
+
+      const { getByTestId } = await render(
+        <PersonalSettingsPanel userId="user-1" onShowReleaseNotes={onShowReleaseNotes} />
+      );
+      await fireEvent.press(getByTestId("personal-settings-release-notes"));
+
+      expect(onShowReleaseNotes).toHaveBeenCalled();
+    });
+
+    it("hides the 更新内容を見る button when there is no way to show the release notes", async () => {
+      mockHooks();
+
+      const { queryByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+      expect(queryByTestId("personal-settings-release-notes")).toBeNull();
+    });
+
     it("hides the 使い方を見る button when there is no way to show the tutorial", async () => {
       mockHooks();
 

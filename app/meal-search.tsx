@@ -7,7 +7,7 @@ import { MealFormModal, type MealFormTarget, type MealFormValues } from "../src/
 import { mealFormPatchToUpdateInput } from "../src/features/meals/formPatch";
 import { MEAL_SLOT_LABELS, MealRow } from "../src/features/meals/components/MealRow";
 import { RatingStars } from "../src/features/meals/components/RatingStars";
-import { useDeleteMealRecord, useMealRecords, useUpdateMealRecord } from "../src/features/meals/hooks";
+import { useDeleteMealRecord, useMealRecordsByCalendars, useUpdateMealRecord } from "../src/features/meals/hooks";
 import type { MealRecord, MealSlot } from "../src/features/meals/types";
 
 const MEAL_SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
@@ -26,13 +26,21 @@ function formatDateLabel(mealDate: string): string {
 }
 
 export default function MealSearchScreen() {
-  const { calendarId } = useLocalSearchParams<{ calendarId?: string }>();
-  const activeCalendarId = calendarId ?? "";
+  const { calendarIds: calendarIdsParam } = useLocalSearchParams<{ calendarIds?: string }>();
 
-  const { calendars } = useMyCalendars();
+  const { calendars, isLoading: isLoadingCalendars } = useMyCalendars();
+  // 検索の対象は、献立タブの一覧に出ているカレンダーと同じ(タブで絞り込み中ならその
+  // カレンダー、そうでなければすべて)。タブから渡されなかったときは、すべての
+  // カレンダーを対象にする。以前は先頭の1カレンダーだけを検索していたため、そこに
+  // 献立が無いと、一覧には出ているのに何も表示されなかった。
+  const searchCalendarIds = useMemo(() => {
+    const passed = (calendarIdsParam ?? "").split(",").filter((id) => id.length > 0);
+    return passed.length > 0 ? passed : calendars.map((calendar) => calendar.id);
+  }, [calendarIdsParam, calendars]);
   const [selectedSlot, setSelectedSlot] = useState<MealSlot | undefined>(undefined);
   const filter = selectedSlot ? { slot: selectedSlot } : undefined;
-  const { mealRecords, isLoading, refetch } = useMealRecords(activeCalendarId, filter);
+  const { mealRecords, isLoading: isLoadingRecords, refetch } = useMealRecordsByCalendars(searchCalendarIds, filter);
+  const isLoading = isLoadingRecords || isLoadingCalendars;
 
   // 検索結果は献立タブの一覧と同じ行(MealRow)をそのまま使い、タップすると
   // 同じ編集フォームが開く - 「さがして終わり」ではなく、見つけた献立の

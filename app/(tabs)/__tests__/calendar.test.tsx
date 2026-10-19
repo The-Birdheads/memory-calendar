@@ -7,6 +7,8 @@ import CalendarScreen from "../calendar";
 import { useSetEventAssignees } from "../../../src/features/assignees/hooks";
 import { AdsProvider, useAds } from "../../../src/features/ads/AdsProvider";
 import { useOnboarding } from "../../../src/features/onboarding/hooks";
+import { useReleaseNotes } from "../../../src/features/releaseNotes/hooks";
+import { RELEASE_NOTES } from "../../../src/features/releaseNotes/releases";
 import { ONBOARDING_SLIDES } from "../../../src/features/onboarding/slides";
 import { useRemoveMyAvatar, useUploadMyAvatar, useAvatarUrls } from "../../../src/features/profile/avatarHooks";
 import { useAuthActions, useAuthSession } from "../../../src/features/auth/hooks";
@@ -71,6 +73,10 @@ jest.mock("../../../src/features/auth/hooks", () => ({
 
 jest.mock("expo-tracking-transparency", () => ({
   requestTrackingPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: "granted" }),
+}));
+
+jest.mock("../../../src/features/releaseNotes/hooks", () => ({
+  useReleaseNotes: jest.fn(),
 }));
 
 jest.mock("../../../src/features/onboarding/hooks", () => ({
@@ -183,6 +189,7 @@ const OTHER_DAY_EVENT = {
 
 function mockCommonHooks() {
   (useOnboarding as jest.Mock).mockReturnValue({ isVisible: false, show: jest.fn(), complete: jest.fn() });
+  (useReleaseNotes as jest.Mock).mockReturnValue({ isVisible: false, show: jest.fn(), close: jest.fn() });
   (useSetEventAssignees as jest.Mock).mockReturnValue({
     setEventAssignees: jest.fn().mockResolvedValue(true),
     isSubmitting: false,
@@ -1639,6 +1646,60 @@ describe("CalendarScreen", () => {
       await fireEvent.press(getByTestId("personal-settings-tutorial"));
 
       expect(queryByTestId("personal-settings-tutorial")).toBeNull();
+      expect(show).not.toHaveBeenCalled();
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+
+      expect(show).toHaveBeenCalled();
+    });
+  });
+
+  describe("更新内容(リリースノート)", () => {
+    it("shows the release notes when the hook says they are visible, and closes through the hook", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      const close = jest.fn();
+      (useReleaseNotes as jest.Mock).mockReturnValue({ isVisible: true, show: jest.fn(), close });
+
+      const { getByTestId, getByText } = await render(<CalendarScreen />);
+
+      expect(getByText(`バージョン ${RELEASE_NOTES[0].version}`)).toBeTruthy();
+      await fireEvent.press(getByTestId("release-notes-close"));
+      expect(close).toHaveBeenCalled();
+    });
+
+    it("keeps the release notes closed when the hook says they are hidden", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+
+      const { queryByTestId } = await render(<CalendarScreen />);
+
+      expect(queryByTestId("release-notes-close")).toBeNull();
+    });
+
+    it("waits for the tutorial: the hook is told it is blocked while the tutorial is open", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      (useOnboarding as jest.Mock).mockReturnValue({ isVisible: true, show: jest.fn(), complete: jest.fn() });
+
+      await render(<CalendarScreen />);
+
+      expect(useReleaseNotes).toHaveBeenLastCalledWith(expect.objectContaining({ isBlocked: true }));
+    });
+
+    it("opens the release notes from the personal settings: the settings close first, then the notes open", async () => {
+      mockCommonHooks();
+      (useEventsInRangeForCalendars as jest.Mock).mockReturnValue({ events: [], isLoading: false, error: null, refetch: jest.fn() });
+      const show = jest.fn();
+      (useReleaseNotes as jest.Mock).mockReturnValue({ isVisible: false, show, close: jest.fn() });
+
+      const { getByTestId, queryByTestId } = await render(<CalendarScreen />);
+      await fireEvent.press(getByTestId("calendar-settings-icon"));
+      await fireEvent.press(getByTestId("settings-hub-open-personal"));
+      await fireEvent.press(getByTestId("personal-settings-release-notes"));
+
+      expect(queryByTestId("personal-settings-release-notes")).toBeNull();
       expect(show).not.toHaveBeenCalled();
       await act(async () => {
         jest.advanceTimersByTime(600);

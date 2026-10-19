@@ -18,9 +18,11 @@ export interface PersonalSettingsPanelProps {
   onChange?: () => void;
   /** 「使い方を見る」を押したとき(初回の案内をもう一度見せる)。渡さなければボタンは出さない。 */
   onShowTutorial?: () => void;
+  /** 「更新内容を見る」を押したとき(リリースノートを見せる)。渡さなければボタンは出さない。 */
+  onShowReleaseNotes?: () => void;
 }
 
-export function PersonalSettingsPanel({ userId, onChange, onShowTutorial }: PersonalSettingsPanelProps) {
+export function PersonalSettingsPanel({ userId, onChange, onShowTutorial, onShowReleaseNotes }: PersonalSettingsPanelProps) {
   const { profile, isLoading, refetch: refetchProfile } = useMyProfile(userId);
   const { updateDisplayName, error: updateError } = useUpdateDisplayName();
   const { updateWeekStartsOn, error: weekStartsOnError } = useUpdateWeekStartsOn();
@@ -206,6 +208,16 @@ export function PersonalSettingsPanel({ userId, onChange, onShowTutorial }: Pers
         {onShowTutorial ? (
           <TouchableOpacity testID="personal-settings-tutorial" style={styles.tutorialButton} onPress={onShowTutorial}>
             <Text style={styles.tutorialButtonText}>使い方を見る</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {onShowReleaseNotes ? (
+          <TouchableOpacity
+            testID="personal-settings-release-notes"
+            style={styles.tutorialButton}
+            onPress={onShowReleaseNotes}
+          >
+            <Text style={styles.tutorialButtonText}>更新内容を見る</Text>
           </TouchableOpacity>
         ) : null}
 

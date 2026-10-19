@@ -207,6 +207,19 @@ describe("SettingsHubModal", () => {
       expect(onShowTutorial).toHaveBeenCalled();
     });
 
+    it("passes the release notes request from personal settings (更新内容を見る) up to the caller", async () => {
+      mockHooks();
+      const onShowReleaseNotes = jest.fn();
+
+      const { getByTestId } = await render(
+        <SettingsHubModal calendars={CALENDARS} currentUserId="user-1" onClose={jest.fn()} onShowReleaseNotes={onShowReleaseNotes} />,
+      );
+      await fireEvent.press(getByTestId("settings-hub-open-personal"));
+      await fireEvent.press(getByTestId("personal-settings-release-notes"));
+
+      expect(onShowReleaseNotes).toHaveBeenCalled();
+    });
+
     it("notifies the caller via onChange when the week-start day is switched from personal settings (regression: the calendar screen's own useMyProfile never learned about the change)", async () => {
       mockHooks();
       (useUpdateWeekStartsOn as jest.Mock).mockReturnValue({

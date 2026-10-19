@@ -3,7 +3,7 @@ import { useLocalSearchParams } from "expo-router";
 
 import MealSearchScreen from "../meal-search";
 import { useMyCalendars } from "../../src/features/calendars/hooks";
-import { useDeleteMealRecord, useMealRecords, useUpdateMealRecord } from "../../src/features/meals/hooks";
+import { useDeleteMealRecord, useMealRecordsByCalendars, useUpdateMealRecord } from "../../src/features/meals/hooks";
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: jest.fn(),
@@ -15,7 +15,7 @@ jest.mock("../../src/features/calendars/hooks", () => ({
 }));
 
 jest.mock("../../src/features/meals/hooks", () => ({
-  useMealRecords: jest.fn(),
+  useMealRecordsByCalendars: jest.fn(),
   useUpdateMealRecord: jest.fn(),
   useDeleteMealRecord: jest.fn(),
 }));
@@ -32,9 +32,9 @@ const RECORDS = [
 ];
 
 function mockCommonHooks(mealRecords: typeof RECORDS = RECORDS, refetch = jest.fn()) {
-  (useLocalSearchParams as jest.Mock).mockReturnValue({ calendarId: "cal-1" });
+  (useLocalSearchParams as jest.Mock).mockReturnValue({ calendarIds: "cal-1" });
   (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null, refetch: jest.fn() });
-  (useMealRecords as jest.Mock).mockReturnValue({ mealRecords, isLoading: false, error: null, refetch });
+  (useMealRecordsByCalendars as jest.Mock).mockReturnValue({ mealRecords, isLoading: false, error: null, refetch });
   (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: jest.fn(), isSubmitting: false, error: null });
   (useDeleteMealRecord as jest.Mock).mockReturnValue({ deleteMealRecord: jest.fn(), isSubmitting: false, error: null });
 }
@@ -111,11 +111,41 @@ describe("MealSearchScreen", () => {
 
     await fireEvent.press(getByTestId("meal-search-slot-lunch"));
 
-    await waitFor(() => expect(useMealRecords).toHaveBeenLastCalledWith("cal-1", { slot: "lunch" }));
+    await waitFor(() => expect(useMealRecordsByCalendars).toHaveBeenLastCalledWith(["cal-1"], { slot: "lunch" }));
 
     await fireEvent.press(getByTestId("meal-search-slot-all"));
 
-    await waitFor(() => expect(useMealRecords).toHaveBeenLastCalledWith("cal-1", undefined));
+    await waitFor(() => expect(useMealRecordsByCalendars).toHaveBeenLastCalledWith(["cal-1"], undefined));
+  });
+
+  it("searches every calendar when no calendars are passed in (regression: nothing showed when the first calendar had no meals)", async () => {
+    mockCommonHooks();
+    (useLocalSearchParams as jest.Mock).mockReturnValue({});
+    (useMyCalendars as jest.Mock).mockReturnValue({
+      calendars: [...CALENDARS, CALENDAR_2],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    await render(<MealSearchScreen />);
+
+    expect(useMealRecordsByCalendars).toHaveBeenLastCalledWith(["cal-1", "cal-2"], undefined);
+  });
+
+  it("searches the same calendars the meals tab was showing when they are passed in", async () => {
+    mockCommonHooks();
+    (useLocalSearchParams as jest.Mock).mockReturnValue({ calendarIds: "cal-2,cal-1" });
+    (useMyCalendars as jest.Mock).mockReturnValue({
+      calendars: [...CALENDARS, CALENDAR_2],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    await render(<MealSearchScreen />);
+
+    expect(useMealRecordsByCalendars).toHaveBeenLastCalledWith(["cal-2", "cal-1"], undefined);
   });
 
   it("shows a 🔗/📝 icon per result when a url/memo is set", async () => {
@@ -148,9 +178,9 @@ describe("MealSearchScreen", () => {
   });
 
   it("shows a loading message instead of the empty state while records are still loading (regression)", async () => {
-    (useLocalSearchParams as jest.Mock).mockReturnValue({ calendarId: "cal-1" });
+    (useLocalSearchParams as jest.Mock).mockReturnValue({ calendarIds: "cal-1" });
     (useMyCalendars as jest.Mock).mockReturnValue({ calendars: CALENDARS, isLoading: false, error: null, refetch: jest.fn() });
-    (useMealRecords as jest.Mock).mockReturnValue({ mealRecords: [], isLoading: true, error: null, refetch: jest.fn() });
+    (useMealRecordsByCalendars as jest.Mock).mockReturnValue({ mealRecords: [], isLoading: true, error: null, refetch: jest.fn() });
     (useUpdateMealRecord as jest.Mock).mockReturnValue({ updateMealRecord: jest.fn(), isSubmitting: false, error: null });
     (useDeleteMealRecord as jest.Mock).mockReturnValue({ deleteMealRecord: jest.fn(), isSubmitting: false, error: null });
 

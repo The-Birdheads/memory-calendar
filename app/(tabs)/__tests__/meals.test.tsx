@@ -440,7 +440,7 @@ describe("MealsScreen", () => {
       await waitFor(() => expect(useMealRecordsByCalendars).toHaveBeenLastCalledWith(["cal-1"]));
     });
 
-    it("navigates to 献立をさがす for the active calendar from the header search button, so inspiration is reachable while planning too", async () => {
+    it("navigates to 献立をさがす for every shown calendar from the header search button, so inspiration is reachable while planning too", async () => {
       mockCommonHooks(RECORDS);
 
       const { getByTestId } = await renderPlanPanel();
@@ -449,7 +449,21 @@ describe("MealsScreen", () => {
 
       expect(router.push).toHaveBeenCalledWith({
         pathname: "/meal-search",
-        params: { calendarId: "cal-1" },
+        params: { calendarIds: "cal-1,cal-2" },
+      });
+    });
+
+    it("passes only the calendars left selected in the filter to 献立をさがす", async () => {
+      mockCommonHooks(RECORDS);
+
+      const { getByTestId } = await renderPlanPanel();
+      await fireEvent.press(getByTestId("meals-filter"));
+      await fireEvent.press(getByTestId("meals-calendar-switch-cal-2"));
+      await fireEvent.press(getByTestId("meals-search-button"));
+
+      expect(router.push).toHaveBeenLastCalledWith({
+        pathname: "/meal-search",
+        params: { calendarIds: "cal-1" },
       });
     });
 
@@ -542,7 +556,7 @@ describe("MealsScreen", () => {
       expect(queryByText("スパイスから作る")).toBeNull();
     });
 
-    it("navigates to the search screen for the active calendar from the header search button", async () => {
+    it("navigates to the search screen for every shown calendar from the header search button", async () => {
       mockCommonHooks(RECORDS);
 
       const { getByTestId } = await renderLogPanel();
@@ -551,7 +565,7 @@ describe("MealsScreen", () => {
 
       expect(router.push).toHaveBeenCalledWith({
         pathname: "/meal-search",
-        params: { calendarId: "cal-1" },
+        params: { calendarIds: "cal-1,cal-2" },
       });
     });
 
