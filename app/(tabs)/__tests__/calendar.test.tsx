@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Linking, StyleSheet } from "react-native";
@@ -3455,6 +3456,22 @@ describe("CalendarScreen", () => {
       // a Saturday, so a Monday-start grid's first row should begin on
       // Monday 2026-07-27 instead of the Sunday-start default's 2026-07-26.
       expect(getByTestId("calendar-grid-cell-2026-07-27")).toBeTruthy();
+    });
+
+    it("keeps starting on Monday from the last known setting while the profile has not loaded (regression: Monday-start users sometimes saw Sunday)", async () => {
+      await AsyncStorage.setItem("profile.weekStartsOn.v1.user-1", "1");
+      mockCommonHooks();
+      (useMyProfile as jest.Mock).mockReturnValue({ profile: null, isLoading: true, error: null, refetch: jest.fn() });
+
+      const { getByTestId } = await render(<CalendarScreen />);
+
+      await waitFor(() => {
+        const labels = within(getByTestId("calendar-weekday-row"))
+          .getAllByText(/^[日月火水木金土]$/)
+          .map((node) => node.props.children);
+        expect(labels).toEqual(["月", "火", "水", "木", "金", "土", "日"]);
+      });
+      await AsyncStorage.clear();
     });
   });
 });

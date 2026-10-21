@@ -36,6 +36,7 @@ import { useBannerPlacement } from "../../src/features/ads/useBannerPlacement";
 import { withBannerSlots } from "../../src/features/ads/bannerPlacement";
 import { useOnboarding } from "../../src/features/onboarding/hooks";
 import { OnboardingModal, type OnboardingAction } from "../../src/features/onboarding/components/OnboardingModal";
+import { useWeekStartsOn } from "../../src/features/profile/weekStartsOn";
 import { useReleaseNotes } from "../../src/features/releaseNotes/hooks";
 import { ReleaseNotesModal } from "../../src/features/releaseNotes/components/ReleaseNotesModal";
 import { AssigneeAvatars } from "../../src/features/assignees/components/AssigneeAvatars";
@@ -182,7 +183,7 @@ export default function CalendarScreen() {
   const { calendars, refetch: refetchCalendars } = useMyCalendars();
   // 個人設定の「週の開始曜日」(未設定/未ログイン中は日曜始まりのデフォルトに揃える)。
   const { profile, refetch: refetchProfile } = useMyProfile(session?.user.id ?? "");
-  const weekStartsOn: WeekStartsOn = profile?.weekStartsOn ?? 0;
+  const weekStartsOn: WeekStartsOn = useWeekStartsOn(session?.user.id, profile);
   // null means "no explicit selection yet" - defaults to ALL calendars, so
   // every calendar is selected when the app first opens. Tapping a chip
   // always toggles that one calendar's own membership in the set (see

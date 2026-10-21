@@ -4,6 +4,8 @@ import TodosScreen from "../../app/(tabs)/todos";
 import { getSupabaseClient } from "../../src/shared/api/supabaseClient";
 import { createFakeSupabaseClient } from "../testUtils/fakeSupabaseClient";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 jest.mock("expo-router", () => {
   const React = require("react");
   return {
@@ -42,8 +44,10 @@ describe("19.1 予定削除→ToDo孤立化→復活フローの検証", () => {
           id: "event-target",
           calendar_id: "cal-1",
           title: "既存の予定",
-          start_at: "2026-09-20T10:00:00.000Z",
-          end_at: "2026-09-20T11:00:00.000Z",
+          // 付け替え先の候補は「30日前〜180日先」の予定なので、固定の日付だと時間がたつと範囲から外れる。
+          // 今日から数日先にしておく。
+          start_at: new Date(Date.now() + 5 * DAY_MS).toISOString(),
+          end_at: new Date(Date.now() + 5 * DAY_MS + 60 * 60 * 1000).toISOString(),
           is_all_day: false,
         },
       ],

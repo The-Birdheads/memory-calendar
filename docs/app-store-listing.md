@@ -76,10 +76,20 @@ Memory Calendar は、予定を共有するだけでなく、終わった予定�
 https://kogenlab.com/support.html
 ```
 
-## 5. このバージョンの新機能(1.0)
+## 5. このバージョンの新機能(1.0.1)
+
+(1.0 は「はじめてのリリースです。」)
 
 ```
-はじめてのリリースです。
+・使い方ガイドを追加しました(設定 > 個人設定 > 使い方を見る)
+・予定の日付と時刻を横並びで入力できるようになり、時刻は専用のキーパッドで入力できます
+・予定の作成画面でリマインドを設定できます(はじめは前日の9時)
+・共有カレンダーの予定に対象者を設定できます。個人設定でアイコンも変えられます
+・共有カレンダーの色を、自分だけ変更できます
+・月のカレンダーに、入るだけ予定を表示します
+・献立の検索の不具合を直し、朝食・昼食・夕食・間食を色分けしました
+・日本語入力中の未確定の文字に、下線が表示されない不具合を直しました
+・一部の画面に広告を表示します
 ```
 
 ---
@@ -175,7 +185,10 @@ Comments and reactions exist only inside a private shared calendar. They are vis
 Push notifications are used only for event changes/comments in calendars the user belongs to, and for reminders the user sets.
 
 [Advertising and App Tracking Transparency]
-The app shows Google AdMob banner ads on some screens (the bottom of the Calendar tab, the Calendar list view, the day list, the ToDo tab, the History tab and the Meals log). Ads are never shown on the login/sign-up screens, while creating or editing events, or in the settings. A short while after launch, the app shows the standard App Tracking Transparency prompt. If the user denies it, every feature remains available and only non-personalized ads are shown.
+The app shows Google AdMob banner ads on some screens (the bottom of the Calendar tab, the Calendar list view, the day list, the ToDo tab, the History tab and the Meals log). Ads are never shown on the login/sign-up screens, while creating or editing events, or in the settings. A few seconds after the Calendar tab opens (after the tutorial / What's new screen is closed), the app shows the standard App Tracking Transparency prompt. If the user denies it, every feature remains available and only non-personalized ads are shown. If no ad is available, the ad area collapses and leaves no blank space.
+
+[First launch and "What's new"]
+On the first launch, a short tutorial (5 slides) is shown; it can be skipped at any time and replayed from Gear icon > Personal settings > "使い方を見る". After an app update, a "更新内容" (What's new) screen is shown once to existing users; it can be reopened from Gear icon > Personal settings > "更新内容を見る". Neither screen contains ads.
 
 [Sign in with Apple - Guideline 4.8]
 The login screen offers Sign in with Apple alongside Google and email/password.

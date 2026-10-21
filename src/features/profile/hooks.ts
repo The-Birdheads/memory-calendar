@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
@@ -17,23 +17,37 @@ export function useMyProfile(userId: string): UseMyProfileResult {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ProfileError | null>(null);
+  // 取得は、設定画面の変更・リアルタイムの通知などで重なることがある。古い取得の結果が、
+  // 新しい取得の結果のあとに届いて上書きしないよう、最後に始めた取得の結果だけを使う。
+  const latestRequestRef = useRef(0);
 
   const refetch = useCallback(async () => {
+    const requestId = ++latestRequestRef.current;
+    if (!userId) {
+      setProfile(null);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     const result = await getMyProfile(getSupabaseClient(), userId);
+    if (requestId !== latestRequestRef.current) return;
     if (result.ok) {
       setProfile(result.value);
       setError(null);
     } else {
-      setProfile(null);
+      // 通信の不調などで取り直しに失敗しても、直前に取得できたプロフィールは残す
+      // (消すと、週の開始曜日などが初期値に戻って見えてしまう)。
       setError(result.error);
     }
     setIsLoading(false);
   }, [userId]);
 
   useEffect(() => {
+    // ユーザーが替わったら、前のユーザーのプロフィールは捨てる。
+    setProfile(null);
     refetch();
-  }, [refetch]);
+  }, [userId, refetch]);
 
   // 個人設定(週の開始曜日・ユーザー名)は別画面/別のuseMyProfileインスタンス
   // から更新されることがあるため、同一プロフィール行の変更をリアルタイムで

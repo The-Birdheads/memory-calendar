@@ -78,6 +78,78 @@ describe("useMyProfile", () => {
   });
 });
 
+describe("useMyProfile の取得の安定性", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("keeps the last loaded profile when a later refetch fails (regression: a network blip reset 週の開始曜日 to Sunday)", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const profile = { id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 1 };
+    (getMyProfile as jest.Mock).mockResolvedValue({ ok: true, value: profile });
+
+    const { result } = await renderHook(() => useMyProfile("user-1"));
+    await waitFor(() => expect(result.current.profile).toEqual(profile));
+
+    (getMyProfile as jest.Mock).mockResolvedValue({ ok: false, error: { type: "NetworkError" } });
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(result.current.profile).toEqual(profile);
+    expect(result.current.error).toEqual({ type: "NetworkError" });
+  });
+
+  it("ignores an older response that arrives after a newer one (regression: a stale 日曜始まり overwrote the new setting)", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const stale = { id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 0 };
+    const fresh = { id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 1 };
+    let resolveFirst: (value: unknown) => void = () => {};
+    (getMyProfile as jest.Mock)
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce({ ok: true, value: fresh });
+
+    const { result } = await renderHook(() => useMyProfile("user-1"));
+    await act(async () => {
+      await result.current.refetch();
+    });
+    expect(result.current.profile).toEqual(fresh);
+
+    await act(async () => {
+      resolveFirst({ ok: true, value: stale });
+    });
+
+    expect(result.current.profile).toEqual(fresh);
+  });
+
+  it("does not query when there is no user yet", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+
+    const { result } = await renderHook(() => useMyProfile(""));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(getMyProfile).not.toHaveBeenCalled();
+    expect(result.current.profile).toBeNull();
+  });
+
+  it("drops the previous user's profile when the user changes", async () => {
+    (getSupabaseClient as jest.Mock).mockReturnValue({});
+    const first = { id: "user-1", displayName: "たろう", avatarPath: null, weekStartsOn: 1 };
+    (getMyProfile as jest.Mock).mockResolvedValueOnce({ ok: true, value: first });
+
+    const { result, rerender } = await renderHook((props: { userId: string }) => useMyProfile(props.userId), {
+      initialProps: { userId: "user-1" },
+    });
+    await waitFor(() => expect(result.current.profile).toEqual(first));
+
+    (getMyProfile as jest.Mock).mockResolvedValueOnce({ ok: false, error: { type: "NotFound" } });
+    await rerender({ userId: "user-2" });
+
+    await waitFor(() => expect(result.current.error).toEqual({ type: "NotFound" }));
+    expect(result.current.profile).toBeNull();
+  });
+});
+
 describe("useUpdateDisplayName", () => {
   afterEach(() => {
     jest.clearAllMocks();
