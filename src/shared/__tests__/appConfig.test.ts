@@ -33,6 +33,14 @@ describe("app.json (App Store release config)", () => {
     expect(expo.version).toBe("1.0.2");
   });
 
+  // App Store の「言語」の行は、アプリ本体が宣言している対応言語を表示する。何も宣言しないと、
+  // 画面が日本語でも「英語」と表示されてしまう。
+  it("declares Japanese as the development region and the only localization (the App Store language row)", () => {
+    const infoPlist = expo.ios.infoPlist as Record<string, unknown>;
+    expect(infoPlist.CFBundleDevelopmentRegion).toBe("ja");
+    expect(infoPlist.CFBundleLocalizations).toEqual(["ja"]);
+  });
+
   describe("広告(AdMob)", () => {
     type PluginEntry = string | [string, Record<string, unknown>];
     const plugins = appJson.expo.plugins as PluginEntry[];

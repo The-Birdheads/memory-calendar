@@ -11,7 +11,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.thebirdseed.memorycalendar",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDevelopmentRegion": "ja",
+        "CFBundleLocalizations": ["ja"]
       },
       "usesAppleSignIn": true
     },
