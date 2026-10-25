@@ -3,7 +3,7 @@
  */
 import { generateKeyPairSync, verify } from "node:crypto";
 
-import { createAppleClientSecret, revokeAppleAuthorization } from "../appleAuth";
+import { createAppleClientSecret, resolveAppleClientId, revokeAppleAuthorization } from "../appleAuth";
 
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const PRIVATE_KEY_PEM = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -129,5 +129,28 @@ describe("revokeAppleAuthorization", () => {
     const result = await revokeAppleAuthorization(CREDENTIALS, "auth-code-1", fetchImpl, 1_800_000_000);
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("resolveAppleClientId", () => {
+  const FALLBACK = "com.thebirdseed.memorycalendar";
+
+  it("uses the fallback when no clientId is requested", () => {
+    expect(resolveAppleClientId(undefined, FALLBACK)).toBe(FALLBACK);
+    expect(resolveAppleClientId(null, FALLBACK)).toBe(FALLBACK);
+    expect(resolveAppleClientId("", FALLBACK)).toBe(FALLBACK);
+  });
+
+  it("accepts each app that shares the account (Memory Calendar and Habitas)", () => {
+    expect(resolveAppleClientId("com.thebirdseed.memorycalendar", FALLBACK)).toBe("com.thebirdseed.memorycalendar");
+    expect(resolveAppleClientId("com.morikuma.habitas", FALLBACK)).toBe("com.morikuma.habitas");
+  });
+
+  it("accepts the configured fallback (e.g. an APPLE_CLIENT_ID override)", () => {
+    expect(resolveAppleClientId("com.example.override", "com.example.override")).toBe("com.example.override");
+  });
+
+  it("rejects any other client id", () => {
+    expect(resolveAppleClientId("com.evil.app", FALLBACK)).toBeNull();
   });
 });

@@ -19,6 +19,23 @@ export interface AppleCredentials {
   privateKey: string;
 }
 
+/**
+ * 失効を依頼できるアプリ(Sign in with Apple の client_id = バンドルID)。
+ * Habitas と Memory Calendar は同じ Supabase アカウントを共有しており、どちらのアプリからも
+ * アカウント削除時にこの関数を呼ぶ。任意のIDを受け付けないよう、許可リストで検証する。
+ */
+export const ALLOWED_APPLE_CLIENT_IDS = ["com.thebirdseed.memorycalendar", "com.morikuma.habitas"] as const;
+
+/**
+ * リクエストで指定された client_id を検証して返す。未指定なら fallback(環境変数、無ければ既定)を使う。
+ * 許可リストにも fallback にも無ければ null。
+ */
+export function resolveAppleClientId(requested: string | undefined | null, fallback: string): string | null {
+  const clientId = requested || fallback;
+  const allowed: readonly string[] = [...ALLOWED_APPLE_CLIENT_IDS, fallback];
+  return allowed.includes(clientId) ? clientId : null;
+}
+
 export type AppleRevokeResult = { ok: true } | { ok: false; reason: string };
 
 type FetchLike = (

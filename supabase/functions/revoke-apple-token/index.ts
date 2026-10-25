@@ -8,24 +8,42 @@
 //   APPLE_TEAM_ID      Apple Developer の Team ID
 //   APPLE_KEY_ID       「Sign in with Apple」を有効にした Key の Key ID
 //   APPLE_PRIVATE_KEY  その Key の秘密鍵(.p8 の中身)
-//   APPLE_CLIENT_ID    (任意)アプリのバンドルID。未設定なら com.thebirdseed.memorycalendar
+//   APPLE_CLIENT_ID    (任意)clientId を指定しないリクエストに使うバンドルID。未設定なら
+//                      com.thebirdseed.memorycalendar
+//
+// リクエストボディ: { authorizationCode: string, clientId?: string }
+//   clientId は、認可コードを取得したアプリのバンドルID(Appleの失効はアプリ単位)。
+//   Habitas(com.morikuma.habitas)からも呼ばれるため指定できる。許可リストにあるものだけ受け付ける。
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { revokeAppleAuthorization } from "../_shared/appleAuth.ts";
+import { resolveAppleClientId, revokeAppleAuthorization } from "../_shared/appleAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const DEFAULT_CLIENT_ID = "com.thebirdseed.memorycalendar";
 
+// Habitas(Capacitor の WebView)からも呼ばれる。WebView の fetch は CORS の対象で、
+// 事前確認(OPTIONS)に応答しないとリクエストが送られない(React Native の Memory Calendar は対象外)。
+// 認証は Authorization ヘッダーの JWT で行うため、Origin は制限しない。
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
+};
+
 function json(body: Record<string, unknown>, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
   if (req.method !== "POST") {
     return json({ revoked: false, reason: "method not allowed" }, 405);
   }
@@ -44,9 +62,16 @@ Deno.serve(async (req) => {
     return json({ revoked: false, reason: "not an apple user" }, 400);
   }
 
-  const { authorizationCode } = (await req.json().catch(() => ({}))) as { authorizationCode?: string };
+  const { authorizationCode, clientId: requestedClientId } = (await req.json().catch(() => ({}))) as {
+    authorizationCode?: string;
+    clientId?: string;
+  };
   if (!authorizationCode) {
     return json({ revoked: false, reason: "authorizationCode is required" }, 400);
+  }
+  const clientId = resolveAppleClientId(requestedClientId, Deno.env.get("APPLE_CLIENT_ID") ?? DEFAULT_CLIENT_ID);
+  if (!clientId) {
+    return json({ revoked: false, reason: "unsupported clientId" }, 400);
   }
 
   const teamId = Deno.env.get("APPLE_TEAM_ID");
@@ -57,7 +82,7 @@ Deno.serve(async (req) => {
   }
 
   const result = await revokeAppleAuthorization(
-    { teamId, keyId, privateKey, clientId: Deno.env.get("APPLE_CLIENT_ID") ?? DEFAULT_CLIENT_ID },
+    { teamId, keyId, privateKey, clientId },
     authorizationCode
   );
   if (!result.ok) {
