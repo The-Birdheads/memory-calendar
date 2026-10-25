@@ -195,27 +195,22 @@ The demo account already contains sample events, ToDos, meal records and a share
 - Gear icon (top-left of the Calendar tab): Personal settings / Calendar settings / Tag settings.
 
 [About this update (1.0.3)]
-This update prepares Memory Calendar to share one sign-in account with our other app, "Habitas" (a habit and task tracker by the same developer, bundle ID com.morikuma.habitas). Both apps use the same authentication backend, so a user can sign in to both with the same Apple / Google / email account. Each app keeps its own data separately, and no data is shown in the other app; only the sign-in account is shared. In this version:
-- Logging out ends the session on this device in this app only. It no longer signs the user out of the other app.
-- The app records that the account uses Memory Calendar, so that deleting the account in one app does not remove the data of the other.
-- The account-deletion confirmation tells the user when the same account is also used by Habitas.
-There are no other user-facing changes. This version does not add a new entry to the in-app "What's new", so that screen is not shown after updating.
+This version lets one sign-in account be shared with our other app "Habitas" (habit/task tracker, same developer, com.morikuma.habitas), which uses the same authentication backend. Only the sign-in account is shared; each app keeps its own data and shows nothing from the other. Changes: (1) logging out ends the session on this device in this app only, not in the other app; (2) the app records that the account uses Memory Calendar, so deleting the account in one app does not remove the other app's data; (3) the account-deletion confirmation says when the same account is also used by Habitas. No other user-facing changes, and no new "What's new" entry in this version.
 
 [Account deletion - Guideline 5.1.1(v)]
-Gear icon > Personal settings > "アカウントを削除" (Delete account). For users who signed in with Apple, the app asks them to confirm with Apple and then revokes the Sign in with Apple token before deleting the account.
-Deleting removes all of the user's Memory Calendar data (personal calendar, ToDos, tags, etc.; the user leaves shared calendars). If the same account is also used in Habitas, the confirmation states that the account itself and the Habitas data are kept, and only the Memory Calendar data is deleted; the sign-in account is deleted completely when the user deletes it from the last app that uses it. The demo account below is used only in Memory Calendar, so deleting it removes the account completely (it cannot be restored, so please delete it only to verify this feature).
+Gear icon > Personal settings > "アカウントを削除" (Delete account). Apple sign-in users confirm with Apple, and the app revokes the Sign in with Apple token before deleting. All of the user's Memory Calendar data is deleted and the user leaves shared calendars. If the account is also used in Habitas, the confirmation says the account itself and the Habitas data are kept; the account is deleted completely when it is deleted from the last app using it. The demo account is used only in Memory Calendar, so deleting it removes it completely (not restorable; please delete it only to verify this feature).
 
 [User-generated content - Guideline 1.2]
-Comments and reactions exist only inside a private shared calendar. They are visible only to members who joined with an invitation code issued from that calendar. There are no public posts, no user search or discovery, and no direct messaging. Authors can delete their own comments, and any member can leave a shared calendar at any time (Calendar settings). Support contact: support@kogenlab.com
+Comments and reactions exist only inside a private shared calendar, visible only to members who joined with an invitation code issued from that calendar. There are no public posts, no user search or discovery, and no direct messaging. Authors can delete their own comments, and any member can leave a shared calendar at any time (Calendar settings). Support contact: support@kogenlab.com
 
 [Notifications]
 Push notifications are used only for event changes/comments in calendars the user belongs to, and for reminders the user sets.
 
 [Advertising and App Tracking Transparency]
-The app shows Google AdMob banner ads on some screens (the bottom of the Calendar tab, the Calendar list view, the day list, the ToDo tab, the History tab and the Meals log). Ads are never shown on the login/sign-up screens, while creating or editing events, or in the settings. A few seconds after the Calendar tab opens (after the tutorial / What's new screen is closed), the app shows the standard App Tracking Transparency prompt. If the user denies it, every feature remains available and only non-personalized ads are shown. If no ad is available, the ad area collapses and leaves no blank space.
+The app shows Google AdMob banner ads on some screens (bottom of the Calendar tab, Calendar list view, day list, ToDo tab, History tab, Meals log). Ads are never shown on the login/sign-up screens, while creating or editing events, or in the settings. A few seconds after the Calendar tab opens (after the tutorial / What's new screen is closed), the app shows the standard App Tracking Transparency prompt. If the user denies it, every feature remains available and only non-personalized ads are shown. If no ad is available, the ad area collapses and leaves no blank space.
 
 [First launch and "What's new"]
-On the first launch, a short tutorial (5 slides) is shown; it can be skipped at any time and replayed from Gear icon > Personal settings > "使い方を見る". After an app update, a "更新内容" (What's new) screen is shown once to existing users; it can be reopened from Gear icon > Personal settings > "更新内容を見る". Neither screen contains ads.
+On the first launch, a short tutorial (5 slides) is shown; it can be skipped and replayed from Gear icon > Personal settings > "使い方を見る". After an update that adds a "更新内容" (What's new) entry, that screen is shown once to existing users; it can be reopened from Gear icon > Personal settings > "更新内容を見る". Neither screen contains ads.
 
 [Sign in with Apple - Guideline 4.8]
 The login screen offers Sign in with Apple alongside Google and email/password.
