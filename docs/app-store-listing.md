@@ -76,7 +76,19 @@ Memory Calendar は、予定を共有するだけでなく、終わった予定�
 https://kogenlab.com/support.html
 ```
 
-## 5. このバージョンの新機能(1.0.2)
+## 5. このバージョンの新機能(1.0.3)
+
+```
+・同じアカウントを、姉妹アプリ「Habitas」でも使えるようになります(Habitasの対応版の公開以降)
+・ログアウトは、この端末のこのアプリだけに適用されるようになりました
+・アカウントを削除するときの確認画面で、同じアカウントをほかのアプリでも使っている場合は、そのことをお知らせします(その場合、アカウント自体は削除されません)
+・動作の安定性を改善しました
+```
+
+アプリ内の「更新内容」画面(`src/features/releaseNotes/releases.ts`)には、1.0.3 のノートを足さない。
+利用者から見た機能追加ではなく、足すと全員に更新内容の画面が出るため。
+
+### 1.0.2 の新機能(公開済み)
 
 ```
 ・月のカレンダーで、余白があるのに予定が少なく表示されることがある不具合を直しました
@@ -182,8 +194,16 @@ The demo account already contains sample events, ToDos, meal records and a share
 - Meals tab: meal records.
 - Gear icon (top-left of the Calendar tab): Personal settings / Calendar settings / Tag settings.
 
+[About this update (1.0.3)]
+This update prepares Memory Calendar to share one sign-in account with our other app, "Habitas" (a habit and task tracker by the same developer, bundle ID com.morikuma.habitas). Both apps use the same authentication backend, so a user can sign in to both with the same Apple / Google / email account. Each app keeps its own data separately, and no data is shown in the other app; only the sign-in account is shared. In this version:
+- Logging out ends the session on this device in this app only. It no longer signs the user out of the other app.
+- The app records that the account uses Memory Calendar, so that deleting the account in one app does not remove the data of the other.
+- The account-deletion confirmation tells the user when the same account is also used by Habitas.
+There are no other user-facing changes. This version does not add a new entry to the in-app "What's new", so that screen is not shown after updating.
+
 [Account deletion - Guideline 5.1.1(v)]
 Gear icon > Personal settings > "アカウントを削除" (Delete account). For users who signed in with Apple, the app asks them to confirm with Apple and then revokes the Sign in with Apple token before deleting the account.
+Deleting removes all of the user's Memory Calendar data (personal calendar, ToDos, tags, etc.; the user leaves shared calendars). If the same account is also used in Habitas, the confirmation states that the account itself and the Habitas data are kept, and only the Memory Calendar data is deleted; the sign-in account is deleted completely when the user deletes it from the last app that uses it. The demo account below is used only in Memory Calendar, so deleting it removes the account completely (it cannot be restored, so please delete it only to verify this feature).
 
 [User-generated content - Guideline 1.2]
 Comments and reactions exist only inside a private shared calendar. They are visible only to members who joined with an invitation code issued from that calendar. There are no public posts, no user search or discovery, and no direct messaging. Authors can delete their own comments, and any member can leave a shared calendar at any time (Calendar settings). Support contact: support@kogenlab.com
