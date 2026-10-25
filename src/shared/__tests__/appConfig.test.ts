@@ -29,8 +29,8 @@ describe("app.json (App Store release config)", () => {
     expect(expo.slug).toBe("memory-calendar");
   });
 
-  it("is version 1.0.2", () => {
-    expect(expo.version).toBe("1.0.2");
+  it("is version 1.0.3", () => {
+    expect(expo.version).toBe("1.0.3");
   });
 
   // App Store の「言語」の行は、アプリ本体が宣言している対応言語を表示する。何も宣言しないと、
