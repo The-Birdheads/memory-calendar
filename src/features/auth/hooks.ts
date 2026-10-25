@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import { getExpoPushTokenAsync, invalidatePushToken } from "../notifications/service";
-import { signIn, signInWithApple, signInWithGoogle, signOut, signUp } from "./service";
+import { registerAppUse, signIn, signInWithApple, signInWithGoogle, signOut, signUp } from "./service";
 import type { AuthCredentials, AuthError } from "./types";
 
 export interface UseAuthSessionResult {
@@ -14,6 +14,15 @@ export interface UseAuthSessionResult {
 export function useAuthSession(): UseAuthSessionResult {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const registeredUserIdRef = useRef<string | null>(null);
+
+  // ログインしたら(ユーザーが変わるたびに1回)、Memory Calendar を使っていることを記録する。
+  useEffect(() => {
+    const userId = session?.user?.id ?? null;
+    if (!userId || registeredUserIdRef.current === userId) return;
+    registeredUserIdRef.current = userId;
+    void registerAppUse(getSupabaseClient());
+  }, [session]);
 
   useEffect(() => {
     const client = getSupabaseClient();

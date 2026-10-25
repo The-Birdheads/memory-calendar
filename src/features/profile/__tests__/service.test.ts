@@ -5,6 +5,7 @@ import {
   getAvatarUrls,
   getMyProfile,
   getProfileErrorMessageJa,
+  isHabitasInUse,
   removeMyAvatar,
   removeOwnAvatarFiles,
   updateDisplayName,
@@ -173,6 +174,34 @@ describe("deleteOwnAccount", () => {
     const result = await deleteOwnAccount(client);
 
     expect(result).toEqual({ ok: false, error: { type: "DeleteFailed" } });
+  });
+});
+
+describe("isHabitasInUse", () => {
+  it("returns true when the account also uses Habitas", async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: ["memory_calendar", "habitas"], error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    expect(await isHabitasInUse(client)).toBe(true);
+    expect(rpc).toHaveBeenCalledWith("get_account_usage");
+  });
+
+  it("returns false when only Memory Calendar is used", async () => {
+    const client = {
+      rpc: jest.fn().mockResolvedValue({ data: ["memory_calendar"], error: null }),
+    } as unknown as SupabaseClient;
+
+    expect(await isHabitasInUse(client)).toBe(false);
+  });
+
+  it("returns null when the usage cannot be fetched (RPC error, bad data, or network failure)", async () => {
+    const error = { rpc: jest.fn().mockResolvedValue({ data: null, error: { message: "boom" } }) };
+    const bad = { rpc: jest.fn().mockResolvedValue({ data: "nope", error: null }) };
+    const offline = { rpc: jest.fn().mockRejectedValue(new Error("offline")) };
+
+    expect(await isHabitasInUse(error as unknown as SupabaseClient)).toBeNull();
+    expect(await isHabitasInUse(bad as unknown as SupabaseClient)).toBeNull();
+    expect(await isHabitasInUse(offline as unknown as SupabaseClient)).toBeNull();
   });
 });
 

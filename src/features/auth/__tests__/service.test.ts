@@ -9,6 +9,7 @@ import {
   signIn,
   signInWithApple,
   signInWithGoogle,
+  registerAppUse,
   signOut,
   signUp,
 } from "../service";
@@ -122,6 +123,25 @@ describe("signIn", () => {
   });
 });
 
+describe("registerAppUse", () => {
+  it("records that this account uses Memory Calendar via the register_app_use RPC", async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    await registerAppUse(client);
+
+    expect(rpc).toHaveBeenCalledWith("register_app_use", { p_app: "memory_calendar" });
+  });
+
+  it("never throws, even when the RPC fails or the network is down (it must not block using the app)", async () => {
+    const failing = { rpc: jest.fn().mockResolvedValue({ data: null, error: { message: "boom" } }) };
+    const offline = { rpc: jest.fn().mockRejectedValue(new Error("offline")) };
+
+    await expect(registerAppUse(failing as unknown as SupabaseClient)).resolves.toBeUndefined();
+    await expect(registerAppUse(offline as unknown as SupabaseClient)).resolves.toBeUndefined();
+  });
+});
+
 describe("signOut", () => {
   it("succeeds when Supabase returns no error", async () => {
     const client = createMockClient({ signOut: jest.fn().mockResolvedValue({ error: null }) });
@@ -129,6 +149,15 @@ describe("signOut", () => {
     const result = await signOut(client);
 
     expect(result).toEqual({ ok: true, value: undefined });
+  });
+
+  it("signs out only this device (local scope) so other apps sharing the account stay logged in", async () => {
+    const signOutMock = jest.fn().mockResolvedValue({ error: null });
+    const client = createMockClient({ signOut: signOutMock });
+
+    await signOut(client);
+
+    expect(signOutMock).toHaveBeenCalledWith({ scope: "local" });
   });
 
   it("returns an Unknown error when Supabase sign-out fails", async () => {

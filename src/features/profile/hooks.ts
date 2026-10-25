@@ -3,7 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeToTableChanges } from "../../shared/api/realtime";
 import { getSupabaseClient } from "../../shared/api/supabaseClient";
 import { revokeAppleAuthorizationIfNeeded } from "../auth/service";
-import { deleteOwnAccount, getMyProfile, removeOwnAvatarFiles, updateDisplayName, updateWeekStartsOn } from "./service";
+import {
+  deleteOwnAccount,
+  getMyProfile,
+  isHabitasInUse,
+  removeOwnAvatarFiles,
+  updateDisplayName,
+  updateWeekStartsOn,
+} from "./service";
 import type { Profile, ProfileError } from "./types";
 
 export interface UseMyProfileResult {
@@ -113,6 +120,8 @@ export function useUpdateWeekStartsOn(): UseUpdateWeekStartsOnResult {
 
 export interface UseDeleteAccountResult {
   deleteAccount: () => Promise<boolean>;
+  /** 確認画面の文言の出し分け用。Habitas も使っているか(取得できなければ null) */
+  checkHabitasInUse: () => Promise<boolean | null>;
   isSubmitting: boolean;
   error: ProfileError | null;
 }
@@ -145,5 +154,7 @@ export function useDeleteAccount(): UseDeleteAccountResult {
     return true;
   }, []);
 
-  return { deleteAccount: runDeleteAccount, isSubmitting, error };
+  const checkHabitasInUse = useCallback(() => isHabitasInUse(getSupabaseClient()), []);
+
+  return { deleteAccount: runDeleteAccount, checkHabitasInUse, isSubmitting, error };
 }

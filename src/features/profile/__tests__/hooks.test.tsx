@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
 import { revokeAppleAuthorizationIfNeeded } from "../../auth/service";
-import { deleteOwnAccount, getMyProfile, removeOwnAvatarFiles, updateDisplayName } from "../service";
+import { deleteOwnAccount, getMyProfile, isHabitasInUse, removeOwnAvatarFiles, updateDisplayName } from "../service";
 import { useDeleteAccount, useMyProfile, useUpdateDisplayName } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
@@ -17,6 +17,7 @@ jest.mock("../service", () => ({
   getMyProfile: jest.fn(),
   updateDisplayName: jest.fn(),
   deleteOwnAccount: jest.fn(),
+  isHabitasInUse: jest.fn(),
   removeOwnAvatarFiles: jest.fn(),
 }));
 
@@ -218,6 +219,21 @@ describe("useDeleteAccount", () => {
     await runDelete();
 
     expect(removeOwnAvatarFiles).not.toHaveBeenCalled();
+  });
+
+  it("checkHabitasInUse returns whether the account also uses Habitas", async () => {
+    const client = {};
+    (getSupabaseClient as jest.Mock).mockReturnValue(client);
+    (isHabitasInUse as jest.Mock).mockResolvedValue(true);
+
+    const { result } = await renderHook(() => useDeleteAccount());
+    let inUse: boolean | null = null;
+    await act(async () => {
+      inUse = await result.current.checkHabitasInUse();
+    });
+
+    expect(inUse).toBe(true);
+    expect(isHabitasInUse).toHaveBeenCalledWith(client);
   });
 
   async function runDelete() {

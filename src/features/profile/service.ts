@@ -199,6 +199,21 @@ export async function removeOwnAvatarFiles(client: SupabaseClient): Promise<void
   }
 }
 
+/**
+ * このアカウントが Habitas も使っているか。
+ * true: 使っている(削除してもアカウント自体は残る) / false: 使っていない(アカウントごと削除される) /
+ * null: 取得できなかった。
+ */
+export async function isHabitasInUse(client: SupabaseClient): Promise<boolean | null> {
+  try {
+    const { data, error } = await client.rpc("get_account_usage");
+    if (error || !Array.isArray(data)) return null;
+    return data.includes("habitas");
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteOwnAccount(client: SupabaseClient): Promise<Result<void, ProfileError>> {
   const { error } = await client.rpc("delete_own_account");
 

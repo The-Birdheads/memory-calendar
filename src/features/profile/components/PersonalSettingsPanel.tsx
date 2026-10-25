@@ -31,10 +31,16 @@ export function PersonalSettingsPanel({ userId, onChange, onShowTutorial, onShow
   const avatarPath = profile?.avatarPath ?? null;
   const avatarUrls = useAvatarUrls(avatarPath ? [avatarPath] : []);
   const { signOut, isSubmitting: isSigningOut } = useAuthActions();
-  const { deleteAccount, isSubmitting: isDeletingAccount, error: deleteError } = useDeleteAccount();
+  const {
+    deleteAccount,
+    checkHabitasInUse,
+    isSubmitting: isDeletingAccount,
+    error: deleteError,
+  } = useDeleteAccount();
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
+  const [habitasInUse, setHabitasInUse] = useState<boolean | null>(null);
 
   const handleStartEditName = () => {
     setNameDraft(profile?.displayName ?? "");
@@ -85,6 +91,12 @@ export function PersonalSettingsPanel({ userId, onChange, onShowTutorial, onShow
     if (success) {
       router.replace("/(auth)/login");
     }
+  };
+
+  const handleRequestDeleteAccount = async () => {
+    // Habitas も使っているかで、確認画面の文言を出し分ける(取得できなければ汎用の文言)
+    setHabitasInUse(await checkHabitasInUse());
+    setIsDeleteConfirmVisible(true);
   };
 
   const handleConfirmDeleteAccount = async () => {
@@ -234,7 +246,7 @@ export function PersonalSettingsPanel({ userId, onChange, onShowTutorial, onShow
         <TouchableOpacity
           testID="personal-settings-delete-account"
           style={styles.deleteAccountButton}
-          onPress={() => setIsDeleteConfirmVisible(true)}
+          onPress={handleRequestDeleteAccount}
           disabled={isDeletingAccount}
         >
           <Text style={styles.deleteAccountButtonText}>アカウントを削除</Text>
@@ -243,6 +255,7 @@ export function PersonalSettingsPanel({ userId, onChange, onShowTutorial, onShow
 
       <DeleteAccountConfirmModal
         visible={isDeleteConfirmVisible}
+        habitasInUse={habitasInUse}
         onConfirm={handleConfirmDeleteAccount}
         onCancel={() => setIsDeleteConfirmVisible(false)}
       />

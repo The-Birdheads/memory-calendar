@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSupabaseClient } from "../../../shared/api/supabaseClient";
 import { getExpoPushTokenAsync, invalidatePushToken } from "../../notifications/service";
-import { signIn, signInWithApple, signInWithGoogle, signOut, signUp } from "../service";
+import { registerAppUse, signIn, signInWithApple, signInWithGoogle, signOut, signUp } from "../service";
 import { useAuthActions, useAuthSession } from "../hooks";
 
 jest.mock("../../../shared/api/supabaseClient", () => ({
@@ -10,6 +10,7 @@ jest.mock("../../../shared/api/supabaseClient", () => ({
 }));
 
 jest.mock("../service", () => ({
+  registerAppUse: jest.fn(),
   signIn: jest.fn(),
   signUp: jest.fn(),
   signOut: jest.fn(),
@@ -80,6 +81,54 @@ describe("useAuthSession", () => {
     });
 
     expect(result.current.session).toEqual(newSession);
+  });
+
+  it("registers Memory Calendar usage once per signed-in user", async () => {
+    const client = {
+      auth: {
+        getSession: jest.fn().mockResolvedValue({ data: { session: { user: { id: "u1" } } } }),
+        onAuthStateChange: jest.fn().mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
+      },
+    };
+    (getSupabaseClient as jest.Mock).mockReturnValue(client);
+
+    const { rerender } = await renderHook(() => useAuthSession());
+
+    await waitFor(() => expect(registerAppUse).toHaveBeenCalledTimes(1));
+    expect(registerAppUse).toHaveBeenCalledWith(client);
+
+    await rerender({});
+    expect(registerAppUse).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers again when a different user signs in, and not at all when signed out", async () => {
+    let authStateCallback: (event: string, session: unknown) => void = () => {};
+    (getSupabaseClient as jest.Mock).mockReturnValue({
+      auth: {
+        getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
+        onAuthStateChange: jest.fn((cb) => {
+          authStateCallback = cb;
+          return { data: { subscription: { unsubscribe: jest.fn() } } };
+        }),
+      },
+    });
+
+    const { result } = await renderHook(() => useAuthSession());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(registerAppUse).not.toHaveBeenCalled();
+
+    await act(async () => {
+      authStateCallback("SIGNED_IN", { user: { id: "u2" } });
+    });
+    await waitFor(() => expect(registerAppUse).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      authStateCallback("SIGNED_OUT", null);
+    });
+    await act(async () => {
+      authStateCallback("SIGNED_IN", { user: { id: "u3" } });
+    });
+    await waitFor(() => expect(registerAppUse).toHaveBeenCalledTimes(2));
   });
 
   it("unsubscribes from auth state changes on unmount", async () => {

@@ -1,6 +1,6 @@
 import { fireEvent, render } from "@testing-library/react-native";
 
-import { DeleteAccountConfirmModal } from "../DeleteAccountConfirmModal";
+import { DeleteAccountConfirmModal, getDeleteAccountWarning } from "../DeleteAccountConfirmModal";
 
 describe("DeleteAccountConfirmModal", () => {
   it("shows the consequences of deleting the account when visible", async () => {
@@ -10,6 +10,29 @@ describe("DeleteAccountConfirmModal", () => {
 
     expect(getByText("アカウントを削除しますか?")).toBeTruthy();
     expect(getByText(/この操作は取り消せません/)).toBeTruthy();
+  });
+
+  it("says the account itself is also deleted when Habitas is not used", async () => {
+    const { getByTestId } = await render(
+      <DeleteAccountConfirmModal visible habitasInUse={false} onConfirm={jest.fn()} onCancel={jest.fn()} />
+    );
+
+    expect(getByTestId("delete-account-warning").props.children).toContain("アカウント自体も削除されます");
+  });
+
+  it("says the account and Habitas data stay when Habitas is also used", async () => {
+    const { getByTestId } = await render(
+      <DeleteAccountConfirmModal visible habitasInUse onConfirm={jest.fn()} onCancel={jest.fn()} />
+    );
+
+    expect(getByTestId("delete-account-warning").props.children).toContain(
+      "アカウント自体とHabitasのデータは削除されません"
+    );
+  });
+
+  it("falls back to a neutral warning when Habitas usage is unknown", async () => {
+    expect(getDeleteAccountWarning(null)).toContain("Habitasでもこのアカウントを使っている場合");
+    expect(getDeleteAccountWarning(undefined)).toBe(getDeleteAccountWarning(null));
   });
 
   it("renders nothing when not visible", async () => {

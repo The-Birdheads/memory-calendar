@@ -188,8 +188,26 @@ export async function revokeAppleAuthorizationIfNeeded(client: SupabaseClient): 
   return error ? "failed" : "revoked";
 }
 
+/**
+ * このアカウントが Memory Calendar を使っていることを記録する(冪等)。
+ * Habitas と共通のアカウントのため、アカウント削除時に「他のアプリも使っているか」を
+ * 判定する材料になる(DB側: public.app_usage / register_app_use)。
+ * 失敗しても利用は妨げない(次回のログイン時にやり直す)。
+ */
+export async function registerAppUse(client: SupabaseClient): Promise<void> {
+  try {
+    const { error } = await client.rpc("register_app_use", { p_app: "memory_calendar" });
+    if (error && __DEV__) console.warn("[registerAppUse] failed:", error.message);
+  } catch {
+    // 通信失敗などは無視する
+  }
+}
+
 export async function signOut(client: SupabaseClient): Promise<Result<void, AuthError>> {
-  const { error } = await client.auth.signOut();
+  // Habitas と同じ Supabase アカウントを共有しているため、この端末のセッションだけを破棄する。
+  // 既定の scope "global" だと、同じアカウントの全端末・全アプリ(Habitas を含む)の
+  // リフレッシュトークンが失効し、他方のアプリまでログアウトされてしまう。
+  const { error } = await client.auth.signOut({ scope: "local" });
   if (error) {
     return err(mapAuthError(error.message));
   }

@@ -47,6 +47,7 @@ function mockHooks(overrides: {
   signOut?: jest.Mock;
   deleteAccount?: jest.Mock;
   deleteError?: unknown;
+  checkHabitasInUse?: jest.Mock;
 } = {}) {
   (useMyProfile as jest.Mock).mockReturnValue({
     profile: {
@@ -88,6 +89,7 @@ function mockHooks(overrides: {
   });
   (useDeleteAccount as jest.Mock).mockReturnValue({
     deleteAccount: overrides.deleteAccount ?? jest.fn().mockResolvedValue(true),
+    checkHabitasInUse: overrides.checkHabitasInUse ?? jest.fn().mockResolvedValue(false),
     isSubmitting: false,
     error: overrides.deleteError ?? null,
   });
@@ -251,6 +253,43 @@ describe("PersonalSettingsPanel", () => {
     await fireEvent.press(getByTestId("personal-settings-delete-account"));
 
     expect(getByTestId("delete-account-confirm-button")).toBeTruthy();
+  });
+
+  it("tells the user the account stays when Habitas is also used", async () => {
+    mockHooks({ checkHabitasInUse: jest.fn().mockResolvedValue(true) });
+
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-delete-account"));
+
+    await waitFor(() =>
+      expect(getByTestId("delete-account-warning").props.children).toContain(
+        "アカウント自体とHabitasのデータは削除されません"
+      )
+    );
+  });
+
+  it("tells the user the account is deleted too when only Memory Calendar is used", async () => {
+    mockHooks({ checkHabitasInUse: jest.fn().mockResolvedValue(false) });
+
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-delete-account"));
+
+    await waitFor(() =>
+      expect(getByTestId("delete-account-warning").props.children).toContain("アカウント自体も削除されます")
+    );
+  });
+
+  it("still shows the confirmation (with a neutral warning) when the Habitas usage cannot be fetched", async () => {
+    mockHooks({ checkHabitasInUse: jest.fn().mockResolvedValue(null) });
+
+    const { getByTestId } = await render(<PersonalSettingsPanel userId="user-1" />);
+
+    await fireEvent.press(getByTestId("personal-settings-delete-account"));
+
+    await waitFor(() => expect(getByTestId("delete-account-confirm-button")).toBeTruthy());
+    expect(getByTestId("delete-account-warning").props.children).toContain("Habitasでもこのアカウントを使っている場合");
   });
 
   it("deletes the account, signs out, and navigates to login on confirm", async () => {
