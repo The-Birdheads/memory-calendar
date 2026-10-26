@@ -2,10 +2,11 @@
 // 各ユーザーが設定した時刻の献立の通知(朝食/昼食/夕食/間食)を配信する。
 // 予定のリマインドはevent_reminders(各メンバーが自分で設定した個人単位のリマインド時刻)を
 // そのまま配信対象とする(「対象者」概念は廃止。行が存在する = 本人がその時刻に通知してほしいという意思表示)。
-// notification_log の一意制約により、再実行しても重複配信しない。
+// notification_log の一意制約により、再実行しても重複配信しない(配信済みのものは、そもそも対象から外す)。
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+import { chunk, excludeLogged, LOG_LOOKUP_CHUNK_SIZE, lookbackStart } from "../_shared/dueReminders.ts";
 import { sendExpoPushNotifications } from "../_shared/expoPush.ts";
 import {
   buildMealReminderMessage,
@@ -88,13 +89,40 @@ async function sendReminder(supabase: SupabaseClient, params: SendReminderParams
     .match(params.idempotency);
 }
 
-async function dispatchEventReminders(supabase: SupabaseClient, now: string): Promise<void> {
+/** すでに notification_log に行がある(配信済み・配信失敗済みの)リマインドのID。 */
+async function loadLoggedIds(
+  supabase: SupabaseClient,
+  column: "event_reminder_id" | "todo_id",
+  ids: string[]
+): Promise<Set<string>> {
+  const logged = new Set<string>();
+  for (const group of chunk(ids, LOG_LOOKUP_CHUNK_SIZE)) {
+    const { data } = await supabase.from("notification_log").select(column).in(column, group);
+    for (const row of (data ?? []) as Record<string, string | null>[]) {
+      const id = row[column];
+      if (id) logged.add(id);
+    }
+  }
+  return logged;
+}
+
+// 配信対象は「リマインド時刻が直近の一定期間にあり、まだ notification_log に行が無いもの」だけ。
+// (期限が過ぎたもの全部を毎分たどると、配信済みのものにも毎回INSERTして一意制約違反が出続ける。)
+async function dispatchEventReminders(supabase: SupabaseClient, now: Date): Promise<void> {
   const { data: reminders } = await supabase
     .from("event_reminders")
     .select("id, user_id, events(title)")
-    .lte("remind_at", now);
+    .gte("remind_at", lookbackStart(now))
+    .lte("remind_at", now.toISOString());
 
-  for (const reminder of (reminders ?? []) as EventReminderRow[]) {
+  const candidates = (reminders ?? []) as EventReminderRow[];
+  const logged = await loadLoggedIds(
+    supabase,
+    "event_reminder_id",
+    candidates.map((reminder) => reminder.id)
+  );
+
+  for (const reminder of excludeLogged(candidates, logged)) {
     await sendReminder(supabase, {
       notificationType: "event_reminder",
       userId: reminder.user_id,
@@ -105,15 +133,23 @@ async function dispatchEventReminders(supabase: SupabaseClient, now: string): Pr
   }
 }
 
-async function dispatchTodoReminders(supabase: SupabaseClient, now: string): Promise<void> {
+async function dispatchTodoReminders(supabase: SupabaseClient, now: Date): Promise<void> {
   const { data: todos } = await supabase
     .from("todos")
     .select("id, created_by, title")
     .not("reminder_at", "is", null)
-    .lte("reminder_at", now)
+    .gte("reminder_at", lookbackStart(now))
+    .lte("reminder_at", now.toISOString())
     .eq("is_done", false);
 
-  for (const todo of (todos ?? []) as TodoReminderRow[]) {
+  const candidates = (todos ?? []) as TodoReminderRow[];
+  const logged = await loadLoggedIds(
+    supabase,
+    "todo_id",
+    candidates.map((todo) => todo.id)
+  );
+
+  for (const todo of excludeLogged(candidates, logged)) {
     // ToDoは非公開のため、配信対象は常に作成者本人のみ。
     await sendReminder(supabase, {
       notificationType: "todo_reminder",
@@ -178,8 +214,8 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const now = new Date();
 
-  await dispatchEventReminders(supabase, now.toISOString());
-  await dispatchTodoReminders(supabase, now.toISOString());
+  await dispatchEventReminders(supabase, now);
+  await dispatchTodoReminders(supabase, now);
   await dispatchMealReminders(supabase, now);
 
   return new Response(JSON.stringify({ ok: true }), {
