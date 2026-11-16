@@ -26,12 +26,12 @@ describe("DeleteAccountConfirmModal", () => {
     );
 
     expect(getByTestId("delete-account-warning").props.children).toContain(
-      "アカウント自体とHabitasのデータは削除されません"
+      "アカウント自体とまいにちコンパス（旧Habitas）のデータは削除されません"
     );
   });
 
   it("falls back to a neutral warning when Habitas usage is unknown", async () => {
-    expect(getDeleteAccountWarning(null)).toContain("Habitasでもこのアカウントを使っている場合");
+    expect(getDeleteAccountWarning(null)).toContain("まいにちコンパス（旧Habitas）でもこのアカウントを使っている場合");
     expect(getDeleteAccountWarning(undefined)).toBe(getDeleteAccountWarning(null));
   });
 

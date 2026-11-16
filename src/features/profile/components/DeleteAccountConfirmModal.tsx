@@ -13,12 +13,12 @@ const BASE_WARNING =
  */
 export function getDeleteAccountWarning(habitasInUse?: boolean | null): string {
   if (habitasInUse === true) {
-    return `${BASE_WARNING}このアカウントはHabitasでも使われているため、アカウント自体とHabitasのデータは削除されません。この操作は取り消せません。`;
+    return `${BASE_WARNING}このアカウントはまいにちコンパス（旧Habitas）でも使われているため、アカウント自体とまいにちコンパス（旧Habitas）のデータは削除されません。この操作は取り消せません。`;
   }
   if (habitasInUse === false) {
     return `${BASE_WARNING}アカウント自体も削除されます。この操作は取り消せません。`;
   }
-  return `${BASE_WARNING}Habitasでもこのアカウントを使っている場合、アカウント自体とHabitasのデータは削除されません。この操作は取り消せません。`;
+  return `${BASE_WARNING}まいにちコンパス（旧Habitas）でもこのアカウントを使っている場合、アカウント自体とまいにちコンパス（旧Habitas）のデータは削除されません。この操作は取り消せません。`;
 }
 
 export interface DeleteAccountConfirmModalProps {

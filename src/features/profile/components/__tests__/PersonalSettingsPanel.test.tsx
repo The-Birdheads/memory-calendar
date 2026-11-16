@@ -264,7 +264,7 @@ describe("PersonalSettingsPanel", () => {
 
     await waitFor(() =>
       expect(getByTestId("delete-account-warning").props.children).toContain(
-        "アカウント自体とHabitasのデータは削除されません"
+        "アカウント自体とまいにちコンパス（旧Habitas）のデータは削除されません"
       )
     );
   });
@@ -289,7 +289,7 @@ describe("PersonalSettingsPanel", () => {
     await fireEvent.press(getByTestId("personal-settings-delete-account"));
 
     await waitFor(() => expect(getByTestId("delete-account-confirm-button")).toBeTruthy());
-    expect(getByTestId("delete-account-warning").props.children).toContain("Habitasでもこのアカウントを使っている場合");
+    expect(getByTestId("delete-account-warning").props.children).toContain("まいにちコンパス（旧Habitas）でもこのアカウントを使っている場合");
   });
 
   it("deletes the account, signs out, and navigates to login on confirm", async () => {
